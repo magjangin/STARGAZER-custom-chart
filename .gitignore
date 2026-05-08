@@ -1,0 +1,22 @@
+## Visual Studio / C# standard gitignore
+[Bb]in/
+[Oo]bj/
+[Ll]ogs/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.slnx.sqlite
+
+# Log files
+*.log
+
+# 게임 어셈블리 디컴파일 결과 (참조용, scripts/decompile.ps1로 재생성)
+# 폴더 전체를 제외한다 — 안에는 아무것도 커밋하지 않는다.
+# 폴더 설명은 docs/REFERENCE_DECOMPILED.md에 있다.
+decompiled/
+
+# OS generated files
+.DS_Store
+Thumbs.db
