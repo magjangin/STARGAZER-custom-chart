@@ -180,11 +180,18 @@ namespace STARGAZER_custom_chart
 
                     string itemType = item.GetType().FullName ?? item.GetType().Name;
                     
+                    // Expose members catalog for the first item in the collection
+                    if (i == 0)
+                    {
+                        string itemCatalog = BuildObjectMemberCatalog($"Item[{memberName}]", item);
+                        MelonLogger.Msg($"[FocusedTrackViewer][{phase}] {itemCatalog}");
+                    }
+                    
                     // Extract key values using candidates
                     string details = "";
                     try
                     {
-                        string[] detailNames = { "name", "id", "level", "title", "text", "value" };
+                        string[] detailNames = { "name", "id", "level", "title", "text", "value", "lv", "difficulty", "num", "score", "rate", "number", "index" };
                         List<string> foundDetails = new List<string>();
                         foreach (string detailName in detailNames)
                         {
