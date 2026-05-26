@@ -10,21 +10,31 @@ namespace STARGAZER_custom_chart
 
         private static void TrackDisplayNamePostfix(object __instance, ref string __result)
         {
+            string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
+            MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
+            try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNamePostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayName", __instance, ref __result);
         }
 
         private static void TrackDisplayNameEnPostfix(object __instance, ref string __result)
         {
+            string trackIdEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
+            MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
+            try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNameENPostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayNameEN", __instance, ref __result);
         }
 
         private static void MetaDisplayNamePostfix(object __instance, ref string __result)
         {
+            string trackIdMeta = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
+            MelonLogger.Msg($"[Accessor][MetaDisplayName] trackId={trackIdMeta} result={__result}");
             ApplyTrackDisplayNameOverride("MetaDisplayName", __instance, ref __result);
         }
 
         private static void MetaDisplayNameEnPostfix(object __instance, ref string __result)
         {
+            string trackIdMetaEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
+            MelonLogger.Msg($"[Accessor][MetaDisplayNameEN] trackId={trackIdMetaEn} result={__result}");
             ApplyTrackDisplayNameOverride("MetaDisplayNameEN", __instance, ref __result);
         }
 
@@ -53,6 +63,7 @@ namespace STARGAZER_custom_chart
             {
                 return;
             }
+
             MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
         }
 
@@ -63,15 +74,9 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
-            if (!IsStartingPointDisplayName(displayName) || HasStartingPointSuffix(displayName))
-            {
-                return;
-            }
-
-            string before = displayName;
-            displayName += StartingPointSuffix;
-            string trackId = trackData is null ? "<unknown>" : BuildTrackIdForDebug(trackData);
-            MelonLogger.Msg($"[TrackNameOverride][{source}] trackId={trackId} {before} -> {displayName}");
+            // Removed automatic appending of Starting Point suffix (was: " [SP]")
+            // Preserve existing behavior: do nothing to the displayName here.
+            return;
         }
 
         private static bool IsStartingPointDisplayName(string displayName)
