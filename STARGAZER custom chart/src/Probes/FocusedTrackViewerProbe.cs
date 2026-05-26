@@ -11,6 +11,9 @@ namespace STARGAZER_custom_chart
     {
         private static bool _focusedTrackViewerPatched;
 
+        [ThreadStatic]
+        private static bool _isProbingFocusedTrackViewer;
+
         private void TryApplyFocusedTrackViewerPatches()
         {
             if (_focusedTrackViewerPatched) return;
@@ -31,9 +34,10 @@ namespace STARGAZER_custom_chart
 
                 LoggerInstance.Msg($"[FocusedTrackViewerProbe] Found type: {type.FullName}. Proceeding with dynamic hooks.");
 
-                // Hook all methods of this type
+                // Hook methods of this type, excluding property getters/setters to avoid high-frequency noise and recursion
                 MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                     .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
+                    .Where(m => !m.Name.StartsWith("get_", StringComparison.Ordinal) && !m.Name.StartsWith("set_", StringComparison.Ordinal))
                     .ToArray();
 
                 int successCount = 0;
@@ -50,11 +54,11 @@ namespace STARGAZER_custom_chart
                     }
                     catch
                     {
-                        // Some methods (like getters/setters or internal calls) might fail to patch, which is fine
+                        // Some methods might fail to patch, which is fine
                     }
                 }
 
-                LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer.");
+                LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer (excluding getters/setters).");
             }
             catch (Exception ex)
             {
@@ -64,6 +68,9 @@ namespace STARGAZER_custom_chart
 
         private static void FocusedTrackViewerPrefix(MethodBase __originalMethod, object? __instance, object[]? __args)
         {
+            if (_isProbingFocusedTrackViewer) return;
+            _isProbingFocusedTrackViewer = true;
+
             try
             {
                 string methodSig = $"{__originalMethod.DeclaringType?.FullName}.{__originalMethod.Name}";
@@ -78,10 +85,17 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[FocusedTrackViewer][PRE] Exception: {ex.Message}");
             }
+            finally
+            {
+                _isProbingFocusedTrackViewer = false;
+            }
         }
 
         private static void FocusedTrackViewerPostfix(MethodBase __originalMethod, object? __instance, object[]? __args)
         {
+            if (_isProbingFocusedTrackViewer) return;
+            _isProbingFocusedTrackViewer = true;
+
             try
             {
                 string methodSig = $"{__originalMethod.DeclaringType?.FullName}.{__originalMethod.Name}";
@@ -96,6 +110,10 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[FocusedTrackViewer][POST] Exception: {ex.Message}");
             }
+            finally
+            {
+                _isProbingFocusedTrackViewer = false;
+            }
         }
 
         private static void EnumerateFocusedTrackViewerLevelItems(object instance, string phase)
@@ -105,7 +123,7 @@ namespace STARGAZER_custom_chart
                 Type type = instance.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // Let's print member catalog for debugging first
+                // Print member catalog for debugging
                 string membersCatalog = BuildObjectMemberCatalog("FocusedTrackViewer", instance);
                 MelonLogger.Msg($"[FocusedTrackViewer][{phase}] Member Catalog: {membersCatalog}");
 
