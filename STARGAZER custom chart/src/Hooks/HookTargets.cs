@@ -18,7 +18,7 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Play.TravelPlayer.SetupPlay",
             "Il2CppStargazer.Starlike.Sound.SoundPlayer.GetBGMHandler",
             "Il2CppStarlike.Sound.SoundPlayer.GetBGMHandler",
-            "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker"
+            "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker",
         };
         private static readonly object InvocationLogThrottleLock = new object();
         private static readonly Dictionary<string, InvocationLogThrottleEntry> InvocationLogThrottleMap = new Dictionary<string, InvocationLogThrottleEntry>(StringComparer.Ordinal);
@@ -27,6 +27,7 @@ namespace STARGAZER_custom_chart
         private const bool EnableForceAutoPlayAtPlayerBasePlay = true;
         private static bool PlayerBaseJacketLogged;
         private static bool PlayerBaseAutoPlaySetAttempted;
+        private static bool LevelSelectorCatalogLogged;
 
         private void TryApplyRuntimeHookPatches(string phase)
         {
@@ -386,20 +387,16 @@ namespace STARGAZER_custom_chart
                 {
                     if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
                     {
-                        if (__instance is not null)
+                        // null record는 초기화 전 상태이므로 스킵, 실제 record가 있을 때만 1회 실행
+                        if (__instance is not null && !LevelSelectorCatalogLogged && args.Length > 0 && args[0] is not null)
                         {
-                            string instanceCatalog = BuildObjectMemberCatalog("LevelSelectorInstance", __instance);
-                            MelonLogger.Msg($"[LevelSelectorInstance] Catalog: {instanceCatalog}");
-
+                            LevelSelectorCatalogLogged = true;
                             EnumerateLevelSelectorLevels(__instance);
                         }
 
                         if (args.Length > 0 && args[0] is not null)
                         {
                             object record = args[0];
-                            string recordCatalog = BuildObjectMemberCatalog("FetchTrackRecord.record", record);
-                            MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] Record Catalog: {recordCatalog}");
-
                             List<string> recordDetails = new List<string>();
                             string[] detailNames = { "score", "rate", "perfect", "accuracy", "combo", "grade", "clear", "rank" };
                             foreach (string name in detailNames)
@@ -411,7 +408,7 @@ namespace STARGAZER_custom_chart
                             }
                             if (recordDetails.Count > 0)
                             {
-                                MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] Record Details: {string.Join(", ", recordDetails)}");
+                                MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] {string.Join(", ", recordDetails)}");
                             }
                         }
                     }
@@ -584,112 +581,40 @@ namespace STARGAZER_custom_chart
                 }
 
                 var items = EnumerateCollectionItems(levels, 12).ToList();
-                MelonLogger.Msg($"[LevelSelector][Enumerate] Found 'levels' collection with {items.Count} items. Enumerating elements:");
+                if (items.Count == 0) return;
 
-                for (int i = 0; i < items.Count; i++)
+                var levelSummary = new List<string>();
+                foreach (object? item in items)
                 {
-                    object? item = items[i];
-                    if (item is null)
-                    {
-                        MelonLogger.Msg($"  [{i}] null");
-                        continue;
-                    }
+                    if (item is null) { levelSummary.Add("null"); continue; }
 
-                    string itemType = item.GetType().FullName ?? item.GetType().Name;
-
-                    // Log the Member Catalog of SelectionLevel for the first item
-                    if (i == 0)
-                    {
-                        string selectionLevelCatalog = BuildObjectMemberCatalog("SelectionLevel", item);
-                        MelonLogger.Msg($"[LevelSelector][Enumerate] SelectionLevel Catalog: {selectionLevelCatalog}");
-                    }
-
-                    // Extract details using candidates
-                    string details = "";
+                    // item(LevelItem) → name (GameObject 이름 = "Cosmic"/"Stellar"/"Void" 등)
+                    string levelName = "?";
+                    string levelText = "?";
                     try
                     {
-                        string[] detailNames = { "name", "id", "level", "title", "text", "value", "lv", "difficulty", "num", "score", "rate", "number", "index" };
-                        List<string> foundDetails = new List<string>();
-                        foreach (string detailName in detailNames)
+                        object? levelItem = TryGetMemberValue(item, item.GetType(), "item");
+                        if (levelItem is not null)
                         {
-                            if (TryGetValueByNameCandidates(item, new[] { detailName }, out object? detailVal) && detailVal is not null)
-                            {
-                                foundDetails.Add($"{detailName}={detailVal}");
-                            }
-                        }
-                        if (foundDetails.Count > 0)
-                        {
-                            details = $" ({string.Join(", ", foundDetails)})";
+                            // LevelItem은 Component이므로 name = GameObject 이름
+                            levelName = TryGetMemberValue(levelItem, levelItem.GetType(), "name")?.ToString() ?? "?";
+
+                            // levelText(TextProvider) → Text (난이도 숫자)
+                            object? tp = TryGetMemberValue(levelItem, levelItem.GetType(), "levelText");
+                            if (tp is not null && TryGetExactPropertyValue(tp, "Text", out object? tVal) && tVal is not null)
+                                levelText = tVal.ToString() ?? "?";
                         }
                     }
                     catch { }
 
-                    // Deeper inspection of sub-items inside SelectionLevel
-                    try
-                    {
-                        object? textProvider = TryGetMemberValue(item, item.GetType(), "levelText")
-                            ?? TryGetMemberValue(item, item.GetType(), "LevelText")
-                            ?? TryGetMemberValue(item, item.GetType(), "text")
-                            ?? TryGetMemberValue(item, item.GetType(), "Text")
-                            ?? TryGetMemberValue(item, item.GetType(), "levelItem")
-                            ?? TryGetMemberValue(item, item.GetType(), "LevelItem")
-                            ?? TryGetMemberValue(item, item.GetType(), "_levelText_k__BackingField");
-
-                        if (textProvider is not null)
-                        {
-                            string subTypeName = textProvider.GetType().FullName ?? textProvider.GetType().Name;
-                            
-                            if (i == 0)
-                            {
-                                string subCatalog = BuildObjectMemberCatalog("SelectionLevel.SubItem", textProvider);
-                                MelonLogger.Msg($"[LevelSelector][Enumerate] Sub-item Catalog: {subCatalog}");
-                            }
-
-                            List<string> subDetails = new List<string>();
-                            if (TryGetExactPropertyValue(textProvider, "Text", out object? exactTextVal) && exactTextVal is not null)
-                            {
-                                subDetails.Add($"Text=\"{exactTextVal}\"");
-                            }
-
-                            string[] subDetailNames = { "level", "lv", "number", "index", "value", "title", "text", "name", "id", "difficulty" };
-                            foreach (string subName in subDetailNames)
-                            {
-                                if (TryGetValueByNameCandidates(textProvider, new[] { subName }, out object? subVal) && subVal is not null)
-                                {
-                                    subDetails.Add($"{subName}={subVal}");
-                                }
-                            }
-                            if (subDetails.Count > 0)
-                            {
-                                details += $" | subItem[{subTypeName}]: [{string.Join(", ", subDetails)}]";
-                            }
-
-                            // Nested TextProvider probe
-                            object? nestedTextProvider = TryGetMemberValue(textProvider, textProvider.GetType(), "levelText")
-                                ?? TryGetMemberValue(textProvider, textProvider.GetType(), "LevelText")
-                                ?? TryGetMemberValue(textProvider, textProvider.GetType(), "_levelText_k__BackingField");
-                            if (nestedTextProvider is not null)
-                            {
-                                List<string> nestedDetails = new List<string>();
-                                if (TryGetExactPropertyValue(nestedTextProvider, "Text", out object? nestedExactText) && nestedExactText is not null)
-                                {
-                                    nestedDetails.Add($"Text=\"{nestedExactText}\"");
-                                }
-                                if (nestedDetails.Count > 0)
-                                {
-                                    details += $" | nestedTextProvider: [{string.Join(", ", nestedDetails)}]";
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    MelonLogger.Msg($"  [{i}] Type={itemType}{details}");
+                    levelSummary.Add($"{levelName}={levelText}");
                 }
+
+                MelonLogger.Msg($"[LevelSelector] levels: [{string.Join(", ", levelSummary)}]");
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[LevelSelector][Enumerate] Failed to enumerate selection levels: {ex.Message}");
+                MelonLogger.Warning($"[LevelSelector][Enumerate] Failed: {ex.Message}");
             }
         }
     }
