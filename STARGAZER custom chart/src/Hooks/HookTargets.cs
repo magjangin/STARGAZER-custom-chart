@@ -384,6 +384,12 @@ namespace STARGAZER_custom_chart
                 {
                     if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
                     {
+                        if (__instance is not null)
+                        {
+                            string instanceCatalog = BuildObjectMemberCatalog("LevelSelectorInstance", __instance);
+                            MelonLogger.Msg($"[LevelSelectorInstance] Catalog: {instanceCatalog}");
+                        }
+
                         if (args.Length > 0 && args[0] is not null)
                         {
                             object record = args[0];
