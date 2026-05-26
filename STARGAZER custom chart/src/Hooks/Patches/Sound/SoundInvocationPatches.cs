@@ -29,5 +29,29 @@ namespace STARGAZER_custom_chart
             private static void Prefix(MethodBase __originalMethod, object? __instance, object[]? __args) => HookPrefix(__originalMethod, __instance, __args);
             private static void Postfix(MethodBase __originalMethod, object? __instance, object[]? __args) => HookPostfix(__originalMethod, __instance, __args);
         }
+
+        [HarmonyPatch]
+        private static class StopBgmPatch
+        {
+            private static MethodBase TargetMethod()
+            {
+                var spec = new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "StopBGM", 0)
+                    .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer");
+                return ResolveRequiredTargetMethod(spec);
+            }
+
+            private static bool Prefix()
+            {
+                if (EnableKeepBgmPlaying)
+                {
+                    if (LogOnce("StopBGM_Suppressed"))
+                    {
+                        MelonLogger.Msg("[SoundPatch][StopBGM] Suppressed StopBGM to keep BGM playing!");
+                    }
+                    return false; // Suppress original StopBGM execution
+                }
+                return true;
+            }
+        }
     }
 }
