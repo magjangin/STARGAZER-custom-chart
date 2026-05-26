@@ -254,7 +254,14 @@ namespace STARGAZER_custom_chart
 
                                     // Retrieve string/value/text from TextProvider
                                     List<string> textDetails = new List<string>();
-                                    string[] textFields = { "text", "Text", "value", "Value", "str", "Str", "stringValue", "StringValue", "raw", "Raw", "displayText", "DisplayText" };
+                                    
+                                    // Query "Text" property EXACTLY first to get the difficulty number!
+                                    if (TryGetExactPropertyValue(textProvider, "Text", out object? exactTextVal) && exactTextVal is not null)
+                                    {
+                                        textDetails.Add($"Text=\"{exactTextVal}\"");
+                                    }
+
+                                    string[] textFields = { "value", "Value", "str", "Str", "stringValue", "StringValue", "raw", "Raw", "displayText", "DisplayText" };
                                     foreach (string textField in textFields)
                                     {
                                         if (TryGetValueByNameCandidates(textProvider, new[] { textField }, out object? textVal) && textVal is not null)
@@ -280,6 +287,41 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[FocusedTrackViewer][{phase}] Failed to enumerate collection '{memberName}': {ex.Message}");
             }
+        }
+
+        private static bool TryGetExactPropertyValue(object owner, string name, out object? value)
+        {
+            value = null;
+            if (owner is null) return false;
+
+            Type type = owner.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+            PropertyInfo? prop = type.GetProperty(name, flags)
+                ?? type.GetProperties(flags).FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (prop is not null && prop.CanRead && prop.GetIndexParameters().Length == 0)
+            {
+                try
+                {
+                    value = prop.GetValue(owner);
+                    return value is not null;
+                }
+                catch {}
+            }
+
+            FieldInfo? field = type.GetField(name, flags)
+                ?? type.GetFields(flags).FirstOrDefault(f => string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (field is not null)
+            {
+                try
+                {
+                    value = field.GetValue(owner);
+                    return value is not null;
+                }
+                catch {}
+            }
+
+            return false;
         }
     }
 }
