@@ -28,6 +28,25 @@ namespace STARGAZER_custom_chart
             ApplyTrackDisplayNameOverride("MetaDisplayNameEN", __instance, ref __result);
         }
 
+        private static void ArtistDisplayNamePostfix(object __instance, ref string __result)
+        {
+            if (string.IsNullOrWhiteSpace(__result))
+            {
+                return;
+            }
+            string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
+            MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
+        }
+
+        private static void TrackIDPostfix(object __instance, ref string __result)
+        {
+            if (string.IsNullOrWhiteSpace(__result))
+            {
+                return;
+            }
+            MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
+        }
+
         private static void ApplyTrackDisplayNameOverride(string source, object? trackData, ref string displayName)
         {
             if (string.IsNullOrWhiteSpace(displayName))

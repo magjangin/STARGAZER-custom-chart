@@ -130,6 +130,8 @@ namespace STARGAZER_custom_chart
             patched += PatchGetterPostfix(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_TrackDisplayNameEN", 0), nameof(TrackDisplayNameEnPostfix), phase, ref missingCount);
             patched += PatchGetterPostfix(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackMetaData", "get_displayName", 0), nameof(MetaDisplayNamePostfix), phase, ref missingCount);
             patched += PatchGetterPostfix(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackMetaData", "get_displayNameEN", 0), nameof(MetaDisplayNameEnPostfix), phase, ref missingCount);
+            patched += PatchGetterPostfix(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_ArtistDisplayName", 0), nameof(ArtistDisplayNamePostfix), phase, ref missingCount);
+            patched += PatchGetterPostfix(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_TrackID", 0), nameof(TrackIDPostfix), phase, ref missingCount);
 
             return patched;
         }
