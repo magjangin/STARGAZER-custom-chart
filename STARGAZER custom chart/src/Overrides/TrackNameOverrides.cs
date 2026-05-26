@@ -11,7 +11,8 @@ namespace STARGAZER_custom_chart
         private static void TrackDisplayNamePostfix(object __instance, ref string __result)
         {
             string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            if (LogOnce($"Accessor.TrackDisplayName:{trackId}:{__result}"))
+            bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint || LogOnce($"Accessor.TrackDisplayName:{trackId}:{__result}"))
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
             }
@@ -22,7 +23,8 @@ namespace STARGAZER_custom_chart
         private static void TrackDisplayNameEnPostfix(object __instance, ref string __result)
         {
             string trackIdEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            if (LogOnce($"Accessor.TrackDisplayNameEN:{trackIdEn}:{__result}"))
+            bool isStartingPoint = string.Equals(trackIdEn, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint || LogOnce($"Accessor.TrackDisplayNameEN:{trackIdEn}:{__result}"))
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
             }
@@ -33,7 +35,8 @@ namespace STARGAZER_custom_chart
         private static void MetaDisplayNamePostfix(object __instance, ref string __result)
         {
             string trackIdMeta = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            if (LogOnce($"Accessor.MetaDisplayName:{trackIdMeta}:{__result}"))
+            bool isStartingPoint = string.Equals(trackIdMeta, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint || LogOnce($"Accessor.MetaDisplayName:{trackIdMeta}:{__result}"))
             {
                 MelonLogger.Msg($"[Accessor][MetaDisplayName] trackId={trackIdMeta} result={__result}");
             }
@@ -43,7 +46,8 @@ namespace STARGAZER_custom_chart
         private static void MetaDisplayNameEnPostfix(object __instance, ref string __result)
         {
             string trackIdMetaEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            if (LogOnce($"Accessor.MetaDisplayNameEN:{trackIdMetaEn}:{__result}"))
+            bool isStartingPoint = string.Equals(trackIdMetaEn, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint || LogOnce($"Accessor.MetaDisplayNameEN:{trackIdMetaEn}:{__result}"))
             {
                 MelonLogger.Msg($"[Accessor][MetaDisplayNameEN] trackId={trackIdMetaEn} result={__result}");
             }
@@ -58,13 +62,11 @@ namespace STARGAZER_custom_chart
             }
             string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
             string before = __result;
-            if (string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase))
+            bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint)
             {
                 __result = "화영왕";
-                if (LogOnce($"TrackNameOverride.ArtistDisplayName:{trackId}:{__result}"))
-                {
-                    MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
-                }
+                MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
             }
             else
             {
@@ -82,7 +84,8 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
-            if (LogOnce($"TrackNameOverride.TrackID:{__result}"))
+            bool isStartingPoint = string.Equals(__result, "startingpoint", StringComparison.OrdinalIgnoreCase);
+            if (isStartingPoint || LogOnce($"TrackNameOverride.TrackID:{__result}"))
             {
                 MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
             }

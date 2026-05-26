@@ -131,7 +131,9 @@ namespace STARGAZER_custom_chart
             Type mtype = metaObj.GetType();
             string trackId = TryGetStringMember(metaObj, mtype, "id") ?? TryGetStringMember(metaObj, mtype, "TrackID") ?? TryGetStringMember(metaObj, mtype, "trackId") ?? TryGetStringMember(metaObj, mtype, "trackid") ?? "<unknown>";
 
-            if (!LogOnce($"TrackMetaDump:{trackId}"))
+            bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
+
+            if (!isStartingPoint && !LogOnce($"TrackMetaDump:{trackId}"))
             {
                 return;
             }
