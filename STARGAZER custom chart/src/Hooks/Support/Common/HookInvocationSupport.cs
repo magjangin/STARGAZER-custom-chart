@@ -33,6 +33,14 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($"[HookInvoke][GetParser] {BuildInvocationSignature(__originalMethod, __instance, args)}");
                 }
 
+                // Log calls to PlayBGM regardless of EnableVerboseInvocationLogging
+                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal) ||
+                     string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
+                    && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal))
+                {
+                    MelonLogger.Msg($"[SoundPatch][PlayBGM] {BuildInvocationSignature(__originalMethod, __instance, args)}");
+                }
+
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.PlayerBase", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Play", StringComparison.Ordinal))
                 {
