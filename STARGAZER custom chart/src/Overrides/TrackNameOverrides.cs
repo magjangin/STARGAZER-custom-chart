@@ -12,7 +12,7 @@ namespace STARGAZER_custom_chart
         {
             string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
             bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
-            if (isStartingPoint || LogOnce($"Accessor.TrackDisplayName:{trackId}:{__result}"))
+            if (isStartingPoint)
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
             }
@@ -24,7 +24,7 @@ namespace STARGAZER_custom_chart
         {
             string trackIdEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
             bool isStartingPoint = string.Equals(trackIdEn, "startingpoint", StringComparison.OrdinalIgnoreCase);
-            if (isStartingPoint || LogOnce($"Accessor.TrackDisplayNameEN:{trackIdEn}:{__result}"))
+            if (isStartingPoint)
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
             }
@@ -36,7 +36,7 @@ namespace STARGAZER_custom_chart
         {
             string trackIdMeta = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
             bool isStartingPoint = string.Equals(trackIdMeta, "startingpoint", StringComparison.OrdinalIgnoreCase);
-            if (isStartingPoint || LogOnce($"Accessor.MetaDisplayName:{trackIdMeta}:{__result}"))
+            if (isStartingPoint)
             {
                 MelonLogger.Msg($"[Accessor][MetaDisplayName] trackId={trackIdMeta} result={__result}");
             }
@@ -47,7 +47,7 @@ namespace STARGAZER_custom_chart
         {
             string trackIdMetaEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
             bool isStartingPoint = string.Equals(trackIdMetaEn, "startingpoint", StringComparison.OrdinalIgnoreCase);
-            if (isStartingPoint || LogOnce($"Accessor.MetaDisplayNameEN:{trackIdMetaEn}:{__result}"))
+            if (isStartingPoint)
             {
                 MelonLogger.Msg($"[Accessor][MetaDisplayNameEN] trackId={trackIdMetaEn} result={__result}");
             }
@@ -68,13 +68,6 @@ namespace STARGAZER_custom_chart
                 __result = "화영왕";
                 MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
             }
-            else
-            {
-                if (LogOnce($"TrackNameOverride.ArtistDisplayName:{trackId}:{__result}"))
-                {
-                    MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
-                }
-            }
         }
 
         private static void TrackIDPostfix(object __instance, ref string __result)
@@ -85,7 +78,7 @@ namespace STARGAZER_custom_chart
             }
 
             bool isStartingPoint = string.Equals(__result, "startingpoint", StringComparison.OrdinalIgnoreCase);
-            if (isStartingPoint || LogOnce($"TrackNameOverride.TrackID:{__result}"))
+            if (isStartingPoint)
             {
                 MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
             }

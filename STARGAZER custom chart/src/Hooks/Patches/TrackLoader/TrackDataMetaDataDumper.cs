@@ -135,7 +135,7 @@ namespace STARGAZER_custom_chart
 
             bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
 
-            if (!isStartingPoint && !LogOnce($"TrackMetaDump:{trackId}"))
+            if (!isStartingPoint)
             {
                 return;
             }

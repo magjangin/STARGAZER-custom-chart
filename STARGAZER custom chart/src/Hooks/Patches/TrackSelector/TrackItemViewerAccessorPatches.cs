@@ -18,7 +18,7 @@ namespace STARGAZER_custom_chart
                     string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
                     string val = __result?.ToString() ?? "<null>";
                     bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
-                    if (isStartingPoint || LogOnce($"TrackItemViewer.trackNameText:{trackId}:{val}"))
+                    if (isStartingPoint)
                     {
                         MelonLogger.Msg($"[Accessor][TrackItemViewer.trackNameText] trackId={trackId} value={val}");
                     }
@@ -38,7 +38,7 @@ namespace STARGAZER_custom_chart
                     string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
                     string val = __result?.ToString() ?? "<null>";
                     bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
-                    if (isStartingPoint || LogOnce($"TrackItemViewer.composerNameText:{trackId}:{val}"))
+                    if (isStartingPoint)
                     {
                         MelonLogger.Msg($"[Accessor][TrackItemViewer.composerNameText] trackId={trackId} value={val}");
                     }
@@ -58,7 +58,7 @@ namespace STARGAZER_custom_chart
                     string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
                     string val = __result is null ? "<null>" : (__result.GetType().FullName ?? __result.ToString() ?? "<unknown-type>");
                     bool isStartingPoint = string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase);
-                    if (isStartingPoint || LogOnce($"TrackItemViewer.trackNameScroller:{trackId}:{val}"))
+                    if (isStartingPoint)
                     {
                         MelonLogger.Msg($"[Accessor][TrackItemViewer.trackNameScroller] trackId={trackId} valueType={val}");
                     }
