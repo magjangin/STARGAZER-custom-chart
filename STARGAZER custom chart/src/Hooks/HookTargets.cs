@@ -388,6 +388,8 @@ namespace STARGAZER_custom_chart
                         {
                             string instanceCatalog = BuildObjectMemberCatalog("LevelSelectorInstance", __instance);
                             MelonLogger.Msg($"[LevelSelectorInstance] Catalog: {instanceCatalog}");
+
+                            EnumerateLevelSelectorLevels(__instance);
                         }
 
                         if (args.Length > 0 && args[0] is not null)
@@ -565,6 +567,127 @@ namespace STARGAZER_custom_chart
             {
                 TypeNames = new[] { TypeName }.Concat(fallbackTypeNames).ToArray();
                 return this;
+            }
+        }
+
+        private static void EnumerateLevelSelectorLevels(object instance)
+        {
+            try
+            {
+                object? levels = TryGetMemberValue(instance, instance.GetType(), "levels");
+                if (levels is null)
+                {
+                    MelonLogger.Warning("[LevelSelector][Enumerate] 'levels' collection is null.");
+                    return;
+                }
+
+                var items = EnumerateCollectionItems(levels, 12).ToList();
+                MelonLogger.Msg($"[LevelSelector][Enumerate] Found 'levels' collection with {items.Count} items. Enumerating elements:");
+
+                for (int i = 0; i < items.Count; i++)
+                {
+                    object? item = items[i];
+                    if (item is null)
+                    {
+                        MelonLogger.Msg($"  [{i}] null");
+                        continue;
+                    }
+
+                    string itemType = item.GetType().FullName ?? item.GetType().Name;
+
+                    // Log the Member Catalog of SelectionLevel for the first item
+                    if (i == 0)
+                    {
+                        string selectionLevelCatalog = BuildObjectMemberCatalog("SelectionLevel", item);
+                        MelonLogger.Msg($"[LevelSelector][Enumerate] SelectionLevel Catalog: {selectionLevelCatalog}");
+                    }
+
+                    // Extract details using candidates
+                    string details = "";
+                    try
+                    {
+                        string[] detailNames = { "name", "id", "level", "title", "text", "value", "lv", "difficulty", "num", "score", "rate", "number", "index" };
+                        List<string> foundDetails = new List<string>();
+                        foreach (string detailName in detailNames)
+                        {
+                            if (TryGetValueByNameCandidates(item, new[] { detailName }, out object? detailVal) && detailVal is not null)
+                            {
+                                foundDetails.Add($"{detailName}={detailVal}");
+                            }
+                        }
+                        if (foundDetails.Count > 0)
+                        {
+                            details = $" ({string.Join(", ", foundDetails)})";
+                        }
+                    }
+                    catch { }
+
+                    // Deeper inspection of sub-items inside SelectionLevel
+                    try
+                    {
+                        object? textProvider = TryGetMemberValue(item, item.GetType(), "levelText")
+                            ?? TryGetMemberValue(item, item.GetType(), "LevelText")
+                            ?? TryGetMemberValue(item, item.GetType(), "text")
+                            ?? TryGetMemberValue(item, item.GetType(), "Text")
+                            ?? TryGetMemberValue(item, item.GetType(), "levelItem")
+                            ?? TryGetMemberValue(item, item.GetType(), "LevelItem")
+                            ?? TryGetMemberValue(item, item.GetType(), "_levelText_k__BackingField");
+
+                        if (textProvider is not null)
+                        {
+                            string subTypeName = textProvider.GetType().FullName ?? textProvider.GetType().Name;
+                            
+                            if (i == 0)
+                            {
+                                string subCatalog = BuildObjectMemberCatalog("SelectionLevel.SubItem", textProvider);
+                                MelonLogger.Msg($"[LevelSelector][Enumerate] Sub-item Catalog: {subCatalog}");
+                            }
+
+                            List<string> subDetails = new List<string>();
+                            if (TryGetExactPropertyValue(textProvider, "Text", out object? exactTextVal) && exactTextVal is not null)
+                            {
+                                subDetails.Add($"Text=\"{exactTextVal}\"");
+                            }
+
+                            string[] subDetailNames = { "level", "lv", "number", "index", "value", "title", "text", "name", "id", "difficulty" };
+                            foreach (string subName in subDetailNames)
+                            {
+                                if (TryGetValueByNameCandidates(textProvider, new[] { subName }, out object? subVal) && subVal is not null)
+                                {
+                                    subDetails.Add($"{subName}={subVal}");
+                                }
+                            }
+                            if (subDetails.Count > 0)
+                            {
+                                details += $" | subItem[{subTypeName}]: [{string.Join(", ", subDetails)}]";
+                            }
+
+                            // Nested TextProvider probe
+                            object? nestedTextProvider = TryGetMemberValue(textProvider, textProvider.GetType(), "levelText")
+                                ?? TryGetMemberValue(textProvider, textProvider.GetType(), "LevelText")
+                                ?? TryGetMemberValue(textProvider, textProvider.GetType(), "_levelText_k__BackingField");
+                            if (nestedTextProvider is not null)
+                            {
+                                List<string> nestedDetails = new List<string>();
+                                if (TryGetExactPropertyValue(nestedTextProvider, "Text", out object? nestedExactText) && nestedExactText is not null)
+                                {
+                                    nestedDetails.Add($"Text=\"{nestedExactText}\"");
+                                }
+                                if (nestedDetails.Count > 0)
+                                {
+                                    details += $" | nestedTextProvider: [{string.Join(", ", nestedDetails)}]";
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    MelonLogger.Msg($"  [{i}] Type={itemType}{details}");
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[LevelSelector][Enumerate] Failed to enumerate selection levels: {ex.Message}");
             }
         }
     }
