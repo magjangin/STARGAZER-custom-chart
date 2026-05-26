@@ -35,7 +35,16 @@ namespace STARGAZER_custom_chart
                 return;
             }
             string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
+            string before = __result;
+            if (string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase))
+            {
+                __result = "화영왕";
+                MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
+            }
+            else
+            {
+                MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
+            }
         }
 
         private static void TrackIDPostfix(object __instance, ref string __result)
