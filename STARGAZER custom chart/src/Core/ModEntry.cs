@@ -15,6 +15,7 @@ namespace STARGAZER_custom_chart
             {
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
                 TryApplyRuntimeHookPatches("init");
+                TryApplyFocusedTrackViewerPatches();
             }
             catch (Exception ex)
             {
