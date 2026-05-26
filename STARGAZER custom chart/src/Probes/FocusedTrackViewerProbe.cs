@@ -236,6 +236,39 @@ namespace STARGAZER_custom_chart
                             {
                                 details += $" | levelItem: [{string.Join(", ", subDetails)}]";
                             }
+
+                            // Even deeper inspection of the TextProvider inside LevelItem
+                            try
+                            {
+                                object? textProvider = TryGetMemberValue(subItem, subItem.GetType(), "levelText")
+                                    ?? TryGetMemberValue(subItem, subItem.GetType(), "LevelText")
+                                    ?? TryGetMemberValue(subItem, subItem.GetType(), "_levelText_k__BackingField");
+
+                                if (textProvider is not null)
+                                {
+                                    if (i == 0)
+                                    {
+                                        string textProviderCatalog = BuildObjectMemberCatalog($"levelText[levelItem[Item[{memberName}]]]", textProvider);
+                                        MelonLogger.Msg($"[FocusedTrackViewer][{phase}] TextProvider Catalog: {textProviderCatalog}");
+                                    }
+
+                                    // Retrieve string/value/text from TextProvider
+                                    List<string> textDetails = new List<string>();
+                                    string[] textFields = { "text", "Text", "value", "Value", "str", "Str", "stringValue", "StringValue", "raw", "Raw", "displayText", "DisplayText" };
+                                    foreach (string textField in textFields)
+                                    {
+                                        if (TryGetValueByNameCandidates(textProvider, new[] { textField }, out object? textVal) && textVal is not null)
+                                        {
+                                            textDetails.Add($"{textField}={textVal}");
+                                        }
+                                    }
+                                    if (textDetails.Count > 0)
+                                    {
+                                        details += $" | levelText: [{string.Join(", ", textDetails)}]";
+                                    }
+                                }
+                            }
+                            catch { }
                         }
                     }
                     catch { }
