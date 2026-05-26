@@ -67,7 +67,11 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
 
                 // Result flow
-                new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData")
+                new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
+
+                // LevelSelector hooks
+                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
+                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
             };
 
             int patchedCount = 0;
@@ -374,6 +378,43 @@ namespace STARGAZER_custom_chart
                     && string.Equals(__originalMethod.Name, "_Load_b__5_0", StringComparison.Ordinal))
                 {
                     ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
+                }
+
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.LevelSelector.LevelSelector", StringComparison.Ordinal))
+                {
+                    if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
+                    {
+                        if (args.Length > 0 && args[0] is not null)
+                        {
+                            object record = args[0];
+                            string recordCatalog = BuildObjectMemberCatalog("FetchTrackRecord.record", record);
+                            MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] Record Catalog: {recordCatalog}");
+
+                            List<string> recordDetails = new List<string>();
+                            string[] detailNames = { "score", "rate", "perfect", "accuracy", "combo", "grade", "clear", "rank" };
+                            foreach (string name in detailNames)
+                            {
+                                if (TryGetValueByNameCandidates(record, new[] { name }, out object? val) && val is not null)
+                                {
+                                    recordDetails.Add($"{name}={val}");
+                                }
+                            }
+                            if (recordDetails.Count > 0)
+                            {
+                                MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] Record Details: {string.Join(", ", recordDetails)}");
+                            }
+                        }
+                    }
+                    
+                    if (string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
+                    {
+                        if (args.Length > 0 && args[0] is not null)
+                        {
+                            object sprite = args[0];
+                            string spriteName = TryGetPropertyValue(sprite, "name")?.ToString() ?? sprite.GetType().Name;
+                            MelonLogger.Msg($"[LevelSelector][FetchJacektImage] Sprite Name: {spriteName}");
+                        }
+                    }
                 }
 
             }
