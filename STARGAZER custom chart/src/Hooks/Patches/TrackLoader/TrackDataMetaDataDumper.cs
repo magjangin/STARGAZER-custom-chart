@@ -143,47 +143,50 @@ namespace STARGAZER_custom_chart
 
             MelonLogger.Msg($"[TrackMetaDump] caller={caller} metaType={mtype.FullName} id={trackId} display={display} displayEN={displayEN} bundle={bundle} episode={episode}");
 
-            // Dump member names and (safe) values for debugging
-            try
+            // Dump member names and (safe) values for debugging ONLY for startingpoint tracks
+            if (string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase))
             {
-                var memberList = new System.Collections.Generic.List<string>();
-                // reuse existing 'flags' declared above
-                // (flags variable already contains BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-
-                int pcount = 0;
-                foreach (PropertyInfo prop in mtype.GetProperties(searchFlags))
+                try
                 {
-                    if (!prop.CanRead) { continue; }
-                    try
-                    {
-                        object? val = prop.GetValue(metaObj);
-                        string sval = val is null ? "<null>" : val.ToString() ?? "<obj>";
-                        string writable = prop.CanWrite ? "W" : "R";
-                        memberList.Add($"P:{prop.Name}({writable})={sval}");
-                    }
-                    catch { memberList.Add($"P:{prop.Name}=<error>"); }
-                    if (++pcount >= 64) break;
-                }
+                    var memberList = new System.Collections.Generic.List<string>();
+                    // reuse existing 'flags' declared above
+                    // (flags variable already contains BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
 
-                int fcount = 0;
-                foreach (FieldInfo field in mtype.GetFields(searchFlags))
+                    int pcount = 0;
+                    foreach (PropertyInfo prop in mtype.GetProperties(searchFlags))
+                    {
+                        if (!prop.CanRead) { continue; }
+                        try
+                        {
+                            object? val = prop.GetValue(metaObj);
+                            string sval = val is null ? "<null>" : val.ToString() ?? "<obj>";
+                            string writable = prop.CanWrite ? "W" : "R";
+                            memberList.Add($"P:{prop.Name}({writable})={sval}");
+                        }
+                        catch { memberList.Add($"P:{prop.Name}=<error>"); }
+                        if (++pcount >= 64) break;
+                    }
+
+                    int fcount = 0;
+                    foreach (FieldInfo field in mtype.GetFields(searchFlags))
+                    {
+                        try
+                        {
+                            object? val = field.GetValue(metaObj);
+                            string sval = val is null ? "<null>" : val.ToString() ?? "<obj>";
+                            string ro = field.IsInitOnly ? "RO" : "RW";
+                            memberList.Add($"F:{field.Name}({ro})={sval}");
+                        }
+                        catch { memberList.Add($"F:{field.Name}=<error>"); }
+                        if (++fcount >= 128) break;
+                    }
+
+                    MelonLogger.Msg($"[TrackMetaDump] members ({memberList.Count}): {string.Join(", ", memberList)}");
+                }
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        object? val = field.GetValue(metaObj);
-                        string sval = val is null ? "<null>" : val.ToString() ?? "<obj>";
-                        string ro = field.IsInitOnly ? "RO" : "RW";
-                        memberList.Add($"F:{field.Name}({ro})={sval}");
-                    }
-                    catch { memberList.Add($"F:{field.Name}=<error>"); }
-                    if (++fcount >= 128) break;
+                    MelonLogger.Warning($"[TrackMetaDump] member dump failed: {ex.GetType().Name}: {ex.Message}");
                 }
-
-                MelonLogger.Msg($"[TrackMetaDump] members ({memberList.Count}): {string.Join(", ", memberList)}");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[TrackMetaDump] member dump failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
