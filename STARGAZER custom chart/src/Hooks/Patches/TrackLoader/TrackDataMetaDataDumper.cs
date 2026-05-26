@@ -7,6 +7,8 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        private static long LastTrackMetaDumpMembersTicks;
+
         [HarmonyPatch]
         private static class TrackDataMeta_Postfixes
         {
@@ -148,8 +150,10 @@ namespace STARGAZER_custom_chart
             // Dump member names and (safe) values for debugging ONLY for startingpoint tracks
             if (string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase))
             {
-                if (LogOnce($"TrackMetaDumpMembers:{metaObj.GetHashCode()}"))
+                long now = Environment.TickCount64;
+                if (now - LastTrackMetaDumpMembersTicks > 5000)
                 {
+                    LastTrackMetaDumpMembersTicks = now;
                     try
                     {
                         var memberList = new System.Collections.Generic.List<string>();
