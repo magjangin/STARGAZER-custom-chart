@@ -26,7 +26,8 @@ namespace STARGAZER_custom_chart
                 }
 
                 // Log calls to Il2CppStargazer.TrackLoader+INNER_TrackMetaData.GetParser()
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackMetaData", StringComparison.Ordinal)
+                if (EnableVerboseInvocationLogging
+                    && string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackMetaData", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "GetParser", StringComparison.Ordinal))
                 {
                     MelonLogger.Msg($"[HookInvoke][GetParser] {BuildInvocationSignature(__originalMethod, __instance, args)}");
@@ -125,28 +126,31 @@ namespace STARGAZER_custom_chart
                     HandleTrackSelectorSetTracks(args[0]);
 
                     // PoC: attempt to rewrite TrackID for provided tracks (non-destructive)
-                    try
+                    if (EnableTrackIdRewrite)
                     {
-                        var target = args[0];
-                        int appliedCount = 0;
-                        if (target is System.Collections.IEnumerable && !(target is string))
+                        try
                         {
-                            foreach (var item in (System.Collections.IEnumerable)target)
+                            var target = args[0];
+                            int appliedCount = 0;
+                            if (target is System.Collections.IEnumerable && !(target is string))
                             {
-                                if (item is null) continue;
-                                if (TrySetTrackId(item, item.GetType(), "album_override_id_001")) appliedCount++;
+                                foreach (var item in (System.Collections.IEnumerable)target)
+                                {
+                                    if (item is null) continue;
+                                    if (TrySetTrackId(item, item.GetType(), TrackIdRewriteValue)) appliedCount++;
+                                }
+                                MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied to {appliedCount} items");
                             }
-                            MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied to {appliedCount} items");
+                            else
+                            {
+                                bool applied = TrySetTrackId(target, target.GetType(), TrackIdRewriteValue);
+                                MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied={applied} targetType={target.GetType().FullName}");
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            bool applied = TrySetTrackId(target, target.GetType(), "album_override_id_001");
-                            MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied={applied} targetType={target.GetType().FullName}");
+                            MelonLogger.Warning($"[TrackSelector][Set] TrackID rewrite failed: {ex.GetType().Name}: {ex.Message}");
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        MelonLogger.Warning($"[TrackSelector][Set] TrackID rewrite failed: {ex.GetType().Name}: {ex.Message}");
                     }
                 }
 
@@ -298,6 +302,11 @@ namespace STARGAZER_custom_chart
 
         private static bool ShouldSkipInvocationLog(MethodBase method, object[] args)
         {
+            if (!EnableVerboseInvocationLogging)
+            {
+                return true;
+            }
+
             string methodFullName = $"{method.DeclaringType?.FullName}.{method.Name}";
             if (SuppressedInvocationMethods.Contains(methodFullName))
             {

@@ -6,6 +6,18 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        private static bool EnableVerboseInvocationLogging = false;
+        private static readonly HashSet<string> LoggedOnceCache = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly object LoggedOnceLock = new object();
+
+        private static bool LogOnce(string key)
+        {
+            lock (LoggedOnceLock)
+            {
+                return LoggedOnceCache.Add(key);
+            }
+        }
+
         private static readonly HashSet<string> LoggedCurrentTrackViewerImageHits = new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<string> LoggedResultImageHits = new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<string> SuppressedInvocationMethods = new HashSet<string>(StringComparer.Ordinal)

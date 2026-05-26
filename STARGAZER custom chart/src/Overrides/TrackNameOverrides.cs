@@ -11,7 +11,10 @@ namespace STARGAZER_custom_chart
         private static void TrackDisplayNamePostfix(object __instance, ref string __result)
         {
             string trackId = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
+            if (LogOnce($"Accessor.TrackDisplayName:{trackId}:{__result}"))
+            {
+                MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
+            }
             try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNamePostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayName", __instance, ref __result);
         }
@@ -19,7 +22,10 @@ namespace STARGAZER_custom_chart
         private static void TrackDisplayNameEnPostfix(object __instance, ref string __result)
         {
             string trackIdEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
+            if (LogOnce($"Accessor.TrackDisplayNameEN:{trackIdEn}:{__result}"))
+            {
+                MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
+            }
             try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNameENPostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayNameEN", __instance, ref __result);
         }
@@ -27,14 +33,20 @@ namespace STARGAZER_custom_chart
         private static void MetaDisplayNamePostfix(object __instance, ref string __result)
         {
             string trackIdMeta = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            MelonLogger.Msg($"[Accessor][MetaDisplayName] trackId={trackIdMeta} result={__result}");
+            if (LogOnce($"Accessor.MetaDisplayName:{trackIdMeta}:{__result}"))
+            {
+                MelonLogger.Msg($"[Accessor][MetaDisplayName] trackId={trackIdMeta} result={__result}");
+            }
             ApplyTrackDisplayNameOverride("MetaDisplayName", __instance, ref __result);
         }
 
         private static void MetaDisplayNameEnPostfix(object __instance, ref string __result)
         {
             string trackIdMetaEn = __instance is null ? "<unknown>" : BuildTrackIdForDebug(__instance);
-            MelonLogger.Msg($"[Accessor][MetaDisplayNameEN] trackId={trackIdMetaEn} result={__result}");
+            if (LogOnce($"Accessor.MetaDisplayNameEN:{trackIdMetaEn}:{__result}"))
+            {
+                MelonLogger.Msg($"[Accessor][MetaDisplayNameEN] trackId={trackIdMetaEn} result={__result}");
+            }
             ApplyTrackDisplayNameOverride("MetaDisplayNameEN", __instance, ref __result);
         }
 
@@ -49,11 +61,17 @@ namespace STARGAZER_custom_chart
             if (string.Equals(trackId, "startingpoint", StringComparison.OrdinalIgnoreCase))
             {
                 __result = "화영왕";
-                MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
+                if (LogOnce($"TrackNameOverride.ArtistDisplayName:{trackId}:{__result}"))
+                {
+                    MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} {before} -> {__result}");
+                }
             }
             else
             {
-                MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
+                if (LogOnce($"TrackNameOverride.ArtistDisplayName:{trackId}:{__result}"))
+                {
+                    MelonLogger.Msg($"[TrackNameOverride][ArtistDisplayName] trackId={trackId} artist={__result}");
+                }
             }
         }
 
@@ -64,7 +82,10 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
-            MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
+            if (LogOnce($"TrackNameOverride.TrackID:{__result}"))
+            {
+                MelonLogger.Msg($"[TrackNameOverride][TrackID] trackId={__result}");
+            }
         }
 
         private static void ApplyTrackDisplayNameOverride(string source, object? trackData, ref string displayName)

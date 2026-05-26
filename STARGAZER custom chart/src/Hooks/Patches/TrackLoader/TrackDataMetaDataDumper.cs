@@ -13,33 +13,29 @@ namespace STARGAZER_custom_chart
             private static MethodBase TargetMethod1() => ResolveRequiredTargetMethod(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_TrackDisplayName", 0));
             private static void Postfix1(object __instance, ref string __result)
             {
-                MelonLogger.Msg($"[TrackMetaDump] invoked: caller=get_TrackDisplayName");
                 DumpInnerTrackMetaDataSafe(__instance, "get_TrackDisplayName");
             }
 
             private static MethodBase TargetMethod2() => ResolveRequiredTargetMethod(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_TrackDisplayNameEN", 0));
             private static void Postfix2(object __instance, ref string __result)
             {
-                MelonLogger.Msg($"[TrackMetaDump] invoked: caller=get_TrackDisplayNameEN");
                 DumpInnerTrackMetaDataSafe(__instance, "get_TrackDisplayNameEN");
             }
 
             private static MethodBase TargetMethod3() => ResolveRequiredTargetMethod(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_ArtistDisplayName", 0));
             private static void Postfix3(object __instance, ref string __result)
             {
-                MelonLogger.Msg($"[TrackMetaDump] invoked: caller=get_ArtistDisplayName");
                 DumpInnerTrackMetaDataSafe(__instance, "get_ArtistDisplayName");
             }
 
             private static MethodBase TargetMethod4() => ResolveRequiredTargetMethod(new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "get_TrackID", 0));
             private static void Postfix4(object __instance, ref string __result)
             {
-                MelonLogger.Msg($"[TrackMetaDump] invoked: caller=get_TrackID");
                 DumpInnerTrackMetaDataSafe(__instance, "get_TrackID");
             }
         }
 
-        private static void DumpInnerTrackMetaDataSafe(object instance, string caller)
+        private static void DumpInnerTrackMetaDataSafe(object? instance, string caller)
         {
             try
             {
@@ -51,7 +47,7 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void DumpInnerTrackMetaData(object instance, string caller)
+        private static void DumpInnerTrackMetaData(object? instance, string caller)
         {
             if (instance is null) return;
 
@@ -88,7 +84,10 @@ namespace STARGAZER_custom_chart
                             metaObj = ff.GetValue(instance);
                             if (metaObj is not null)
                             {
-                                MelonLogger.Msg($"[TrackMetaDump] fallback found meta field: {ff.Name}");
+                                if (LogOnce($"TrackMetaDumpFallbackField:{t.FullName}:{ff.Name}"))
+                                {
+                                    MelonLogger.Msg($"[TrackMetaDump] fallback found meta field: {ff.Name}");
+                                }
                                 break;
                             }
                         }
@@ -108,7 +107,10 @@ namespace STARGAZER_custom_chart
                             metaObj = pp.GetValue(instance);
                             if (metaObj is not null)
                             {
-                                MelonLogger.Msg($"[TrackMetaDump] fallback found meta property: {pp.Name}");
+                                if (LogOnce($"TrackMetaDumpFallbackProperty:{t.FullName}:{pp.Name}"))
+                                {
+                                    MelonLogger.Msg($"[TrackMetaDump] fallback found meta property: {pp.Name}");
+                                }
                                 break;
                             }
                         }
@@ -119,12 +121,21 @@ namespace STARGAZER_custom_chart
 
             if (metaObj is null)
             {
-                MelonLogger.Msg($"[TrackMetaDump] {caller}: metaData not found on instance type={t.FullName}");
+                if (LogOnce($"TrackMetaDumpNotFound:{t.FullName}"))
+                {
+                    MelonLogger.Msg($"[TrackMetaDump] {caller}: metaData not found on instance type={t.FullName}");
+                }
                 return;
             }
 
             Type mtype = metaObj.GetType();
             string trackId = TryGetStringMember(metaObj, mtype, "id") ?? TryGetStringMember(metaObj, mtype, "TrackID") ?? TryGetStringMember(metaObj, mtype, "trackId") ?? TryGetStringMember(metaObj, mtype, "trackid") ?? "<unknown>";
+
+            if (!LogOnce($"TrackMetaDump:{trackId}"))
+            {
+                return;
+            }
+
             string display = TryGetStringMember(metaObj, mtype, "displayName") ?? TryGetStringMember(metaObj, mtype, "DisplayName") ?? "<unknown>";
             string displayEN = TryGetStringMember(metaObj, mtype, "displayNameEN") ?? "?";
             string bundle = TryGetStringMember(metaObj, mtype, "bundleID") ?? TryGetStringMember(metaObj, mtype, "BundleID") ?? "<none>";
