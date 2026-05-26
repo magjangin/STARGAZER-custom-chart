@@ -207,6 +207,39 @@ namespace STARGAZER_custom_chart
                     }
                     catch { }
 
+                    // Deeper inspection of the nested 'levelItem' object inside LevelUnit
+                    try
+                    {
+                        object? subItem = TryGetMemberValue(item, item.GetType(), "levelItem")
+                            ?? TryGetMemberValue(item, item.GetType(), "LevelItem")
+                            ?? TryGetMemberValue(item, item.GetType(), "_levelItem_k__BackingField");
+
+                        if (subItem is not null)
+                        {
+                            if (i == 0)
+                            {
+                                string subCatalog = BuildObjectMemberCatalog($"levelItem[Item[{memberName}]]", subItem);
+                                MelonLogger.Msg($"[FocusedTrackViewer][{phase}] Sub-item Catalog: {subCatalog}");
+                            }
+
+                            // Retrieve primitive / string / enum details of the nested levelItem
+                            List<string> subDetails = new List<string>();
+                            string[] subDetailNames = { "level", "lv", "number", "index", "value", "title", "text", "name", "id", "difficulty", "score", "rate" };
+                            foreach (string subName in subDetailNames)
+                            {
+                                if (TryGetValueByNameCandidates(subItem, new[] { subName }, out object? subVal) && subVal is not null)
+                                {
+                                    subDetails.Add($"{subName}={subVal}");
+                                }
+                            }
+                            if (subDetails.Count > 0)
+                            {
+                                details += $" | levelItem: [{string.Join(", ", subDetails)}]";
+                            }
+                        }
+                    }
+                    catch { }
+
                     MelonLogger.Msg($"  [{i}] Type={itemType}{details}");
                 }
             }
