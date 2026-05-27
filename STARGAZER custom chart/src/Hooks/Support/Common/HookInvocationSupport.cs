@@ -32,6 +32,9 @@ namespace STARGAZER_custom_chart
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.PlayerBase", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Play", StringComparison.Ordinal))
                 {
+                    IsInPlayScene = true;
+                    MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
+
                     if (EnableForceAutoPlayAtPlayerBasePlay)
                     {
                         TryEnablePlayerBaseAutoPlay(__instance);
@@ -83,6 +86,9 @@ namespace STARGAZER_custom_chart
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.Result.PlayInfoViewer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "ShowPlayInfo", StringComparison.Ordinal))
                 {
+                    IsInPlayScene = false;
+                    MelonLogger.Msg("[PlayScene] 결과 화면 진입 — IsInPlayScene=false");
+
                     if (EnableResultSceneJacketLogging)
                     {
                         ProbeResultPlayInfoJacketMembers(__instance, args);
@@ -111,54 +117,42 @@ namespace STARGAZER_custom_chart
                     HandleTrackSelectorSetTracks(args[0]);
                 }
 
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.TrackSelector.TrackListViewer", StringComparison.Ordinal))
+                {
+                    if (string.Equals(__originalMethod.Name, "MoveCursor", StringComparison.Ordinal))
+                    {
+                        HandleTrackListViewerMoveCursor(__instance, args);
+                    }
+                }
+
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.LevelSelector.LevelSelector", StringComparison.Ordinal))
                 {
                     if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
                     {
-                        if (EnableRuntimeProbeLogging && __instance is not null && !LevelSelectorCatalogLogged && args.Length > 0 && args[0] is not null)
-                        {
-                            LevelSelectorCatalogLogged = true;
-                            EnumerateLevelSelectorLevels(__instance);
-                        }
-
-                        if (EnableRuntimeProbeLogging && args.Length > 0 && args[0] is not null)
-                        {
-                            object record = args[0];
-                            List<string> recordDetails = new List<string>();
-                            string[] detailNames = { "score", "rate", "perfect", "accuracy", "combo", "grade", "clear", "rank" };
-                            foreach (string name in detailNames)
-                            {
-                                if (TryGetValueByNameCandidates(record, new[] { name }, out object? val) && val is not null)
-                                {
-                                    recordDetails.Add($"{name}={val}");
-                                }
-                            }
-                            if (recordDetails.Count > 0)
-                            {
-                                MelonLogger.Msg($"[LevelSelector][FetchTrackRecord] {string.Join(", ", recordDetails)}");
-                            }
-                        }
+                        HandleLevelSelectorFetchTrackRecord(__instance, args);
                     }
 
-                    if (string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal)
-                        && args.Length > 0
-                        && args[0] is not null)
+                    if (string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
                     {
-                        if (EnableRuntimeProbeLogging)
-                        {
-                            object sprite = args[0];
-                            string spriteName = TryGetPropertyValue(sprite, "name")?.ToString() ?? sprite.GetType().Name;
-                            MelonLogger.Msg($"[LevelSelector][FetchJacektImage] Sprite Name: {spriteName}");
-                        }
+                        HandleLevelSelectorFetchJacektImage(__instance, args);
                     }
                 }
 
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "LoadTracksAsync", StringComparison.Ordinal)
-                    && EnableRuntimeProbeLogging && !TrackLoaderCatalogLogged && __instance is not null)
+
+                // PlaySFX 오버로드 자동 덤프: PlayBGM이 처음 호출되는 시점에 SoundPlayer 타입에서 PlaySFX 시그니처를 전부 출력
+                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal)
+                     || string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
+                    && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal)
+                    && LogOnce("SoundPlayer.PlaySFX.overload.dump"))
                 {
-                    TrackLoaderCatalogLogged = true;
-                    MelonLogger.Msg($"[TrackLoader] {BuildObjectMemberCatalog("TrackLoader", __instance)}");
+                    DumpPlaySFXOverloads(__originalMethod.DeclaringType!);
+                }
+
+                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal)
+                     || string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
+                    && string.Equals(__originalMethod.Name, "PlaySFX", StringComparison.Ordinal))
+                {
+                    HandlePlaySFX(__originalMethod, args);
                 }
             }
             catch (Exception ex)

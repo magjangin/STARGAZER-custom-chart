@@ -112,7 +112,7 @@ namespace STARGAZER_custom_chart
                     try { val = property.GetValue(instance); } catch { continue; }
                     if (val is null) continue;
 
-                    EnumerateFocusedTrackViewerCollection(property.Name, val, methodName);
+                    EnumerateFocusedTrackViewerCollection(instance, property.Name, val, methodName);
                 }
 
                 foreach (FieldInfo field in type.GetFields(flags))
@@ -123,7 +123,7 @@ namespace STARGAZER_custom_chart
                     try { val = field.GetValue(instance); } catch { continue; }
                     if (val is null) continue;
 
-                    EnumerateFocusedTrackViewerCollection(field.Name, val, methodName);
+                    EnumerateFocusedTrackViewerCollection(instance, field.Name, val, methodName);
                 }
             }
             catch (Exception ex)
@@ -132,7 +132,7 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void EnumerateFocusedTrackViewerCollection(string memberName, object collection, string methodName)
+        private static void EnumerateFocusedTrackViewerCollection(object parentInstance, string memberName, object collection, string methodName)
         {
             try
             {
@@ -140,6 +140,7 @@ namespace STARGAZER_custom_chart
                 if (items.Count == 0) return;
 
                 var levelSummary = new List<string>();
+                var cacheEntry = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (object? item in items)
                 {
                     if (item is null) { levelSummary.Add("null"); continue; }
@@ -169,16 +170,60 @@ namespace STARGAZER_custom_chart
                     catch { }
 
                     levelSummary.Add($"{level}={text}");
+                    if (level != "?" && text != "?")
+                    {
+                        cacheEntry[level] = text;
+                    }
+                }
+
+                string songInfo = "";
+                string songId = "";
+
+                string[] trackCandidates = { "CurrentFocused", "selectedTrack", "currentTrack", "focusedTrack", "track", "trackData" };
+                object? trackObj = null;
+                Type parentType = parentInstance.GetType();
+                foreach (var fieldName in trackCandidates)
+                {
+                    trackObj = TryGetMemberValue(parentInstance, parentType, fieldName);
+                    if (trackObj is not null && trackObj.GetType().FullName != "System.Int32" && trackObj.GetType().FullName != "System.Boolean")
+                    {
+                        break;
+                    }
+                }
+
+                if (trackObj is not null)
+                {
+                    Type t = trackObj.GetType();
+                    string id = TryGetMemberValue(trackObj, t, "TrackID")?.ToString()
+                                ?? TryGetMemberValue(trackObj, t, "trackId")?.ToString()
+                                ?? "?";
+                    string title = TryGetMemberValue(trackObj, t, "TrackDisplayName")?.ToString()
+                                   ?? TryGetMemberValue(trackObj, t, "TrackDisplayNameEN")?.ToString()
+                                   ?? TryGetMemberValue(trackObj, t, "displayName")?.ToString()
+                                   ?? "?";
+                    string artist = TryGetMemberValue(trackObj, t, "ArtistDisplayName")?.ToString() ?? "?";
+
+                    songInfo = $"Song: {title} / {artist} (id={id}) | ";
+                    songId = id;
+                }
+
+                // Save to cache
+                if (!string.IsNullOrEmpty(songId) && songId != "?" && cacheEntry.Count > 0)
+                {
+                    lock (_trackLevelsCache)
+                    {
+                        _trackLevelsCache[songId] = cacheEntry;
+                    }
                 }
 
                 string summary = string.Join(", ", levelSummary);
-                string line = $"[{summary}] via {methodName}";
+                string changeKey = $"{songId}_{summary}";
 
                 // 값이 변경됐을 때만 출력
-                if (string.Equals(_lastFocusedTrackViewerSummary, summary, StringComparison.Ordinal)) return;
-                _lastFocusedTrackViewerSummary = summary;
+                if (string.Equals(_lastFocusedTrackViewerSummary, changeKey, StringComparison.Ordinal)) return;
+                _lastFocusedTrackViewerSummary = changeKey;
 
-                MelonLogger.Msg($"[FocusedTrackViewer] levels: {line}");
+                MelonLogger.Msg($"[FocusedTrackViewer] {songInfo}levels: [{summary}] via {methodName}");
             }
             catch (Exception ex)
             {

@@ -14,6 +14,19 @@ namespace STARGAZER_custom_chart
             try
             {
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
+
+                // Create the 'hwa' directory automatically in the game directory
+                string hwaPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "hwa");
+                if (!System.IO.Directory.Exists(hwaPath))
+                {
+                    System.IO.Directory.CreateDirectory(hwaPath);
+                    LoggerInstance.Msg($"[Mod] Created directory: {hwaPath}");
+                }
+                else
+                {
+                    LoggerInstance.Msg($"[Mod] Directory already exists: {hwaPath}");
+                }
+
                 TryApplyHarmonyAttributePatches("init");
                 TryApplyFocusedTrackViewerPatches();
             }

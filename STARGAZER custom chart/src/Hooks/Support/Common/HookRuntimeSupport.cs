@@ -8,7 +8,7 @@ namespace STARGAZER_custom_chart
     {
         private static bool EnableVerboseInvocationLogging = true;
         private static bool EnableFocusedHarmonyInvocationLogging = true;
-        private static bool EnableRuntimeProbeLogging = false;
+        private static bool EnableRuntimeProbeLogging = true;
         private static bool EnablePlaySceneJacketLogging = true;
         private static bool EnablePlaySceneTrackLogging = true;
         private static bool EnableResultSceneJacketLogging = true;
@@ -35,6 +35,9 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Starlike.Sound.SoundPlayer.GetBGMHandler",
             "Il2CppStarlike.Sound.SoundPlayer.GetBGMHandler",
             "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker",
+            // PlaySFX는 HandlePlaySFX (IsInPlayScene 가드 포함)에서만 출력
+            "Il2CppStarlike.Sound.SoundPlayer.PlaySFX",
+            "Il2CppStargazer.Starlike.Sound.SoundPlayer.PlaySFX",
         };
         private static readonly object InvocationLogThrottleLock = new object();
         private static readonly Dictionary<string, InvocationLogThrottleEntry> InvocationLogThrottleMap = new Dictionary<string, InvocationLogThrottleEntry>(StringComparer.Ordinal);
@@ -62,6 +65,7 @@ namespace STARGAZER_custom_chart
         private static bool LevelSelectorCatalogLogged;
         private static bool TrackLoaderCatalogLogged;
         private static bool TrackLoaderListLogged;
+        private static bool IsInPlayScene;
 
         private void TryApplyHarmonyAttributePatches(string phase)
         {

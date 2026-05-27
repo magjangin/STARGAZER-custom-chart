@@ -34,7 +34,6 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "OpenStandby", 1, "String"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "ChangeTrackCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "Start", 0),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
@@ -77,6 +76,18 @@ namespace STARGAZER_custom_chart
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "StopBGM", 0)
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
+                // PlaySFX overload [0]: PlaySFX(AudioClip clip, ESoundType type)
+                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 2, "AudioClip", "ESoundType")
+                    .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
+                // PlaySFX overload [1]: PlaySFX(AudioClip clip, ESoundType type, Single volume)
+                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "AudioClip", "ESoundType", "Single")
+                    .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
+                // PlaySFX overload [2]: PlaySFX(Single startTime, AudioClip clip, ESoundType type)
+                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "Single", "AudioClip", "ESoundType")
+                    .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
+                // PlaySFX overload [3]: PlaySFX(Single startTime, AudioClip clip, ESoundType type, Single volume)
+                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 4, "Single", "AudioClip", "ESoundType", "Single")
+                    .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
             };
         }
 
@@ -87,7 +98,6 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "OpenStandby", 1, "String"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "ChangeTrackCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "Start", 0),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
             };
         }
