@@ -16,7 +16,6 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayName] trackId={trackId} result={__result}");
             }
-            try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNamePostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayName", __instance, ref __result);
         }
 
@@ -28,7 +27,6 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Msg($"[Accessor][TrackDisplayNameEN] trackId={trackIdEn} result={__result}");
             }
-            try { DumpInnerTrackMetaDataSafe(__instance, "Accessor.TrackDisplayNameENPostfix"); } catch { }
             ApplyTrackDisplayNameOverride("TrackDisplayNameEN", __instance, ref __result);
         }
 
