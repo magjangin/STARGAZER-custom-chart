@@ -9,10 +9,6 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        // Toggle to enable TrackID rewrite PoC
-        private static bool EnableTrackIdRewrite = true;
-        private static string TrackIdRewriteValue = "custom_new_id_001";
-
         private static void HookPrefix(MethodBase __originalMethod, object? __instance, object[]? __args)
         {
             try
@@ -33,14 +29,6 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($"[HookInvoke][GetParser] {BuildInvocationSignature(__originalMethod, __instance, args)}");
                 }
 
-                // Log calls to PlayBGM regardless of EnableVerboseInvocationLogging
-                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal) ||
-                     string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
-                    && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal))
-                {
-                    MelonLogger.Msg($"[SoundPatch][PlayBGM] {BuildInvocationSignature(__originalMethod, __instance, args)}");
-                }
-
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.PlayerBase", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Play", StringComparison.Ordinal))
                 {
@@ -49,36 +37,14 @@ namespace STARGAZER_custom_chart
                         TryEnablePlayerBaseAutoPlay(__instance);
                     }
 
-                    LogPlayerBaseJacketSnapshot(__instance);
-
-                    if (args.Length > 0 && args[0] != null)
+                    if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
                     {
-                        object travelArgs = args[0];
-                        Type tType = travelArgs.GetType();
+                        LogPlayerBaseJacketSnapshot(__instance);
+                    }
 
-                        object? playTrack = TryGetMemberValue(travelArgs, tType, "PlayTrack");
-                        object? playLevel = TryGetMemberValue(travelArgs, tType, "PlayLevel");
-
-                        string trackInfo = "<null_track>";
-                        if (playTrack != null)
-                        {
-                            Type ptType = playTrack.GetType();
-                            object trackId = TryGetMemberValue(playTrack, ptType, "TrackID")
-                                             ?? TryGetMemberValue(playTrack, ptType, "TrackId")
-                                             ?? TryGetMemberValue(playTrack, ptType, "trackId")
-                                             ?? "<unknown_id>";
-
-                            object trackTitle = TryGetMemberValue(playTrack, ptType, "TrackDisplayName")
-                                                ?? TryGetMemberValue(playTrack, ptType, "TrackDisplayNameEN")
-                                                ?? TryGetMemberValue(playTrack, ptType, "displayName")
-                                                ?? TryGetMemberValue(playTrack, ptType, "displayNameEN")
-                                                ?? "<unknown_title>";
-
-                            trackInfo = $"TrackID: {trackId}, Title: {trackTitle}";
-                        }
-
-                        string levelInfo = playLevel?.ToString() ?? "<null_level>";
-                        MelonLogger.Msg($"[AutoPlay] Song playing - {trackInfo}, Level: {levelInfo}");
+                    if (EnablePlaySceneTrackLogging && args.Length > 0 && args[0] != null)
+                    {
+                        LogPlaySceneTrackInfo(args[0]);
                     }
                 }
 
@@ -100,30 +66,41 @@ namespace STARGAZER_custom_chart
             try
             {
                 object[] args = __args ?? Array.Empty<object>();
-                if (ShouldSkipInvocationLog(__originalMethod, args))
+                if (!ShouldSkipInvocationLog(__originalMethod, args))
                 {
-                    return;
+                    MelonLogger.Msg($"[HookInvoke][POST] {BuildInvocationSignature(__originalMethod, __instance, args)}");
                 }
-
-                MelonLogger.Msg($"[HookInvoke][POST] {BuildInvocationSignature(__originalMethod, __instance, args)}");
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.Widgets.CurrentTrackViewer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Listen", StringComparison.Ordinal))
                 {
-                    ProbeCurrentTrackViewerImageMembers(__instance, args);
+                    if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
+                    {
+                        ProbeCurrentTrackViewerImageMembers(__instance, args);
+                    }
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.Result.PlayInfoViewer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "ShowPlayInfo", StringComparison.Ordinal))
                 {
-                    ProbeResultPlayInfoJacketMembers(__instance, args);
-                    ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "Result.PlayInfoViewer.ShowPlayInfo");
+                    if (EnableResultSceneJacketLogging)
+                    {
+                        ProbeResultPlayInfoJacketMembers(__instance, args);
+                    }
+
+                    if (EnableRuntimeProbeLogging)
+                    {
+                        ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "Result.PlayInfoViewer.ShowPlayInfo");
+                    }
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "_Load_b__5_0", StringComparison.Ordinal))
                 {
-                    ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
+                    if (EnableRuntimeProbeLogging)
+                    {
+                        ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
+                    }
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.TrackSelector.TrackSelector", StringComparison.Ordinal)
@@ -132,47 +109,19 @@ namespace STARGAZER_custom_chart
                     && args[0] is not null)
                 {
                     HandleTrackSelectorSetTracks(args[0]);
-
-                    // PoC: attempt to rewrite TrackID for provided tracks (non-destructive)
-                    if (EnableTrackIdRewrite)
-                    {
-                        try
-                        {
-                            var target = args[0];
-                            int appliedCount = 0;
-                            if (target is System.Collections.IEnumerable && !(target is string))
-                            {
-                                foreach (var item in (System.Collections.IEnumerable)target)
-                                {
-                                    if (item is null) continue;
-                                    if (TrySetTrackId(item, item.GetType(), TrackIdRewriteValue)) appliedCount++;
-                                }
-                                MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied to {appliedCount} items");
-                            }
-                            else
-                            {
-                                bool applied = TrySetTrackId(target, target.GetType(), TrackIdRewriteValue);
-                                MelonLogger.Msg($"[TrackSelector][Set] TrackID rewrite applied={applied} targetType={target.GetType().FullName}");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            MelonLogger.Warning($"[TrackSelector][Set] TrackID rewrite failed: {ex.GetType().Name}: {ex.Message}");
-                        }
-                    }
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.LevelSelector.LevelSelector", StringComparison.Ordinal))
                 {
                     if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
                     {
-                        if (__instance is not null && !LevelSelectorCatalogLogged && args.Length > 0 && args[0] is not null)
+                        if (EnableRuntimeProbeLogging && __instance is not null && !LevelSelectorCatalogLogged && args.Length > 0 && args[0] is not null)
                         {
                             LevelSelectorCatalogLogged = true;
                             EnumerateLevelSelectorLevels(__instance);
                         }
 
-                        if (args.Length > 0 && args[0] is not null)
+                        if (EnableRuntimeProbeLogging && args.Length > 0 && args[0] is not null)
                         {
                             object record = args[0];
                             List<string> recordDetails = new List<string>();
@@ -195,15 +144,18 @@ namespace STARGAZER_custom_chart
                         && args.Length > 0
                         && args[0] is not null)
                     {
-                        object sprite = args[0];
-                        string spriteName = TryGetPropertyValue(sprite, "name")?.ToString() ?? sprite.GetType().Name;
-                        MelonLogger.Msg($"[LevelSelector][FetchJacektImage] Sprite Name: {spriteName}");
+                        if (EnableRuntimeProbeLogging)
+                        {
+                            object sprite = args[0];
+                            string spriteName = TryGetPropertyValue(sprite, "name")?.ToString() ?? sprite.GetType().Name;
+                            MelonLogger.Msg($"[LevelSelector][FetchJacektImage] Sprite Name: {spriteName}");
+                        }
                     }
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "LoadTracksAsync", StringComparison.Ordinal)
-                    && !TrackLoaderCatalogLogged && __instance is not null)
+                    && EnableRuntimeProbeLogging && !TrackLoaderCatalogLogged && __instance is not null)
                 {
                     TrackLoaderCatalogLogged = true;
                     MelonLogger.Msg($"[TrackLoader] {BuildObjectMemberCatalog("TrackLoader", __instance)}");
@@ -262,11 +214,49 @@ namespace STARGAZER_custom_chart
                 object? afterObj = TryGetMemberValue(playerBaseInstance, type, "IsAutoPlay")
                     ?? TryGetMemberValue(playerBaseInstance, type, "isAutoPlay");
                 string afterText = afterObj?.ToString() ?? "<unknown>";
-                MelonLogger.Msg($"[PlayerBaseAutoPlay] applied={applied} before={beforeText} after={afterText}");
+                if (EnableRuntimeProbeLogging)
+                {
+                    MelonLogger.Msg($"[PlayerBaseAutoPlay] applied={applied} before={beforeText} after={afterText}");
+                }
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[PlayerBaseAutoPlay] failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
+        private static void LogPlaySceneTrackInfo(object travelArgs)
+        {
+            try
+            {
+                Type travelArgsType = travelArgs.GetType();
+                object? playTrack = TryGetMemberValue(travelArgs, travelArgsType, "PlayTrack");
+                object? playLevel = TryGetMemberValue(travelArgs, travelArgsType, "PlayLevel");
+
+                if (playTrack is null)
+                {
+                    MelonLogger.Msg("[PlaySceneTrack] track=<null>");
+                    return;
+                }
+
+                Type trackType = playTrack.GetType();
+                object trackId = TryGetMemberValue(playTrack, trackType, "TrackID")
+                                 ?? TryGetMemberValue(playTrack, trackType, "TrackId")
+                                 ?? TryGetMemberValue(playTrack, trackType, "trackId")
+                                 ?? "<unknown_id>";
+
+                object title = TryGetMemberValue(playTrack, trackType, "TrackDisplayName")
+                               ?? TryGetMemberValue(playTrack, trackType, "TrackDisplayNameEN")
+                               ?? TryGetMemberValue(playTrack, trackType, "displayName")
+                               ?? TryGetMemberValue(playTrack, trackType, "displayNameEN")
+                               ?? "<unknown_title>";
+
+                string levelInfo = playLevel?.ToString() ?? "<null_level>";
+                MelonLogger.Msg($"[PlaySceneTrack] id={trackId} title={title} level={levelInfo}");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[PlaySceneTrack] failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -321,6 +311,11 @@ namespace STARGAZER_custom_chart
                 return true;
             }
 
+            if (EnableFocusedHarmonyInvocationLogging && !FocusedHarmonyInvocationMethods.Contains(methodFullName))
+            {
+                return true;
+            }
+
             long now = Environment.TickCount64;
             lock (InvocationLogThrottleLock)
             {
@@ -370,49 +365,6 @@ namespace STARGAZER_custom_chart
             }
 
             return type.FullName ?? type.Name;
-        }
-
-        private static bool TrySetTrackId(object trackObj, Type trackType, string newId)
-        {
-            if (trackObj is null || trackType is null) return false;
-
-            string[] candidates = new[] { "TrackID", "TrackId", "trackId", "id" };
-            foreach (string name in candidates)
-            {
-                try
-                {
-                    FieldInfo? f = trackType.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (f is not null && f.FieldType == typeof(string))
-                    {
-                        f.SetValue(trackObj, newId);
-                        return true;
-                    }
-
-                    PropertyInfo? p = trackType.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (p is not null && p.CanWrite && p.PropertyType == typeof(string))
-                    {
-                        p.SetValue(trackObj, newId);
-                        return true;
-                    }
-                }
-                catch { }
-            }
-
-            // try setter method
-            try
-            {
-                MethodInfo? setter = trackType.GetMethod("set_TrackID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                                     ?? trackType.GetMethod("SetTrackID", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                                     ?? trackType.GetMethod("set_Id", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (setter is not null)
-                {
-                    setter.Invoke(trackObj, new object[] { newId });
-                    return true;
-                }
-            }
-            catch { }
-
-            return false;
         }
 
     }
