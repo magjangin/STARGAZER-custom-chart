@@ -771,6 +771,8 @@ namespace STARGAZER_custom_chart
                             }
                         }
 
+                        // Write back both properties to their notes
+                        TrySetValueByNameCandidates(note1, new[] { "property" }, property1);
                         TrySetValueByNameCandidates(note2, new[] { "property" }, property2);
                     }
                 }
