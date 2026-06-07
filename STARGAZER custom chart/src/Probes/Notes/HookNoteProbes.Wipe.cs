@@ -459,6 +459,81 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[NoteDebug][{stage}] ----------------------------------------------------");
         }
 
+        private static object? InstantiateIl2CppObject(Type type)
+        {
+            // Try 1: ScriptableObject.CreateInstance (if it is a ScriptableObject)
+            try
+            {
+                Type? scriptableObjectType = Type.GetType("UnityEngine.ScriptableObject, UnityEngine.CoreModule")
+                    ?? Type.GetType("UnityEngine.ScriptableObject, UnityEngine");
+                if (scriptableObjectType != null && scriptableObjectType.IsAssignableFrom(type))
+                {
+                    MethodInfo? createInstanceMethod = scriptableObjectType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .FirstOrDefault(m => string.Equals(m.Name, "CreateInstance", StringComparison.Ordinal)
+                            && m.GetParameters().Length == 1
+                            && m.GetParameters()[0].ParameterType == typeof(Type));
+                    if (createInstanceMethod != null)
+                    {
+                        object? obj = createInstanceMethod.Invoke(null, new object[] { type });
+                        if (obj != null)
+                        {
+                            MelonLogger.Msg($"[Instantiate] Created {type.Name} using ScriptableObject.CreateInstance");
+                            return obj;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] ScriptableObject.CreateInstance failed for {type.Name}: {ex.Message}");
+            }
+
+            // Try 2: Parameterless constructor (public or non-public)
+            try
+            {
+                ConstructorInfo? paramCtor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (paramCtor != null)
+                {
+                    object obj = paramCtor.Invoke(null);
+                    MelonLogger.Msg($"[Instantiate] Created {type.Name} using empty constructor");
+                    return obj;
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] Empty constructor failed for {type.Name}: {ex.Message}");
+            }
+
+            // Try 3: Call Activator.CreateInstance
+            try
+            {
+                object obj = Activator.CreateInstance(type);
+                MelonLogger.Msg($"[Instantiate] Created {type.Name} using Activator.CreateInstance");
+                return obj;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] Activator.CreateInstance failed for {type.Name}: {ex.Message}");
+            }
+
+            // Try 4: Log constructors to help debug
+            try
+            {
+                ConstructorInfo[] ctors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MelonLogger.Msg($"[Instantiate] Available constructors for {type.FullName}: {ctors.Length}");
+                foreach (ConstructorInfo ctor in ctors)
+                {
+                    string paramsText = string.Join(", ", ctor.GetParameters().Select(p => $"{p.ParameterType.FullName} {p.Name}"));
+                    MelonLogger.Msg($"  Ctor: {type.Name}({paramsText})");
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
         private static bool TryDuplicateAndLinkAsLongNote(object notesValue, object note1, out object? note2)
         {
             note2 = null;
@@ -468,7 +543,7 @@ namespace STARGAZER_custom_chart
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
                 // 1. Create note2
-                note2 = Activator.CreateInstance(noteType);
+                note2 = InstantiateIl2CppObject(noteType);
                 if (note2 == null) return false;
 
                 // 2. Copy TargetLaneUID
@@ -488,7 +563,7 @@ namespace STARGAZER_custom_chart
                 if (beatInfo1 != null)
                 {
                     Type beatInfoType = beatInfo1.GetType();
-                    object? beatInfo2 = Activator.CreateInstance(beatInfoType);
+                    object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
                     if (beatInfo2 != null)
                     {
                         // Copy fields BeatSplit, BeatIndex
@@ -515,7 +590,7 @@ namespace STARGAZER_custom_chart
                 if (property1 != null)
                 {
                     Type propType = property1.GetType();
-                    object? property2 = Activator.CreateInstance(propType);
+                    object? property2 = InstantiateIl2CppObject(propType);
                     if (property2 != null)
                     {
                         // Copy expressionHolder
