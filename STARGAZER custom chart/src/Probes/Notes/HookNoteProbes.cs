@@ -256,19 +256,21 @@ namespace STARGAZER_custom_chart
                         int keepIndex = keepChoice is not null && ReferenceEquals(keepChoice.Context, context)
                             ? keepChoice.NoteIndex
                             : -1;
-                        if (TryKeepOnlySelectedNote(context.NotesCollection, context.Items, context.CountBefore, keepIndex, out int removedCount))
+                        
+                        bool success = TryKeepOnlySelectedNote(context.NotesCollection, context.Items, context.CountBefore, keepIndex, out int removedCount);
+                        wipedNotes += removedCount;
+                        if (success || keepIndex >= 0)
                         {
                             wipeSucceeded++;
-                            wipedNotes += removedCount;
+                        }
+                    }
 
-                            if (keepIndex >= 0 && keepIndex < context.Items.Count)
-                            {
-                                object? keptNote = context.Items[keepIndex];
-                                if (keptNote is not null)
-                                {
-                                    TryDuplicateAndLinkAsLongNote(context.NotesCollection, keptNote, out _);
-                                }
-                            }
+                    if (keepChoice is not null && keepChoice.NoteIndex >= 0 && keepChoice.NoteIndex < keepChoice.Context.Items.Count)
+                    {
+                        object? keptNote = keepChoice.Context.Items[keepChoice.NoteIndex];
+                        if (keptNote is not null)
+                        {
+                            TryDuplicateAndLinkAsLongNote(keepChoice.Context.NotesCollection, keptNote, out _);
                         }
                     }
 
