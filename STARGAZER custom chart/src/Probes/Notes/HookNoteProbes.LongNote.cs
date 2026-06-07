@@ -56,9 +56,12 @@ namespace STARGAZER_custom_chart
             // Try 3: Call Activator.CreateInstance
             try
             {
-                object obj = Activator.CreateInstance(type);
-                MelonLogger.Msg($"[Instantiate] Created {type.Name} using Activator.CreateInstance");
-                return obj;
+                object? obj = Activator.CreateInstance(type);
+                if (obj is not null)
+                {
+                    MelonLogger.Msg($"[Instantiate] Created {type.Name} using Activator.CreateInstance");
+                    return obj;
+                }
             }
             catch (Exception ex)
             {

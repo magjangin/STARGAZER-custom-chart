@@ -25,6 +25,22 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[BgmDebug] custom file present path={file.FullName} bytes={file.Length} modified={file.LastWriteTime:O}");
         }
 
+        private static readonly Dictionary<string, AudioClip> CustomBgmClipCache = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, DownloadHandlerAudioClip> CustomBgmDownloadHandlerCache = new Dictionary<string, DownloadHandlerAudioClip>(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> CustomBgmLoadsInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, List<object>> PendingCustomBgmCallbacks = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
+        private static void StartCustomBgmPreload(string hwaPath)
+        {
+            StartCustomAudioClipLoad(Path.Combine(hwaPath, "music.ogg"));
+
+            string previewPath = Path.Combine(hwaPath, "music_preview.ogg");
+            if (File.Exists(previewPath))
+            {
+                StartCustomAudioClipLoad(previewPath);
+            }
+        }
+
         private static void UpdateCustomChartPlayState(object? travelArgs)
         {
             IsCustomChartPlayActive = false;
@@ -126,46 +142,120 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static IEnumerator LoadCustomAudioClipCoroutine(string filePath, object callback)
+        private static void StartCustomAudioClipLoad(string filePath)
         {
-            string uri = "file://" + Path.GetFullPath(filePath);
+            string fullPath = Path.GetFullPath(filePath);
+            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached))
+            {
+                if (cached != null)
+                {
+                    return;
+                }
+
+                CustomBgmClipCache.Remove(fullPath);
+            }
+
+            if (!File.Exists(fullPath)
+                || !CustomBgmLoadsInProgress.Add(fullPath))
+            {
+                return;
+            }
+
+            MelonCoroutines.Start(LoadCustomAudioClipCoroutine(fullPath));
+        }
+
+        private static IEnumerator LoadCustomAudioClipCoroutine(string filePath)
+        {
+            string uri = "file:///" + filePath.Replace('\\', '/');
             MelonLogger.Msg($"[CustomBgm] Starting load from uri: {uri}");
             UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.OGGVORBIS);
+            www.disposeDownloadHandlerOnDispose = false;
+            DownloadHandlerAudioClip? downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
             try
             {
-                var downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
                 if (downloadHandler != null)
                 {
-                    downloadHandler.streamAudio = true;
+                    downloadHandler.streamAudio = false;
                 }
 
                 yield return www.SendWebRequest();
 
-                if (www.result == UnityWebRequest.Result.ConnectionError || www.result == UnityWebRequest.Result.ProtocolError)
+                if (www.result != UnityWebRequest.Result.Success)
                 {
                     MelonLogger.Error($"[CustomBgm] Failed to load custom BGM: {www.error}");
-                    InvokeActionOfAudioClip(callback, null);
+                    CompletePendingCustomBgmCallbacks(filePath, null);
                 }
                 else
                 {
-                    AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
-                    if (clip != null)
+                    AudioClip? clip = DownloadHandlerAudioClip.GetContent(www);
+                    if (clip is not null)
                     {
                         clip.name = "CustomBGM_" + Path.GetFileNameWithoutExtension(filePath);
-                        MelonLogger.Msg($"[CustomBgm] Successfully loaded custom BGM: {filePath}");
-                        InvokeActionOfAudioClip(callback, clip);
+                        clip.hideFlags |= HideFlags.DontUnloadUnusedAsset;
+                        CustomBgmClipCache[filePath] = clip;
+                        if (downloadHandler is not null)
+                        {
+                            CustomBgmDownloadHandlerCache[filePath] = downloadHandler;
+                        }
+                        MelonLogger.Msg($"[CustomBgm] Cached custom BGM: {filePath} clip={DescribeAudioClip(clip)}");
+                        CompletePendingCustomBgmCallbacks(filePath, clip);
                     }
                     else
                     {
                         MelonLogger.Error("[CustomBgm] Loaded clip is null!");
-                        InvokeActionOfAudioClip(callback, null);
+                        CompletePendingCustomBgmCallbacks(filePath, null);
                     }
                 }
             }
             finally
             {
+                CustomBgmLoadsInProgress.Remove(filePath);
                 www.Dispose();
             }
+        }
+
+        private static void QueueCustomBgmCallback(string path, object callback)
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (!PendingCustomBgmCallbacks.TryGetValue(fullPath, out List<object>? callbacks))
+            {
+                callbacks = new List<object>();
+                PendingCustomBgmCallbacks[fullPath] = callbacks;
+            }
+
+            callbacks.Add(callback);
+            StartCustomAudioClipLoad(fullPath);
+            MelonLogger.Msg($"[CustomBgm] Queued callback while cache loads: {fullPath} pending={callbacks.Count}");
+        }
+
+        private static void CompletePendingCustomBgmCallbacks(string path, AudioClip? clip)
+        {
+            if (!PendingCustomBgmCallbacks.Remove(path, out List<object>? callbacks))
+            {
+                return;
+            }
+
+            foreach (object callback in callbacks)
+            {
+                InvokeActionOfAudioClip(callback, clip);
+            }
+
+            MelonLogger.Msg($"[CustomBgm] Completed pending callbacks: {path} count={callbacks.Count} clipReady={clip != null}");
+        }
+
+        private static bool TryGetCachedCustomBgm(string path, out AudioClip? clip)
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached) && cached != null)
+            {
+                clip = cached;
+                return true;
+            }
+
+            CustomBgmClipCache.Remove(fullPath);
+            StartCustomAudioClipLoad(fullPath);
+            clip = null;
+            return false;
         }
 
         [HarmonyPatch]
@@ -222,8 +312,14 @@ namespace STARGAZER_custom_chart
 
                         if (File.Exists(path))
                         {
-                            MelonLogger.Msg($"[CustomBgm] Bypassing {__originalMethod.Name} for '{displayName}'. Loading local file: {path}");
-                            MelonCoroutines.Start(LoadCustomAudioClipCoroutine(path, __args[0]));
+                            if (TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
+                            {
+                                MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{displayName}': {path}");
+                                InvokeActionOfAudioClip(__args[0], clip);
+                                return false;
+                            }
+
+                            QueueCustomBgmCallback(path, __args[0]);
                             return false;
                         }
                         else

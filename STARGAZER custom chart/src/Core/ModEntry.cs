@@ -27,8 +27,8 @@ namespace STARGAZER_custom_chart
                     LoggerInstance.Msg($"[Mod] Directory already exists: {hwaPath}");
                 }
 
-                TryApplyHarmonyAttributePatches("init");
                 LogBgmDebugFileInfo(hwaPath);
+                StartCustomBgmPreload(hwaPath);
                 TryApplyFocusedTrackViewerPatches();
             }
             catch (Exception ex)
