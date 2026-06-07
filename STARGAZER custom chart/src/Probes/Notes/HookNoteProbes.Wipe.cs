@@ -377,17 +377,57 @@ namespace STARGAZER_custom_chart
 
         private static void LogNotesBeforeOperation(IReadOnlyList<NoteCollectionContext> contexts, string stage)
         {
-            MelonLogger.Msg($"[NoteDebug][{stage}] --- Printing Note Array (Total Contexts: {contexts.Count}) ---");
+            MelonLogger.Msg($"[NoteDebug][{stage}] --- Printing Long Notes Only (Total Contexts: {contexts.Count}) ---");
             for (int c = 0; c < contexts.Count; c++)
             {
                 NoteCollectionContext context = contexts[c];
+                bool hasLongNote = false;
+                for (int i = 0; i < context.Items.Count; i++)
+                {
+                    object? note = context.Items[i];
+                    if (note == null) continue;
+
+                    string linkText = "?";
+                    TryGetValueByNameCandidates(note, new[] { "property", "noteproperty" }, out object? propObj);
+                    if (propObj != null)
+                    {
+                        TryGetValueByNameCandidates(propObj, new[] { "linked" }, out object? linkedObj);
+                        linkText = linkedObj?.ToString() ?? "?";
+                    }
+
+                    bool isLong = (linkText != "None" && linkText != "?") || TryExtractHoldTiming(note, out _, out _, out _);
+                    if (isLong)
+                    {
+                        hasLongNote = true;
+                        break;
+                    }
+                }
+
+                if (!hasLongNote)
+                {
+                    continue;
+                }
+
                 MelonLogger.Msg($"[NoteDebug][{stage}] Context {c}: Layer {context.LayerIndex}, Area {context.AreaIndex}, Notes Count: {context.Items.Count}");
                 for (int i = 0; i < context.Items.Count; i++)
                 {
                     object? note = context.Items[i];
                     if (note == null)
                     {
-                        MelonLogger.Msg($"  [{i}]: null");
+                        continue;
+                    }
+
+                    string linkText = "?";
+                    TryGetValueByNameCandidates(note, new[] { "property", "noteproperty" }, out object? propObj);
+                    if (propObj != null)
+                    {
+                        TryGetValueByNameCandidates(propObj, new[] { "linked" }, out object? linkedObj);
+                        linkText = linkedObj?.ToString() ?? "?";
+                    }
+
+                    bool isLong = (linkText != "None" && linkText != "?") || TryExtractHoldTiming(note, out _, out _, out _);
+                    if (!isLong)
+                    {
                         continue;
                     }
 
@@ -396,14 +436,6 @@ namespace STARGAZER_custom_chart
 
                     TryGetValueByNameCandidates(note, new[] { "targetlaneuid" }, out object? laneUid);
                     string laneText = laneUid?.ToString() ?? "?";
-
-                    TryGetValueByNameCandidates(note, new[] { "property", "noteproperty" }, out object? propObj);
-                    string linkText = "?";
-                    if (propObj != null)
-                    {
-                        TryGetValueByNameCandidates(propObj, new[] { "linked" }, out object? linkedObj);
-                        linkText = linkedObj?.ToString() ?? "?";
-                    }
 
                     int beatIndex = -1;
                     int beatSplit = -1;
