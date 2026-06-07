@@ -534,6 +534,77 @@ namespace STARGAZER_custom_chart
             return null;
         }
 
+        private static object? FindOwnerArea(object note)
+        {
+            Type type = note.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            
+            foreach (PropertyInfo prop in type.GetProperties(flags))
+            {
+                if (prop.CanRead && prop.PropertyType.Name.Contains("Area") && prop.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        object? val = prop.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                if (field.FieldType.Name.Contains("Area"))
+                {
+                    try
+                    {
+                        object? val = field.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            return TryGetMemberValue(note, type, "Owner")
+                ?? TryGetMemberValue(note, type, "owner")
+                ?? TryGetMemberValue(note, type, "_owner");
+        }
+
+        private static object? FindBeatInfo(object note)
+        {
+            Type type = note.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            
+            foreach (PropertyInfo prop in type.GetProperties(flags))
+            {
+                if (prop.CanRead && prop.PropertyType.Name.Contains("BeatInfo") && prop.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        object? val = prop.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                if (field.FieldType.Name.Contains("BeatInfo"))
+                {
+                    try
+                    {
+                        object? val = field.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            return TryGetMemberValue(note, type, "beatInfo")
+                ?? TryGetMemberValue(note, type, "BeatInfo");
+        }
+
         private static bool TryDuplicateAndLinkAsLongNote(object notesValue, object note1, out object? note2)
         {
             note2 = null;
@@ -542,51 +613,124 @@ namespace STARGAZER_custom_chart
                 Type noteType = note1.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // 1. Create note2
-                note2 = InstantiateIl2CppObject(noteType);
-                if (note2 == null) return false;
+                // Extract properties/fields from note1
+                object? owner = FindOwnerArea(note1);
+                object? laneUid = TryGetMemberValue(note1, noteType, "TargetLaneUID")
+                    ?? TryGetMemberValue(note1, noteType, "targetLaneUID")
+                    ?? TryGetMemberValue(note1, noteType, "targetlaneuid");
+                object? beatInfo1 = FindBeatInfo(note1);
 
-                // 2. Copy TargetLaneUID
-                object? laneUid = TryGetMemberValue(note1, noteType, "TargetLaneUID");
-                if (laneUid == null) laneUid = TryGetMemberValue(note1, noteType, "targetLaneUID");
-                if (laneUid == null) laneUid = TryGetMemberValue(note1, noteType, "targetlaneuid");
-                TrySetValueByNameCandidates(note2, new[] { "targetlaneuid" }, laneUid);
-
-                // 3. Copy Owner
-                object? owner = TryGetMemberValue(note1, noteType, "Owner");
-                if (owner == null) owner = TryGetMemberValue(note1, noteType, "owner");
-                TrySetValueByNameCandidates(note2, new[] { "owner" }, owner);
-
-                // 4. Create and copy beatInfo
-                object? beatInfo1 = TryGetMemberValue(note1, noteType, "beatInfo");
-                if (beatInfo1 == null) beatInfo1 = TryGetMemberValue(note1, noteType, "BeatInfo");
-                if (beatInfo1 != null)
+                if (owner == null || laneUid == null || beatInfo1 == null)
                 {
-                    Type beatInfoType = beatInfo1.GetType();
-                    object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
-                    if (beatInfo2 != null)
-                    {
-                        // Copy fields BeatSplit, BeatIndex
-                        FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
-                        FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
-                        if (splitField != null && indexField != null)
-                        {
-                            int splitVal = Convert.ToInt32(splitField.GetValue(beatInfo1));
-                            int indexVal = Convert.ToInt32(indexField.GetValue(beatInfo1));
+                    MelonLogger.Warning($"[LongNoteTest] Failed to duplicate note: missing owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
+                    return false;
+                }
 
-                            splitField.SetValue(beatInfo2, splitVal);
-                            // Set end note to be 2 beats after start note to make a clear long note
-                            indexField.SetValue(beatInfo2, indexVal + (splitVal * 2)); 
-                        }
-                        TrySetValueByNameCandidates(note2, new[] { "beatinfo" }, beatInfo2);
+                // Create beatInfo2
+                Type beatInfoType = beatInfo1.GetType();
+                object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
+                if (beatInfo2 == null)
+                {
+                    MelonLogger.Warning("[LongNoteTest] Failed to instantiate beatInfo2.");
+                    return false;
+                }
+
+                FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+                FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+                int splitVal = 192;
+                int indexVal = 0;
+                if (splitField != null && indexField != null)
+                {
+                    splitVal = Convert.ToInt32(splitField.GetValue(beatInfo1));
+                    indexVal = Convert.ToInt32(indexField.GetValue(beatInfo1));
+                    splitField.SetValue(beatInfo2, splitVal);
+                    indexField.SetValue(beatInfo2, indexVal + (splitVal * 2));
+                }
+
+                // Try to create note2 using Constructor (Area, string, BeatInfo)
+                ConstructorInfo? noteCtor3 = null;
+                foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
+                {
+                    ParameterInfo[] parameters = ctor.GetParameters();
+                    if (parameters.Length == 3
+                        && parameters[0].ParameterType.Name.Contains("Area")
+                        && parameters[1].ParameterType == typeof(string)
+                        && parameters[2].ParameterType.Name.Contains("BeatInfo"))
+                    {
+                        noteCtor3 = ctor;
+                        break;
                     }
                 }
 
+                if (noteCtor3 != null)
+                {
+                    try
+                    {
+                        note2 = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
+                        MelonLogger.Msg("[LongNoteTest] Successfully created note2 using Note(Area, string, BeatInfo) constructor.");
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Warning($"[LongNoteTest] Note(Area, string, BeatInfo) constructor failed: {ex.Message}");
+                    }
+                }
+
+                // Try fallback 1: Note(Area, string, int, int)
+                if (note2 == null)
+                {
+                    ConstructorInfo? noteCtor4 = null;
+                    foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
+                    {
+                        ParameterInfo[] parameters = ctor.GetParameters();
+                        if (parameters.Length == 4
+                            && parameters[0].ParameterType.Name.Contains("Area")
+                            && parameters[1].ParameterType == typeof(string)
+                            && parameters[2].ParameterType == typeof(int)
+                            && parameters[3].ParameterType == typeof(int))
+                        {
+                            noteCtor4 = ctor;
+                            break;
+                        }
+                    }
+
+                    if (noteCtor4 != null)
+                    {
+                        try
+                        {
+                            int newIndex = indexVal + (splitVal * 2);
+                            note2 = noteCtor4.Invoke(new[] { owner, laneUid, splitVal, newIndex });
+                            MelonLogger.Msg("[LongNoteTest] Successfully created note2 using Note(Area, string, int, int) constructor.");
+                        }
+                        catch (Exception ex)
+                        {
+                            MelonLogger.Warning($"[LongNoteTest] Note(Area, string, int, int) constructor failed: {ex.Message}");
+                        }
+                    }
+                }
+
+                // Try fallback 2: Parameterless instantiation (if any)
+                if (note2 == null)
+                {
+                    note2 = InstantiateIl2CppObject(noteType);
+                }
+
+                if (note2 == null)
+                {
+                    MelonLogger.Warning("[LongNoteTest] All note instantiation strategies failed.");
+                    return false;
+                }
+
+                // Set/Copy members just in case
+                TrySetValueByNameCandidates(note2, new[] { "targetlaneuid" }, laneUid);
+                TrySetValueByNameCandidates(note2, new[] { "owner" }, owner);
+                TrySetValueByNameCandidates(note2, new[] { "beatinfo" }, beatInfo2);
+
                 // 5. Create and copy NoteProperty, then set linked status
-                object? property1 = TryGetMemberValue(note1, noteType, "property");
-                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "Property");
-                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "noteProperty");
-                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "NoteProperty");
+                object? property1 = TryGetMemberValue(note1, noteType, "property")
+                    ?? TryGetMemberValue(note1, noteType, "Property")
+                    ?? TryGetMemberValue(note1, noteType, "noteProperty")
+                    ?? TryGetMemberValue(note1, noteType, "NoteProperty");
+                
                 if (property1 != null)
                 {
                     Type propType = property1.GetType();
@@ -594,9 +738,9 @@ namespace STARGAZER_custom_chart
                     if (property2 != null)
                     {
                         // Copy expressionHolder
-                        object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder");
-                        if (exprHolder == null) exprHolder = TryGetMemberValue(property1, propType, "expressionholder");
-                        if (exprHolder == null) exprHolder = TryGetMemberValue(property1, propType, "ExpressionHolder");
+                        object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
+                            ?? TryGetMemberValue(property1, propType, "expressionholder")
+                            ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
                         TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
 
                         // Get linked enum type and parse values
