@@ -180,6 +180,28 @@ namespace STARGAZER_custom_chart
                 }
             }
 
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                if (field.IsInitOnly)
+                {
+                    continue;
+                }
+
+                if (!NameMatchesAny(field.Name, names))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    field.SetValue(owner, value);
+                    return true;
+                }
+                catch
+                {
+                }
+            }
+
             foreach (MethodInfo method in type.GetMethods(flags))
             {
                 if (method.GetParameters().Length != 1)

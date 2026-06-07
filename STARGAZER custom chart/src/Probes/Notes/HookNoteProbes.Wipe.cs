@@ -381,10 +381,11 @@ namespace STARGAZER_custom_chart
             for (int c = 0; c < contexts.Count; c++)
             {
                 NoteCollectionContext context = contexts[c];
+                System.Collections.Generic.List<object?> liveItems = EnumerateCollectionItems(context.NotesCollection, 1024).ToList();
                 bool hasLongNote = false;
-                for (int i = 0; i < context.Items.Count; i++)
+                for (int i = 0; i < liveItems.Count; i++)
                 {
-                    object? note = context.Items[i];
+                    object? note = liveItems[i];
                     if (note == null) continue;
 
                     string linkText = "?";
@@ -408,10 +409,10 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                MelonLogger.Msg($"[NoteDebug][{stage}] Context {c}: Layer {context.LayerIndex}, Area {context.AreaIndex}, Notes Count: {context.Items.Count}");
-                for (int i = 0; i < context.Items.Count; i++)
+                MelonLogger.Msg($"[NoteDebug][{stage}] Context {c}: Layer {context.LayerIndex}, Area {context.AreaIndex}, Notes Count: {liveItems.Count}");
+                for (int i = 0; i < liveItems.Count; i++)
                 {
-                    object? note = context.Items[i];
+                    object? note = liveItems[i];
                     if (note == null)
                     {
                         continue;
@@ -456,6 +457,134 @@ namespace STARGAZER_custom_chart
                 }
             }
             MelonLogger.Msg($"[NoteDebug][{stage}] ----------------------------------------------------");
+        }
+
+        private static bool TryDuplicateAndLinkAsLongNote(object notesValue, object note1, out object? note2)
+        {
+            note2 = null;
+            try
+            {
+                Type noteType = note1.GetType();
+                BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                // 1. Create note2
+                note2 = Activator.CreateInstance(noteType);
+                if (note2 == null) return false;
+
+                // 2. Copy TargetLaneUID
+                object? laneUid = TryGetMemberValue(note1, noteType, "TargetLaneUID");
+                if (laneUid == null) laneUid = TryGetMemberValue(note1, noteType, "targetLaneUID");
+                if (laneUid == null) laneUid = TryGetMemberValue(note1, noteType, "targetlaneuid");
+                TrySetValueByNameCandidates(note2, new[] { "targetlaneuid" }, laneUid);
+
+                // 3. Copy Owner
+                object? owner = TryGetMemberValue(note1, noteType, "Owner");
+                if (owner == null) owner = TryGetMemberValue(note1, noteType, "owner");
+                TrySetValueByNameCandidates(note2, new[] { "owner" }, owner);
+
+                // 4. Create and copy beatInfo
+                object? beatInfo1 = TryGetMemberValue(note1, noteType, "beatInfo");
+                if (beatInfo1 == null) beatInfo1 = TryGetMemberValue(note1, noteType, "BeatInfo");
+                if (beatInfo1 != null)
+                {
+                    Type beatInfoType = beatInfo1.GetType();
+                    object? beatInfo2 = Activator.CreateInstance(beatInfoType);
+                    if (beatInfo2 != null)
+                    {
+                        // Copy fields BeatSplit, BeatIndex
+                        FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+                        FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+                        if (splitField != null && indexField != null)
+                        {
+                            int splitVal = Convert.ToInt32(splitField.GetValue(beatInfo1));
+                            int indexVal = Convert.ToInt32(indexField.GetValue(beatInfo1));
+
+                            splitField.SetValue(beatInfo2, splitVal);
+                            // Set end note to be 2 beats after start note to make a clear long note
+                            indexField.SetValue(beatInfo2, indexVal + (splitVal * 2)); 
+                        }
+                        TrySetValueByNameCandidates(note2, new[] { "beatinfo" }, beatInfo2);
+                    }
+                }
+
+                // 5. Create and copy NoteProperty, then set linked status
+                object? property1 = TryGetMemberValue(note1, noteType, "property");
+                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "Property");
+                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "noteProperty");
+                if (property1 == null) property1 = TryGetMemberValue(note1, noteType, "NoteProperty");
+                if (property1 != null)
+                {
+                    Type propType = property1.GetType();
+                    object? property2 = Activator.CreateInstance(propType);
+                    if (property2 != null)
+                    {
+                        // Copy expressionHolder
+                        object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder");
+                        if (exprHolder == null) exprHolder = TryGetMemberValue(property1, propType, "expressionholder");
+                        if (exprHolder == null) exprHolder = TryGetMemberValue(property1, propType, "ExpressionHolder");
+                        TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
+
+                        // Get linked enum type and parse values
+                        PropertyInfo? linkedProp = propType.GetProperty("linked", flags)
+                            ?? propType.GetProperties(flags).FirstOrDefault(p => string.Equals(p.Name, "linked", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (linkedProp != null && linkedProp.CanWrite)
+                        {
+                            Type enumType = linkedProp.PropertyType;
+                            object startPointEnum = Enum.Parse(enumType, "StartPoint");
+                            object endPointEnum = Enum.Parse(enumType, "EndPoint");
+
+                            linkedProp.SetValue(property1, startPointEnum);
+                            linkedProp.SetValue(property2, endPointEnum);
+                        }
+                        else
+                        {
+                            FieldInfo? linkedField = propType.GetField("linked", flags)
+                                ?? propType.GetFields(flags).FirstOrDefault(f => string.Equals(f.Name, "linked", StringComparison.OrdinalIgnoreCase));
+                            if (linkedField != null)
+                            {
+                                Type enumType = linkedField.FieldType;
+                                object startPointEnum = Enum.Parse(enumType, "StartPoint");
+                                object endPointEnum = Enum.Parse(enumType, "EndPoint");
+
+                                linkedField.SetValue(property1, startPointEnum);
+                                linkedField.SetValue(property2, endPointEnum);
+                            }
+                        }
+
+                        TrySetValueByNameCandidates(note2, new[] { "property" }, property2);
+                    }
+                }
+
+                // 6. Copy time / hitTime candidate fields and set for end note (+ 2.0 beats)
+                double? time1 = TryExtractNoteTime(note1);
+                if (time1.HasValue)
+                {
+                    double time2 = time1.Value + 2.0;
+                    TrySetValueByNameCandidates(note2, new[] { "time", "timing", "start", "starttime", "hittime", "hittiming", "judge", "tick", "beat", "position", "ms" }, time2);
+                }
+
+                // 7. Add note2 to notesValue collection
+                Type collectionType = notesValue.GetType();
+                MethodInfo? addMethod = collectionType.GetMethods(flags)
+                    .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
+                
+                if (addMethod != null)
+                {
+                    addMethod.Invoke(notesValue, new[] { note2 });
+                    MelonLogger.Msg("[LongNoteTest] Successfully duplicated note, linked as long note (StartPoint -> EndPoint), and added to collection.");
+                    return true;
+                }
+                else
+                {
+                    MelonLogger.Warning("[LongNoteTest] Add method not found on notes collection.");
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[LongNoteTest] Failed to duplicate and link note: {ex.Message}");
+            }
+            return false;
         }
     }
 }

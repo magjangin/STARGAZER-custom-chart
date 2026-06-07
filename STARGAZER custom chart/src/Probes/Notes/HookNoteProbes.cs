@@ -260,6 +260,15 @@ namespace STARGAZER_custom_chart
                         {
                             wipeSucceeded++;
                             wipedNotes += removedCount;
+
+                            if (keepIndex >= 0 && keepIndex < context.Items.Count)
+                            {
+                                object? keptNote = context.Items[keepIndex];
+                                if (keptNote is not null)
+                                {
+                                    TryDuplicateAndLinkAsLongNote(context.NotesCollection, keptNote, out _);
+                                }
+                            }
                         }
                     }
 
@@ -283,6 +292,7 @@ namespace STARGAZER_custom_chart
                         ? "none"
                         : $"L{keepChoice.Context.LayerIndex}A{keepChoice.Context.AreaIndex}[{keepChoice.NoteIndex}]";
                     MelonLogger.Msg($"[NoteWipe] mode=keep-earliest-only targets={wipeTargets} succeeded={wipeSucceeded} removedApprox={wipedNotes} keptArea={keptAreaText} keptTime={keptTimeText} keptTimeNow={keptTimeNowText}");
+                    LogNotesBeforeOperation(wipeContexts!, "AfterOperation");
                 }
 
                 if (shouldProbeLinkHold)
