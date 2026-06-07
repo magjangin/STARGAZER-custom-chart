@@ -22,8 +22,6 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType")
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
-                new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "GetBGMHandler", 0)
-                    .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "StopBGM", 0)
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "BGMPlayChecker", 1, "Single"),
@@ -71,8 +69,6 @@ namespace STARGAZER_custom_chart
             return new[]
             {
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType")
-                    .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
-                new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "GetBGMHandler", 0)
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "StopBGM", 0)
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),

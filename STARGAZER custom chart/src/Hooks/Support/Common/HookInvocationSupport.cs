@@ -14,6 +14,7 @@ namespace STARGAZER_custom_chart
             try
             {
                 object[] args = __args ?? Array.Empty<object>();
+                LogBgmDebugInvocation(__originalMethod, __instance, args);
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "LoadTracksAsync", StringComparison.Ordinal))
@@ -33,6 +34,7 @@ namespace STARGAZER_custom_chart
                     && string.Equals(__originalMethod.Name, "Play", StringComparison.Ordinal))
                 {
                     IsInPlayScene = true;
+                    UpdateCustomChartPlayState(args.Length > 0 ? args[0] : null);
                     MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
 
                     if (EnableForceAutoPlayAtPlayerBasePlay)

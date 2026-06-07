@@ -1,0 +1,243 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using HarmonyLib;
+using MelonLoader;
+using UnityEngine;
+using UnityEngine.Networking;
+
+namespace STARGAZER_custom_chart
+{
+    public sealed partial class GameTypeEnumeratorMod
+    {
+        private static void LogBgmDebugFileInfo(string hwaPath)
+        {
+            string path = Path.Combine(hwaPath, "music.ogg");
+            if (!File.Exists(path))
+            {
+                MelonLogger.Warning($"[BgmDebug] custom file missing path={path}");
+                return;
+            }
+
+            var file = new FileInfo(path);
+            MelonLogger.Msg($"[BgmDebug] custom file present path={file.FullName} bytes={file.Length} modified={file.LastWriteTime:O}");
+        }
+
+        private static void UpdateCustomChartPlayState(object? travelArgs)
+        {
+            IsCustomChartPlayActive = false;
+            if (travelArgs is null)
+            {
+                MelonLogger.Msg("[BgmDebug] play state travelArgs=<null>");
+                return;
+            }
+
+            object? track = TryGetMemberValue(travelArgs, travelArgs.GetType(), "PlayTrack");
+            if (track is null)
+            {
+                MelonLogger.Msg("[BgmDebug] play state track=<null>");
+                return;
+            }
+
+            string title = TryGetMemberValue(track, track.GetType(), "TrackDisplayName")?.ToString()
+                ?? TryGetMemberValue(track, track.GetType(), "TrackDisplayNameEN")?.ToString()
+                ?? string.Empty;
+            IsCustomChartPlayActive = title.StartsWith("테스트 ", StringComparison.Ordinal);
+            MelonLogger.Msg($"[BgmDebug] play state custom={IsCustomChartPlayActive} title={title}");
+        }
+
+        private static void LogBgmDebugInvocation(MethodBase method, object? instance, object[] args)
+        {
+            string typeName = method.DeclaringType?.FullName ?? "<unknown>";
+            string instanceText = DescribeObjectIdentity(instance);
+            if (string.Equals(method.Name, "PlayBGM", StringComparison.Ordinal))
+            {
+                string clip = DescribeAudioClip(args.Length > 0 ? args[0] : null);
+                string soundType = args.Length > 1 ? args[1]?.ToString() ?? "<null>" : "<missing>";
+                MelonLogger.Msg($"[BgmDebug][PlayBGM] owner={typeName} instance={instanceText} soundType={soundType} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive} clip={clip}");
+            }
+            else if (string.Equals(method.Name, "LoadBGMClip", StringComparison.Ordinal))
+            {
+                string callback = args.Length > 0 && args[0] is not null
+                    ? args[0]!.GetType().FullName ?? args[0]!.GetType().Name
+                    : "<null>";
+                MelonLogger.Msg($"[BgmDebug][LoadBGMClip] owner={typeName} instance={instanceText} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive} callback={callback}");
+            }
+            else if (string.Equals(method.Name, "StopBGM", StringComparison.Ordinal))
+            {
+                MelonLogger.Msg($"[BgmDebug][StopBGM] owner={typeName} instance={instanceText} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive}");
+            }
+        }
+
+        private static string DescribeAudioClip(object? value)
+        {
+            if (value is not AudioClip clip)
+            {
+                return value is null ? "<null>" : $"<{value.GetType().FullName ?? value.GetType().Name}>";
+            }
+
+            try
+            {
+                return $"name={clip.name},instanceId={clip.GetInstanceID()},pointer={DescribePointer(clip)},length={clip.length:0.###},samples={clip.samples},channels={clip.channels},frequency={clip.frequency},loadState={clip.loadState}";
+            }
+            catch (Exception ex)
+            {
+                return $"<AudioClip inspect failed: {ex.GetType().Name}>";
+            }
+        }
+
+        private static string DescribeObjectIdentity(object? value)
+        {
+            if (value is null)
+            {
+                return "<null>";
+            }
+
+            return $"{value.GetType().FullName ?? value.GetType().Name}@{DescribePointer(value)}";
+        }
+
+        private static string DescribePointer(object value)
+        {
+            object? pointer = TryGetMemberValue(value, value.GetType(), "Pointer")
+                ?? TryGetMemberValue(value, value.GetType(), "m_CachedPtr");
+            return pointer is IntPtr ptr ? $"0x{ptr.ToInt64():X}" : pointer?.ToString() ?? "<unknown>";
+        }
+
+        private static void InvokeActionOfAudioClip(object? callback, AudioClip? clip)
+        {
+            if (callback == null) return;
+            try
+            {
+                MethodInfo? invoke = callback.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.Public);
+                if (invoke != null)
+                {
+                    invoke.Invoke(callback, new object?[] { clip });
+                }
+                else
+                {
+                    MelonLogger.Warning("[CustomBgm] Invoke method not found on callback object.");
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[CustomBgm] Failed to invoke callback: {ex.Message}");
+            }
+        }
+
+        private static IEnumerator LoadCustomAudioClipCoroutine(string filePath, object callback)
+        {
+            string uri = "file://" + Path.GetFullPath(filePath);
+            MelonLogger.Msg($"[CustomBgm] Starting load from uri: {uri}");
+            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.OGGVORBIS);
+            try
+            {
+                var downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
+                if (downloadHandler != null)
+                {
+                    downloadHandler.streamAudio = true;
+                }
+
+                yield return www.SendWebRequest();
+
+                if (www.result == UnityWebRequest.Result.ConnectionError || www.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    MelonLogger.Error($"[CustomBgm] Failed to load custom BGM: {www.error}");
+                    InvokeActionOfAudioClip(callback, null);
+                }
+                else
+                {
+                    AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
+                    if (clip != null)
+                    {
+                        clip.name = "CustomBGM_" + Path.GetFileNameWithoutExtension(filePath);
+                        MelonLogger.Msg($"[CustomBgm] Successfully loaded custom BGM: {filePath}");
+                        InvokeActionOfAudioClip(callback, clip);
+                    }
+                    else
+                    {
+                        MelonLogger.Error("[CustomBgm] Loaded clip is null!");
+                        InvokeActionOfAudioClip(callback, null);
+                    }
+                }
+            }
+            finally
+            {
+                www.Dispose();
+            }
+        }
+
+        [HarmonyPatch]
+        private static class CustomBgmLoaderPatch
+        {
+            private static IEnumerable<MethodBase> TargetMethods()
+            {
+                Type? trackDataType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
+                if (trackDataType != null)
+                {
+                    MethodInfo? loadBgm = trackDataType.GetMethod("LoadBGMClip", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (loadBgm != null)
+                    {
+                        MelonLogger.Msg($"[CustomBgm] Found target LoadBGMClip: {loadBgm.DeclaringType?.FullName}.{loadBgm.Name}");
+                        yield return loadBgm;
+                    }
+
+                    MethodInfo? loadPreview = trackDataType.GetMethod("LoadPreviewClip", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (loadPreview != null)
+                    {
+                        MelonLogger.Msg($"[CustomBgm] Found target LoadPreviewClip: {loadPreview.DeclaringType?.FullName}.{loadPreview.Name}");
+                        yield return loadPreview;
+                    }
+                }
+                else
+                {
+                    MelonLogger.Warning("[CustomBgm] Il2CppStargazer.TrackLoader+INNER_TrackData type not found.");
+                }
+            }
+
+            private static bool Prefix(MethodBase __originalMethod, object __instance, object[] __args)
+            {
+                try
+                {
+                    if (__args.Length == 0 || __args[0] is null) return true;
+
+                    Type t = __instance.GetType();
+                    string displayName = TryGetMemberValue(__instance, t, "TrackDisplayName")?.ToString()
+                        ?? TryGetMemberValue(__instance, t, "TrackDisplayNameEN")?.ToString()
+                        ?? string.Empty;
+
+                    if (displayName.StartsWith("테스트 ", StringComparison.Ordinal))
+                    {
+                        string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
+                        string bgmFile = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
+                            ? "music_preview.ogg"
+                            : "music.ogg";
+                        
+                        string path = Path.Combine(hwaPath, bgmFile);
+                        if (!File.Exists(path) && string.Equals(bgmFile, "music_preview.ogg", StringComparison.Ordinal))
+                        {
+                            path = Path.Combine(hwaPath, "music.ogg");
+                        }
+
+                        if (File.Exists(path))
+                        {
+                            MelonLogger.Msg($"[CustomBgm] Bypassing {__originalMethod.Name} for '{displayName}'. Loading local file: {path}");
+                            MelonCoroutines.Start(LoadCustomAudioClipCoroutine(path, __args[0]));
+                            return false;
+                        }
+                        else
+                        {
+                            MelonLogger.Warning($"[CustomBgm] Local file not found: {path}. Falling back to default.");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"[CustomBgm] Error in CustomBgmLoaderPatch.Prefix: {ex.Message}");
+                }
+                return true;
+            }
+        }
+    }
+}

@@ -10,9 +10,11 @@ namespace STARGAZER_custom_chart
     {
         private static readonly HashSet<string> LoggedNoteArrayHits = new HashSet<string>(StringComparer.Ordinal);
         private const bool EnableNoteWipeTest = true;
-        private const bool EnableBeatInfoShiftTest = true;
+        private const bool EnableBeatInfoShiftTest = false;
+        private const bool EnableLaneShiftTest = true;
         private static bool NoteWipeTestDone;
         private static bool BeatInfoShiftTestDone;
+        private static bool LaneShiftTestDone;
         private static bool LinkHoldProbeDone;
 
         private static void ProbeNoteArrayMembers(object? instance, string source)
@@ -240,6 +242,12 @@ namespace STARGAZER_custom_chart
                     {
                         TryShiftSelectedNoteBeatInfo(keepChoice);
                         BeatInfoShiftTestDone = true;
+                    }
+
+                    if (EnableLaneShiftTest && !LaneShiftTestDone && keepChoice is not null)
+                    {
+                        TryShiftSelectedNoteLane(keepChoice, wipeContexts!);
+                        LaneShiftTestDone = true;
                     }
 
                     foreach (NoteCollectionContext context in wipeContexts!)

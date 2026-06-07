@@ -8,6 +8,43 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        private static void TryShiftSelectedNoteLane(EarliestNoteChoice choice, IReadOnlyList<NoteCollectionContext> contexts)
+        {
+            object? note = choice.NoteIndex >= 0 && choice.NoteIndex < choice.Context.Items.Count
+                ? choice.Context.Items[choice.NoteIndex]
+                : null;
+            if (note is null
+                || !TryGetValueByNameCandidates(note, new[] { "targetlaneuid" }, out object? currentLane)
+                || currentLane is null)
+            {
+                MelonLogger.Warning("[LaneShiftTest] selected note lane not found.");
+                return;
+            }
+
+            string currentLaneText = currentLane.ToString() ?? "<unknown>";
+            foreach (NoteCollectionContext context in contexts)
+            {
+                foreach (object? candidate in context.Items)
+                {
+                    if (candidate is null
+                        || ReferenceEquals(candidate, note)
+                        || !TryGetValueByNameCandidates(candidate, new[] { "targetlaneuid" }, out object? candidateLane)
+                        || candidateLane is null
+                        || candidateLane.GetType() != currentLane.GetType()
+                        || string.Equals(candidateLane.ToString(), currentLaneText, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    bool changed = TrySetValueByNameCandidates(note, new[] { "targetlaneuid" }, candidateLane);
+                    MelonLogger.Msg($"[LaneShiftTest] selected note lane {currentLaneText}->{candidateLane} changed={changed}");
+                    return;
+                }
+            }
+
+            MelonLogger.Warning($"[LaneShiftTest] alternate lane not found. current={currentLaneText}");
+        }
+
         private static void TryShiftSelectedNoteBeatInfo(EarliestNoteChoice keepChoice)
         {
             if (keepChoice.NoteIndex < 0 || keepChoice.NoteIndex >= keepChoice.Context.Items.Count)

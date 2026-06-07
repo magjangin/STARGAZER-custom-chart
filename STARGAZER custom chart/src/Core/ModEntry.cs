@@ -28,6 +28,7 @@ namespace STARGAZER_custom_chart
                 }
 
                 TryApplyHarmonyAttributePatches("init");
+                LogBgmDebugFileInfo(hwaPath);
                 TryApplyFocusedTrackViewerPatches();
             }
             catch (Exception ex)
