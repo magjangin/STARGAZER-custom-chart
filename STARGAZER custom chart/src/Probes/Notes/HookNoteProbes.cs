@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -237,6 +237,7 @@ namespace STARGAZER_custom_chart
 
                 if (shouldRunWipe)
                 {
+                    LogNotesBeforeOperation(wipeContexts!, "BeforeOperation");
                     EarliestNoteChoice? keepChoice = SelectEarliestNote(wipeContexts!);
                     if (EnableBeatInfoShiftTest && !BeatInfoShiftTestDone && keepChoice is not null)
                     {

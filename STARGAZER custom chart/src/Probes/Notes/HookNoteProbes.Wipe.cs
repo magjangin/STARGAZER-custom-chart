@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -373,6 +373,57 @@ namespace STARGAZER_custom_chart
             public int NoteIndex { get; }
             public double? Time { get; }
             public int Sequence { get; }
+        }
+
+        private static void LogNotesBeforeOperation(IReadOnlyList<NoteCollectionContext> contexts, string stage)
+        {
+            MelonLogger.Msg($"[NoteDebug][{stage}] --- Printing Note Array (Total Contexts: {contexts.Count}) ---");
+            for (int c = 0; c < contexts.Count; c++)
+            {
+                NoteCollectionContext context = contexts[c];
+                MelonLogger.Msg($"[NoteDebug][{stage}] Context {c}: Layer {context.LayerIndex}, Area {context.AreaIndex}, Notes Count: {context.Items.Count}");
+                for (int i = 0; i < context.Items.Count; i++)
+                {
+                    object? note = context.Items[i];
+                    if (note == null)
+                    {
+                        MelonLogger.Msg($"  [{i}]: null");
+                        continue;
+                    }
+
+                    double? time = TryExtractNoteTime(note);
+                    string timeText = time.HasValue ? time.Value.ToString("0.###") : "?";
+
+                    TryGetValueByNameCandidates(note, new[] { "targetlaneuid" }, out object? laneUid);
+                    string laneText = laneUid?.ToString() ?? "?";
+
+                    TryGetValueByNameCandidates(note, new[] { "property", "noteproperty" }, out object? propObj);
+                    string linkText = "?";
+                    if (propObj != null)
+                    {
+                        TryGetValueByNameCandidates(propObj, new[] { "linked" }, out object? linkedObj);
+                        linkText = linkedObj?.ToString() ?? "?";
+                    }
+
+                    int beatIndex = -1;
+                    int beatSplit = -1;
+                    TryGetValueByNameCandidates(note, new[] { "beatinfo" }, out object? beatInfoObj);
+                    if (beatInfoObj != null)
+                    {
+                        Type biType = beatInfoObj.GetType();
+                        FieldInfo? splitField = biType.GetField("BeatSplit", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        FieldInfo? indexField = biType.GetField("BeatIndex", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (splitField != null && indexField != null)
+                        {
+                            beatSplit = Convert.ToInt32(splitField.GetValue(beatInfoObj));
+                            beatIndex = Convert.ToInt32(indexField.GetValue(beatInfoObj));
+                        }
+                    }
+
+                    MelonLogger.Msg($"  [{i}]: Time={timeText}, LaneUID={laneText}, Link={linkText}, BeatIndex={beatIndex}, BeatSplit={beatSplit}");
+                }
+            }
+            MelonLogger.Msg($"[NoteDebug][{stage}] ----------------------------------------------------");
         }
     }
 }
