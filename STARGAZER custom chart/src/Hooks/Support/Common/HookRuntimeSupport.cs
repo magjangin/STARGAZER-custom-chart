@@ -62,8 +62,6 @@ namespace STARGAZER_custom_chart
         private const int InvocationLogMaxPerWindow = 3;
         private const bool EnableForceAutoPlayAtPlayerBasePlay = true;
         private static bool PlayerBaseJacketLogged;
-        private static bool LevelSelectorCatalogLogged;
-        private static bool TrackLoaderCatalogLogged;
         private static bool TrackLoaderListLogged;
         private static bool IsInPlayScene;
 

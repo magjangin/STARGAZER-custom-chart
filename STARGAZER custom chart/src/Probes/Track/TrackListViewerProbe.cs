@@ -82,7 +82,7 @@ namespace STARGAZER_custom_chart
                     foreach (var fieldName in listCandidates)
                     {
                         listObj = TryGetMemberValue(instance, type, fieldName);
-                        if (listObj is not null && listObj is not string && (listObj is System.Collections.IEnumerable || listObj.GetType().IsArray || listObj.GetType().FullName.Contains("List")))
+                        if (listObj is not null && listObj is not string && (listObj is System.Collections.IEnumerable || listObj.GetType().IsArray || listObj.GetType().FullName?.Contains("List") == true))
                         {
                             break;
                         }
