@@ -72,16 +72,16 @@ namespace STARGAZER_custom_chart
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
                 new PatchSpec("Il2CppStargazer.Starlike.Sound.SoundPlayer", "StopBGM", 0)
                     .WithTypeFallback("Il2CppStarlike.Sound.SoundPlayer"),
-                // PlaySFX overload [0]: PlaySFX(AudioClip clip, ESoundType type)
+                // PlaySFX 오버로드 [0]: PlaySFX(AudioClip clip, ESoundType type)
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 2, "AudioClip", "ESoundType")
                     .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
-                // PlaySFX overload [1]: PlaySFX(AudioClip clip, ESoundType type, Single volume)
+                // PlaySFX 오버로드 [1]: PlaySFX(AudioClip clip, ESoundType type, Single volume)
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "AudioClip", "ESoundType", "Single")
                     .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
-                // PlaySFX overload [2]: PlaySFX(Single startTime, AudioClip clip, ESoundType type)
+                // PlaySFX 오버로드 [2]: PlaySFX(Single startTime, AudioClip clip, ESoundType type)
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "Single", "AudioClip", "ESoundType")
                     .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
-                // PlaySFX overload [3]: PlaySFX(Single startTime, AudioClip clip, ESoundType type, Single volume)
+                // PlaySFX 오버로드 [3]: PlaySFX(Single startTime, AudioClip clip, ESoundType type, Single volume)
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 4, "Single", "AudioClip", "ESoundType", "Single")
                     .WithTypeFallback("Il2CppStargazer.Starlike.Sound.SoundPlayer"),
             };

@@ -75,7 +75,7 @@ namespace STARGAZER_custom_chart
 
             try
             {
-                // Try to find the generic "TryCast" or "Cast" method on the object's type
+                // 객체 타입에서 일반적인 'TryCast' 또는 'Cast' 메서드를 찾습니다.
                 MethodInfo? tryCastMethod = obj.GetType()
                     .GetMethods(BindingFlags.Public | BindingFlags.Instance)
                     .FirstOrDefault(m => string.Equals(m.Name, "TryCast", StringComparison.Ordinal)
@@ -96,7 +96,7 @@ namespace STARGAZER_custom_chart
 
             try
             {
-                // Fallback: If targetType has a constructor that accepts IntPtr, instantiate it using the object's Pointer
+                // 대체: targetType에 IntPtr를 받는 생성자가 있으면 객체의 Pointer로 인스턴스화합니다.
                 object? ptrObj = TryGetMemberValue(obj, obj.GetType(), "Pointer")
                                  ?? TryGetMemberValue(obj, obj.GetType(), "m_CachedPtr");
                 if (ptrObj is IntPtr ptr && ptr != IntPtr.Zero)

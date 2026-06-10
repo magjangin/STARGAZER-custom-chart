@@ -10,7 +10,7 @@ namespace STARGAZER_custom_chart
     {
         private static object? InstantiateIl2CppObject(Type type)
         {
-            // Try 1: ScriptableObject.CreateInstance (if it is a ScriptableObject)
+            // 시도 1: ScriptableObject.CreateInstance (스크립터블 오브젝트인 경우)
             try
             {
                 Type? scriptableObjectType = Type.GetType("UnityEngine.ScriptableObject, UnityEngine.CoreModule")
@@ -37,7 +37,7 @@ namespace STARGAZER_custom_chart
                 MelonLogger.Warning($"[Instantiate] ScriptableObject.CreateInstance failed for {type.Name}: {ex.Message}");
             }
 
-            // Try 2: Parameterless constructor (public or non-public)
+            // 시도 2: 매개변수 없는 생성자 (public 또는 non-public)
             try
             {
                 ConstructorInfo? paramCtor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
@@ -53,7 +53,7 @@ namespace STARGAZER_custom_chart
                 MelonLogger.Warning($"[Instantiate] Empty constructor failed for {type.Name}: {ex.Message}");
             }
 
-            // Try 3: Call Activator.CreateInstance
+            // 시도 3: Activator.CreateInstance 호출
             try
             {
                 object? obj = Activator.CreateInstance(type);
@@ -68,7 +68,7 @@ namespace STARGAZER_custom_chart
                 MelonLogger.Warning($"[Instantiate] Activator.CreateInstance failed for {type.Name}: {ex.Message}");
             }
 
-            // Try 4: Log constructors to help debug
+            // 시도 4: 디버깅을 위해 생성자 정보를 출력합니다.
             try
             {
                 ConstructorInfo[] ctors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -157,49 +157,181 @@ namespace STARGAZER_custom_chart
                 ?? TryGetMemberValue(note, type, "BeatInfo");
         }
 
-        private static bool TryDuplicateAndLinkAsLongNote(object notesValue, object note1, out object? note2)
+        private static bool TryReadBeatInfoPosition(object beatInfo, out int beatIndex, out int beatSplit)
         {
-            note2 = null;
+            beatIndex = 0;
+            beatSplit = 0;
+            Type beatInfoType = beatInfo.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+            FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+            if (splitField is null || indexField is null)
+            {
+                return false;
+            }
+
+            beatSplit = Convert.ToInt32(splitField.GetValue(beatInfo));
+            beatIndex = Convert.ToInt32(indexField.GetValue(beatInfo));
+            return true;
+        }
+
+        private static bool TryWriteBeatInfoPosition(object beatInfo, int beatIndex, int beatSplit)
+        {
+            Type beatInfoType = beatInfo.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+            FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+            if (splitField is null || indexField is null)
+            {
+                return false;
+            }
+
+            splitField.SetValue(beatInfo, beatSplit);
+            indexField.SetValue(beatInfo, beatIndex);
+            return true;
+        }
+
+        private static bool TryCalculateOffsetBeatInfoPosition(object beatInfo1, int beatOffset, int splitOffset, out int beatIndex2, out int beatSplit2)
+        {
+            beatIndex2 = 0;
+            beatSplit2 = 0;
+            if (!TryReadBeatInfoPosition(beatInfo1, out int beatIndex1, out int beatSplit1))
+            {
+                return false;
+            }
+
+            beatSplit2 = beatSplit1;
+            beatIndex2 = beatIndex1 + (beatSplit1 * beatOffset) + splitOffset;
+
+            return true;
+        }
+
+        private static bool TrySetLinkedState(object property, string stateName)
+        {
+            Type propType = property.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            PropertyInfo? linkedProp = propType.GetProperty("linked", flags)
+                ?? propType.GetProperties(flags).FirstOrDefault(p => string.Equals(p.Name, "linked", StringComparison.OrdinalIgnoreCase));
+
+            if (linkedProp is not null && linkedProp.CanWrite)
+            {
+                try
+                {
+                    object state = Enum.Parse(linkedProp.PropertyType, stateName);
+                    linkedProp.SetValue(property, state);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            FieldInfo? linkedField = propType.GetField("linked", flags)
+                ?? propType.GetFields(flags).FirstOrDefault(f => string.Equals(f.Name, "linked", StringComparison.OrdinalIgnoreCase));
+            if (linkedField is null)
+            {
+                return false;
+            }
+
             try
             {
-                Type noteType = note1.GetType();
+                object state = Enum.Parse(linkedField.FieldType, stateName);
+                linkedField.SetValue(property, state);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryAddToNotesCollection(object notesValue, object note)
+        {
+            Type collectionType = notesValue.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            MethodInfo? addMethod = collectionType.GetMethods(flags)
+                .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
+            if (addMethod is null)
+            {
+                MelonLogger.Warning("[ExperimentChart] Add method not found on notes collection.");
+                return false;
+            }
+
+            addMethod.Invoke(notesValue, new[] { note });
+            return true;
+        }
+
+        private static bool TryApplyNotePropertyLinkedState(object sourceNote, object targetNote, string linkedState)
+        {
+            Type noteType = sourceNote.GetType();
+            object? property1 = TryGetMemberValue(sourceNote, noteType, "property")
+                ?? TryGetMemberValue(sourceNote, noteType, "Property")
+                ?? TryGetMemberValue(sourceNote, noteType, "noteProperty")
+                ?? TryGetMemberValue(sourceNote, noteType, "NoteProperty");
+
+            if (property1 is null)
+            {
+                MelonLogger.Warning($"[ExperimentChart] source note property not found for linked={linkedState}.");
+                return false;
+            }
+
+            Type propType = property1.GetType();
+            object? property2 = InstantiateIl2CppObject(propType);
+            if (property2 is null)
+            {
+                MelonLogger.Warning($"[ExperimentChart] failed to instantiate note property for linked={linkedState}.");
+                return false;
+            }
+
+            object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
+                ?? TryGetMemberValue(property1, propType, "expressionholder")
+                ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
+            TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
+
+            bool linked = TrySetLinkedState(property2, linkedState);
+            bool written = TrySetValueByNameCandidates(targetNote, new[] { "property" }, property2);
+            MelonLogger.Msg($"[ExperimentChart] property linked={linkedState} linkedSet={linked} written={written}");
+            return linked && written;
+        }
+
+        private static bool TryCreateNoteAtOffset(object sourceNote, int beatOffset, int splitOffset, string linkedState, out object? newNote)
+        {
+            newNote = null;
+            try
+            {
+                Type noteType = sourceNote.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // Extract properties/fields from note1
-                object? owner = FindOwnerArea(note1);
-                object? laneUid = TryGetMemberValue(note1, noteType, "TargetLaneUID")
-                    ?? TryGetMemberValue(note1, noteType, "targetLaneUID")
-                    ?? TryGetMemberValue(note1, noteType, "targetlaneuid");
-                object? beatInfo1 = FindBeatInfo(note1);
+                object? owner = FindOwnerArea(sourceNote);
+                object? laneUid = TryGetMemberValue(sourceNote, noteType, "TargetLaneUID")
+                    ?? TryGetMemberValue(sourceNote, noteType, "targetLaneUID")
+                    ?? TryGetMemberValue(sourceNote, noteType, "targetlaneuid");
+                object? beatInfo1 = FindBeatInfo(sourceNote);
 
                 if (owner == null || laneUid == null || beatInfo1 == null)
                 {
-                    MelonLogger.Warning($"[LongNoteTest] Failed to duplicate note: missing owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
+                    MelonLogger.Warning($"[ExperimentChart] Failed to duplicate note: missing owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
                     return false;
                 }
 
-                // Create beatInfo2
                 Type beatInfoType = beatInfo1.GetType();
                 object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
                 if (beatInfo2 == null)
                 {
-                    MelonLogger.Warning("[LongNoteTest] Failed to instantiate beatInfo2.");
+                    MelonLogger.Warning("[ExperimentChart] Failed to instantiate beatInfo2.");
                     return false;
                 }
 
-                FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
-                FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
-                int splitVal = 192;
-                int indexVal = 0;
-                if (splitField != null && indexField != null)
+                if (!TryReadBeatInfoPosition(beatInfo1, out int indexVal, out int splitVal)
+                    || !TryCalculateOffsetBeatInfoPosition(beatInfo1, beatOffset, splitOffset, out int newIndex, out int newSplit))
                 {
-                    splitVal = Convert.ToInt32(splitField.GetValue(beatInfo1));
-                    indexVal = Convert.ToInt32(indexField.GetValue(beatInfo1));
-                    splitField.SetValue(beatInfo2, splitVal);
-                    indexField.SetValue(beatInfo2, indexVal + (splitVal * 2));
+                    MelonLogger.Warning("[ExperimentChart] BeatInfo BeatIndex/BeatSplit fields not found.");
+                    return false;
                 }
 
-                // Try to create note2 using Constructor (Area, string, BeatInfo)
+                TryWriteBeatInfoPosition(beatInfo2, newIndex, newSplit);
+
                 ConstructorInfo? noteCtor3 = null;
                 foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
                 {
@@ -218,17 +350,16 @@ namespace STARGAZER_custom_chart
                 {
                     try
                     {
-                        note2 = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
-                        MelonLogger.Msg("[LongNoteTest] Successfully created note2 using Note(Area, string, BeatInfo) constructor.");
+                        newNote = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
+                        MelonLogger.Msg("[ExperimentChart] Successfully created note using Note(Area, string, BeatInfo) constructor.");
                     }
                     catch (Exception ex)
                     {
-                        MelonLogger.Warning($"[LongNoteTest] Note(Area, string, BeatInfo) constructor failed: {ex.Message}");
+                        MelonLogger.Warning($"[ExperimentChart] Note(Area, string, BeatInfo) constructor failed: {ex.Message}");
                     }
                 }
 
-                // Try fallback 1: Note(Area, string, int, int)
-                if (note2 == null)
+                if (newNote == null)
                 {
                     ConstructorInfo? noteCtor4 = null;
                     foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
@@ -249,115 +380,98 @@ namespace STARGAZER_custom_chart
                     {
                         try
                         {
-                            int newIndex = indexVal + (splitVal * 2);
-                            note2 = noteCtor4.Invoke(new[] { owner, laneUid, splitVal, newIndex });
-                            MelonLogger.Msg("[LongNoteTest] Successfully created note2 using Note(Area, string, int, int) constructor.");
+                            newNote = noteCtor4.Invoke(new[] { owner, laneUid, newSplit, newIndex });
+                            MelonLogger.Msg("[ExperimentChart] Successfully created note using Note(Area, string, int, int) constructor.");
                         }
                         catch (Exception ex)
                         {
-                            MelonLogger.Warning($"[LongNoteTest] Note(Area, string, int, int) constructor failed: {ex.Message}");
+                            MelonLogger.Warning($"[ExperimentChart] Note(Area, string, int, int) constructor failed: {ex.Message}");
                         }
                     }
                 }
 
-                // Try fallback 2: Parameterless instantiation (if any)
-                if (note2 == null)
+                if (newNote == null)
                 {
-                    note2 = InstantiateIl2CppObject(noteType);
+                    newNote = InstantiateIl2CppObject(noteType);
                 }
 
-                if (note2 == null)
+                if (newNote == null)
                 {
-                    MelonLogger.Warning("[LongNoteTest] All note instantiation strategies failed.");
+                    MelonLogger.Warning("[ExperimentChart] All note instantiation strategies failed.");
                     return false;
                 }
 
-                // Set/Copy members just in case
-                TrySetValueByNameCandidates(note2, new[] { "targetlaneuid" }, laneUid);
-                TrySetValueByNameCandidates(note2, new[] { "owner" }, owner);
-                TrySetValueByNameCandidates(note2, new[] { "beatinfo" }, beatInfo2);
+                TrySetValueByNameCandidates(newNote, new[] { "targetlaneuid" }, laneUid);
+                TrySetValueByNameCandidates(newNote, new[] { "owner" }, owner);
+                bool beatInfoWritten = TrySetValueByNameCandidates(newNote, new[] { "beatinfo" }, beatInfo2);
+                bool propertyWritten = TryApplyNotePropertyLinkedState(sourceNote, newNote, linkedState);
 
-                // 5. Create and copy NoteProperty, then set linked status
-                object? property1 = TryGetMemberValue(note1, noteType, "property")
-                    ?? TryGetMemberValue(note1, noteType, "Property")
-                    ?? TryGetMemberValue(note1, noteType, "noteProperty")
-                    ?? TryGetMemberValue(note1, noteType, "NoteProperty");
-                
-                if (property1 != null)
-                {
-                    Type propType = property1.GetType();
-                    object? property2 = InstantiateIl2CppObject(propType);
-                    if (property2 != null)
-                    {
-                        // Copy expressionHolder
-                        object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
-                            ?? TryGetMemberValue(property1, propType, "expressionholder")
-                            ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
-                        TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
-
-                        // Get linked enum type and parse values
-                        PropertyInfo? linkedProp = propType.GetProperty("linked", flags)
-                            ?? propType.GetProperties(flags).FirstOrDefault(p => string.Equals(p.Name, "linked", StringComparison.OrdinalIgnoreCase));
-                        
-                        if (linkedProp != null && linkedProp.CanWrite)
-                        {
-                            Type enumType = linkedProp.PropertyType;
-                            object startPointEnum = Enum.Parse(enumType, "StartPoint");
-                            object endPointEnum = Enum.Parse(enumType, "EndPoint");
-
-                            linkedProp.SetValue(property1, startPointEnum);
-                            linkedProp.SetValue(property2, endPointEnum);
-                        }
-                        else
-                        {
-                            FieldInfo? linkedField = propType.GetField("linked", flags)
-                                ?? propType.GetFields(flags).FirstOrDefault(f => string.Equals(f.Name, "linked", StringComparison.OrdinalIgnoreCase));
-                            if (linkedField != null)
-                            {
-                                Type enumType = linkedField.FieldType;
-                                object startPointEnum = Enum.Parse(enumType, "StartPoint");
-                                object endPointEnum = Enum.Parse(enumType, "EndPoint");
-
-                                linkedField.SetValue(property1, startPointEnum);
-                                linkedField.SetValue(property2, endPointEnum);
-                            }
-                        }
-
-                        // Write back both properties to their notes
-                        TrySetValueByNameCandidates(note1, new[] { "property" }, property1);
-                        TrySetValueByNameCandidates(note2, new[] { "property" }, property2);
-                    }
-                }
-
-                // 6. Copy time / hitTime candidate fields and set for end note (+ 2.0 beats)
-                double? time1 = TryExtractNoteTime(note1);
-                if (time1.HasValue)
-                {
-                    double time2 = time1.Value + 2.0;
-                    TrySetValueByNameCandidates(note2, new[] { "time", "timing", "start", "starttime", "hittime", "hittiming", "judge", "tick", "beat", "position", "ms" }, time2);
-                }
-
-                // 7. Add note2 to notesValue collection
-                Type collectionType = notesValue.GetType();
-                MethodInfo? addMethod = collectionType.GetMethods(flags)
-                    .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
-                
-                if (addMethod != null)
-                {
-                    addMethod.Invoke(notesValue, new[] { note2 });
-                    MelonLogger.Msg("[LongNoteTest] Successfully duplicated note, linked as long note (StartPoint -> EndPoint), and added to collection.");
-                    return true;
-                }
-                else
-                {
-                    MelonLogger.Warning("[LongNoteTest] Add method not found on notes collection.");
-                }
+                MelonLogger.Msg($"[ExperimentChart] created linked={linkedState} BeatIndex {indexVal}->{newIndex}, BeatSplit {splitVal}->{newSplit}, beatInfoWritten={beatInfoWritten}, propertyWritten={propertyWritten}");
+                return beatInfoWritten && propertyWritten;
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[LongNoteTest] Failed to duplicate and link note: {ex.Message}");
+                MelonLogger.Warning($"[ExperimentChart] Failed to duplicate note: {ex.Message}");
             }
+
             return false;
+        }
+
+        private static bool TryAddExperimentChartNotes(object notesValue, object sourceNote)
+        {
+            int added = 0;
+
+            if (ExperimentChartSettings.EnableShortNoteTest
+                && TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.ShortNoteBeatOffset,
+                    ExperimentChartSettings.ShortNoteSplitOffset,
+                    "None",
+                    out object? shortNote)
+                && shortNote is not null
+                && TryAddToNotesCollection(notesValue, shortNote))
+            {
+                added++;
+                MelonLogger.Msg("[ExperimentChart] Added short note.");
+            }
+
+            if (ExperimentChartSettings.EnableLongNoteTest)
+            {
+                bool createdLongStart = TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.LongNoteStartBeatOffset,
+                    ExperimentChartSettings.LongNoteStartSplitOffset,
+                    "StartPoint",
+                    out object? longStart);
+                bool createdLongEnd = TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.LongNoteEndBeatOffset,
+                    ExperimentChartSettings.LongNoteEndSplitOffset,
+                    "EndPoint",
+                    out object? longEnd);
+
+                if (createdLongStart && longStart is not null && createdLongEnd && longEnd is not null)
+                {
+                    bool startAdded = TryAddToNotesCollection(notesValue, longStart);
+                    bool endAdded = TryAddToNotesCollection(notesValue, longEnd);
+                    if (startAdded && endAdded)
+                    {
+                        added += 2;
+                        MelonLogger.Msg("[ExperimentChart] Added long note pair.");
+                    }
+                    else
+                    {
+                        MelonLogger.Warning($"[ExperimentChart] Long note pair add failed startAdded={startAdded} endAdded={endAdded}.");
+                    }
+                }
+                else
+                {
+                    MelonLogger.Warning($"[ExperimentChart] Long note pair creation failed start={createdLongStart} end={createdLongEnd}.");
+                }
+            }
+
+            MelonLogger.Msg($"[ExperimentChart] addedNotes={added} short={ExperimentChartSettings.EnableShortNoteTest} long={ExperimentChartSettings.EnableLongNoteTest}");
+            return added > 0;
         }
     }
 }

@@ -62,7 +62,7 @@ namespace STARGAZER_custom_chart
                 Type type = instance.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // 1. Try to find direct selected track object
+                // 1. 직접 선택된 트랙 객체를 찾습니다.
                 string[] trackCandidates = { "CurrentFocused", "selectedTrack", "currentTrack", "focusedTrack", "track", "trackData" };
                 object? trackObj = null;
                 foreach (var fieldName in trackCandidates)
@@ -74,7 +74,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 2. Try to find tracks collection and index
+                // 2. 트랙 컬렉션과 인덱스를 찾습니다.
                 if (trackObj is null)
                 {
                     string[] listCandidates = { "tracklist", "tracks", "trackList", "items", "list", "tracksData", "array" };
@@ -114,7 +114,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 3. If we found a track, display it!
+                // 3. 트랙을 찾았다면 표시합니다!
                 if (trackObj is not null)
                 {
                     _lastSelectedTrack = trackObj;
@@ -137,7 +137,7 @@ namespace STARGAZER_custom_chart
                 }
                 else
                 {
-                    // Fallback: list all non-null members to see what we can find
+                    // 대체: 찾을 수 있는 null이 아닌 멤버를 모두 나열합니다.
                     MelonLogger.Msg("[TrackListViewer.MoveCursor] Could not resolve selected track. Dumping members:");
                     foreach (var field in type.GetFields(flags))
                     {

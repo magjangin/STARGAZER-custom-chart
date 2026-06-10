@@ -55,7 +55,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // Dynamic injection check
+                // 동적 주입 확인
                 var firstTwo = EnumerateCollectionItems(tracks, 2).ToList();
                 bool alreadyInjected = firstTwo.Count >= 2
                     && IsStartingPointTrack(firstTwo[0])
@@ -77,7 +77,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                // Attempt to clone and insert two copies of the starting point at the beginning
+                // 시작 지점을 두 번 복제해 앞쪽에 삽입하려고 시도합니다.
                 int applied = 0;
                 object? track1 = null;
                 object? track2 = null;
@@ -99,8 +99,8 @@ namespace STARGAZER_custom_chart
                 }
                 else
                 {
-                    track1 = source;
-                    track2 = source;
+                    MelonLogger.Warning("[TrackSelector.Set] 독립 트랙 복제에 실패하여 주입을 건너뜁니다.");
+                    return;
                 }
 
                 try

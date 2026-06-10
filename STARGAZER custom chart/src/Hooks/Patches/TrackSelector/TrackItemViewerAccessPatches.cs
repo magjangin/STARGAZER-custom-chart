@@ -16,7 +16,7 @@ namespace STARGAZER_custom_chart
 
             private static IEnumerable<MethodBase> TargetMethods()
             {
-                // Use safe lookup via Assembly.GetType(name, throwOnError: false)
+                // Assembly.GetType(name, throwOnError: false)로 안전하게 조회합니다.
                 Type? viewerType = AppDomain.CurrentDomain
                     .GetAssemblies()
                     .Select(assembly => assembly.GetType("Il2CppStargazer.Travel.TrackSelector.TrackItemViewer", false))
@@ -30,7 +30,7 @@ namespace STARGAZER_custom_chart
 
                 foreach (string name in TargetNames)
                 {
-                    // Try property getter
+                    // 프로퍼티 getter를 시도합니다.
                     PropertyInfo? prop = viewerType.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (prop?.GetGetMethod(true) is MethodInfo getter)
                     {
@@ -39,7 +39,7 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    // Try explicit method named get_<name>
+                    // get_<name> 이름의 명시적 메서드를 시도합니다.
                     MethodInfo? method = viewerType.GetMethod("get_" + name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     if (method is not null)
                     {
@@ -48,7 +48,7 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    // As a last resort, try any method that returns a UnityEngine.UI.Text or Scroller-like type and contains the name
+                    // 마지막 수단으로, UnityEngine.UI.Text 또는 Scroller 계열을 반환하고 이름을 포함하는 메서드를 찾습니다.
                     MethodInfo[] candidates = viewerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                     foreach (var cand in candidates)
                     {

@@ -19,7 +19,7 @@ namespace STARGAZER_custom_chart
                 Type type = instance.GetType();
 
 
-                // 1. Get track ID
+                // 1. 트랙 ID를 가져옵니다.
                 string songId = TryGetMemberValue(instance, type, "trackID")?.ToString() ?? "";
                 if (string.IsNullOrEmpty(songId) && _lastSelectedTrack is not null)
                 {
@@ -28,7 +28,7 @@ namespace STARGAZER_custom_chart
                              ?? "";
                 }
 
-                // 2. Get song title and artist name from TextProviders
+                // 2. TextProvider에서 곡 제목과 아티스트 이름을 가져옵니다.
                 string songTitle = "";
                 string artistName = "";
 
@@ -50,7 +50,7 @@ namespace STARGAZER_custom_chart
                                 ?? "";
                 }
 
-                // Fallback to _lastSelectedTrack if title or artist are empty or editor placeholders
+                // 제목이나 아티스트가 비어 있거나 에디터 플레이스홀더면 _lastSelectedTrack로 되돌립니다.
                 if ((string.IsNullOrEmpty(songTitle) || songTitle == "Track Name") && _lastSelectedTrack is not null)
                 {
                     songTitle = TryGetMemberValue(_lastSelectedTrack, _lastSelectedTrack.GetType(), "TrackDisplayName")?.ToString()
@@ -72,7 +72,7 @@ namespace STARGAZER_custom_chart
                     songInfo = $"Song: {songTitle} / {artistName} (id={songId}) | ";
                 }
 
-                // 3. Get selected difficulty name
+                // 3. 선택된 난이도 이름을 가져옵니다.
                 string difficultyInfo = "";
                 object? selectedIndexObj = TryGetMemberValue(instance, type, "SelectedIndex")
                                            ?? TryGetMemberValue(instance, type, "index");
@@ -124,7 +124,7 @@ namespace STARGAZER_custom_chart
                                         levelText = TryScanForNumericDifficulty(activeLevelObj);
                                     }
 
-                                    // Update cache
+                                    // 캐시를 갱신합니다.
                                     if (levelName != "?" && levelText != "?" && !string.IsNullOrEmpty(songId) && songId != "?")
                                     {
                                         lock (_trackLevelsCache)
@@ -144,7 +144,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 4. Format record arguments
+                // 4. 기록 인자를 포맷합니다.
                 string recordInfo = "";
                 if (args.Length > 0 && args[0] is not null)
                 {
@@ -187,7 +187,7 @@ namespace STARGAZER_custom_chart
             {
                 Type type = instance.GetType();
 
-                // 1. Get track ID
+                // 1. 트랙 ID를 가져옵니다.
                 string songId = TryGetMemberValue(instance, type, "trackID")?.ToString() ?? "";
                 if (string.IsNullOrEmpty(songId) && _lastSelectedTrack is not null)
                 {
@@ -196,7 +196,7 @@ namespace STARGAZER_custom_chart
                              ?? "";
                 }
 
-                // 2. Get song title and artist name from TextProviders
+                // 2. TextProvider에서 곡 제목과 아티스트 이름을 가져옵니다.
                 string songTitle = "";
                 string artistName = "";
 
@@ -218,7 +218,7 @@ namespace STARGAZER_custom_chart
                                 ?? "";
                 }
 
-                // Fallback to _lastSelectedTrack if title or artist are empty or editor placeholders
+                // 제목이나 아티스트가 비어 있거나 에디터 플레이스홀더면 _lastSelectedTrack로 되돌립니다.
                 if ((string.IsNullOrEmpty(songTitle) || songTitle == "Track Name") && _lastSelectedTrack is not null)
                 {
                     songTitle = TryGetMemberValue(_lastSelectedTrack, _lastSelectedTrack.GetType(), "TrackDisplayName")?.ToString()
@@ -240,11 +240,11 @@ namespace STARGAZER_custom_chart
                     songInfo = $"Song: {songTitle} / {artistName} (id={songId}) | ";
                 }
 
-                // 3. Format sprite argument
+                // 3. 스프라이트 인자를 포맷합니다.
                 object? sprite = args.Length > 0 ? args[0] : null;
                 string spriteName = sprite is not null ? (TryGetPropertyValue(sprite, "name")?.ToString() ?? sprite.GetType().Name) : "null";
 
-                // 4. Extract level selector levels summary
+                // 4. 레벨 선택기 레벨 요약을 추출합니다.
                 string levelInfo = "";
                 object? levels = TryGetMemberValue(instance, type, "levels");
                 if (levels is not null)
@@ -291,7 +291,7 @@ namespace STARGAZER_custom_chart
                                     levelText = TryScanForNumericDifficulty(item);
                                 }
 
-                                // Update cache
+                                // 캐시를 갱신합니다.
                                 if (levelName != "?" && levelText != "?" && !string.IsNullOrEmpty(songId) && songId != "?")
                                 {
                                     lock (_trackLevelsCache)
@@ -315,7 +315,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // Print
+                // 출력합니다.
                 MelonLogger.Msg($"[LevelSelector][FetchJacektImage] {songInfo}sprite={spriteName}{levelInfo}");
             }
             catch (Exception ex)

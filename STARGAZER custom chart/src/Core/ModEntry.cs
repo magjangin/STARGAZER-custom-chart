@@ -15,7 +15,7 @@ namespace STARGAZER_custom_chart
             {
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
 
-                // Create the 'hwa' directory automatically in the game directory
+                // 게임 디렉터리에 'hwa' 폴더를 자동으로 생성합니다.
                 string hwaPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "hwa");
                 if (!System.IO.Directory.Exists(hwaPath))
                 {

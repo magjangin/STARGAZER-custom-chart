@@ -60,7 +60,7 @@ namespace STARGAZER_custom_chart
                     return true;
                 }
 
-                // Some games expose enum values as numbers in ToString.
+                // 일부 게임은 enum 값을 ToString()에서 숫자로 노출합니다.
                 if (double.TryParse(typeText, out double numericType) && numericType > 0)
                 {
                     return true;

@@ -59,24 +59,27 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                object? concreteTrack = CastToConcreteTrackData(track, concreteTrackType);
-                if (concreteTrack is null)
-                {
-                    return;
-                }
-
-                object? metaObj = GetTrackMetaDataObject(concreteTrack);
+                object? metaObj = GetTrackMetaDataObject(track);
                 if (metaObj is null)
                 {
+                    object? concreteTrack = CastToConcreteTrackData(track, concreteTrackType);
+                    metaObj = concreteTrack is null ? null : GetTrackMetaDataObject(concreteTrack);
+                }
+                if (metaObj is null)
+                {
+                    MelonLogger.Warning($"[TrackSelector.Set] startingpoint 메타데이터를 찾지 못했습니다: requested={displayName}");
                     return;
                 }
 
                 bool displayNameChanged = TrySetValueByNameCandidates(metaObj, new[] { "displayname" }, displayName);
                 bool composerChanged = TrySetValueByNameCandidates(metaObj, new[] { "composer" }, composer);
+                string actualDisplayName = TryGetMemberValue(metaObj, metaObj.GetType(), "displayName")?.ToString()
+                                           ?? TryGetMemberValue(metaObj, metaObj.GetType(), "DisplayName")?.ToString()
+                                           ?? "<unreadable>";
 
                 if (displayNameChanged || composerChanged)
                 {
-                    MelonLogger.Msg($"[TrackSelector.Set] startingpoint 메타데이터 수정: displayName={(displayNameChanged ? displayName : "<skip>")}, composer={(composerChanged ? composer : "<skip>")}");
+                    MelonLogger.Msg($"[TrackSelector.Set] startingpoint 메타데이터 수정: requested={displayName}, actual={actualDisplayName}, displayChanged={displayNameChanged}, composerChanged={composerChanged}");
                 }
             }
             catch (Exception ex)

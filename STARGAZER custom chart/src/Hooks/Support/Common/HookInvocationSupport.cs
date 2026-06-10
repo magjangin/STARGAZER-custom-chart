@@ -22,7 +22,7 @@ namespace STARGAZER_custom_chart
                     TryPatchTrackLoaderOnLoadedCallback(args);
                 }
 
-                // Log calls to Il2CppStargazer.TrackLoader+INNER_TrackMetaData.GetParser()
+                // Il2CppStargazer.TrackLoader+INNER_TrackMetaData.GetParser() 호출을 로그로 남깁니다.
                 if (EnableVerboseInvocationLogging
                     && string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackMetaData", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "GetParser", StringComparison.Ordinal))

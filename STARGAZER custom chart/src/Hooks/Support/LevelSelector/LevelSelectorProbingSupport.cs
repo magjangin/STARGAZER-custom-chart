@@ -73,10 +73,10 @@ namespace STARGAZER_custom_chart
                 Type type = obj.GetType();
                 const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                 
-                // 1. Try to search for fields or properties with exact/partial names containing level/difficulty
+                // 1. level/difficulty를 포함하는 정확/부분 이름의 필드 또는 프로퍼티를 찾습니다.
                 string[] targetCandidates = { "level", "difficulty", "lv", "val", "value" };
                 
-                // Try properties first
+                // 먼저 프로퍼티를 시도합니다.
                 foreach (var prop in type.GetProperties(Flags))
                 {
                     if (!prop.CanRead || prop.GetIndexParameters().Length > 0) continue;
@@ -103,7 +103,7 @@ namespace STARGAZER_custom_chart
                     catch {}
                 }
                 
-                // Try fields
+                // 필드를 시도합니다.
                 foreach (var field in type.GetFields(Flags))
                 {
                     string name = field.Name.ToLowerInvariant();
@@ -129,7 +129,7 @@ namespace STARGAZER_custom_chart
                     catch {}
                 }
                 
-                // 2. If it's a TextProvider or similar, try to extract its text value
+                // 2. TextProvider처럼 보이면 텍스트 값을 추출해 봅니다.
                 object? textVal = TryGetMemberValue(obj, type, "text")
                                   ?? TryGetMemberValue(obj, type, "Text")
                                   ?? TryGetMemberValue(obj, type, "string");

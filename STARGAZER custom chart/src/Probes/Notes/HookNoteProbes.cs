@@ -9,9 +9,6 @@ namespace STARGAZER_custom_chart
     public sealed partial class GameTypeEnumeratorMod
     {
         private static readonly HashSet<string> LoggedNoteArrayHits = new HashSet<string>(StringComparer.Ordinal);
-        private const bool EnableNoteWipeTest = true;
-        private const bool EnableBeatInfoShiftTest = false;
-        private const bool EnableLaneShiftTest = true;
         private static bool NoteWipeTestDone;
         private static bool BeatInfoShiftTestDone;
         private static bool LaneShiftTestDone;
@@ -58,7 +55,7 @@ namespace STARGAZER_custom_chart
                 int totalNotes = 0;
                 bool? writableNotesMember = null;
                 var nonEmptyAreas = new List<string>();
-                bool shouldRunWipe = EnableNoteWipeTest
+                bool shouldRunWipe = ExperimentChartSettings.EnableKeepEarliestOnlyChart
                     && !NoteWipeTestDone
                     && string.Equals(source, "PatternLoader._Load_b__5_0", StringComparison.Ordinal);
                 var wipeContexts = shouldRunWipe ? new List<NoteCollectionContext>() : null;
@@ -239,13 +236,13 @@ namespace STARGAZER_custom_chart
                 {
                     LogNotesBeforeOperation(wipeContexts!, "BeforeOperation");
                     EarliestNoteChoice? keepChoice = SelectEarliestNote(wipeContexts!);
-                    if (EnableBeatInfoShiftTest && !BeatInfoShiftTestDone && keepChoice is not null)
+                    if (ExperimentChartSettings.EnableBeatInfoShiftTest && !BeatInfoShiftTestDone && keepChoice is not null)
                     {
                         TryShiftSelectedNoteBeatInfo(keepChoice);
                         BeatInfoShiftTestDone = true;
                     }
 
-                    if (EnableLaneShiftTest && !LaneShiftTestDone && keepChoice is not null)
+                    if (ExperimentChartSettings.EnableLaneShiftTest && !LaneShiftTestDone && keepChoice is not null)
                     {
                         TryShiftSelectedNoteLane(keepChoice, wipeContexts!);
                         LaneShiftTestDone = true;
@@ -270,7 +267,7 @@ namespace STARGAZER_custom_chart
                         object? keptNote = keepChoice.Context.Items[keepChoice.NoteIndex];
                         if (keptNote is not null)
                         {
-                            TryDuplicateAndLinkAsLongNote(keepChoice.Context.NotesCollection, keptNote, out _);
+                            TryAddExperimentChartNotes(keepChoice.Context.NotesCollection, keptNote);
                         }
                     }
 

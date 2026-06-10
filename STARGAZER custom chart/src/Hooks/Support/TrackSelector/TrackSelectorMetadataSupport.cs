@@ -16,7 +16,7 @@ namespace STARGAZER_custom_chart
                 Type ct = track.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
-                // Also set on the INNER_TrackData wrapper itself if writable
+                // 쓰기 가능하면 INNER_TrackData 래퍼 자체에도 같이 설정합니다.
                 PropertyInfo? wrapperIdProp = ct.GetProperty("TrackID", flags)
                                               ?? ct.GetProperty("TrackId", flags)
                                               ?? ct.GetProperty("trackId", flags);
@@ -36,7 +36,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // Set on the inner metaData object
+                // 내부 metaData 객체에 설정합니다.
                 FieldInfo? metaField = ct.GetField("_metaData", flags)
                                       ?? ct.GetField("metaData", flags)
                                       ?? ct.GetField("m_metaData", flags);
@@ -116,7 +116,7 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($"[TrackSelector.Set.Dump] - TrackDisplayNameEN: {displayNameEn}");
                     MelonLogger.Msg($"[TrackSelector.Set.Dump] - ArtistDisplayName: {artistName}");
 
-                    // Try to cast to INNER_TrackData
+                    // INNER_TrackData로 캐스팅해 봅니다.
                     object? concreteTrack = null;
                     if (concreteTrackType is not null)
                     {
@@ -128,7 +128,7 @@ namespace STARGAZER_custom_chart
                         Type ct = concreteTrack.GetType();
                         MelonLogger.Msg($"[TrackSelector.Set.Dump] - Concrete Wrapper Type: {ct.FullName}");
 
-                        // Extract and dump the inner metaData (INNER_TrackMetaData)
+                        // 내부 metaData(INNER_TrackMetaData)를 추출해 덤프합니다.
                         BindingFlags searchFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
                         FieldInfo? f = ct.GetField("_metaData", searchFlags)
                                       ?? ct.GetField("metaData", searchFlags)
@@ -149,7 +149,7 @@ namespace STARGAZER_custom_chart
                             }
                         }
 
-                        // Fallback to find any field/property with "meta" in its name
+                        // 이름에 'meta'가 포함된 필드/프로퍼티를 찾아봅니다.
                         if (metaObj is null)
                         {
                             foreach (FieldInfo ff in ct.GetFields(searchFlags))

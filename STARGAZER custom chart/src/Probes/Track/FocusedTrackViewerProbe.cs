@@ -35,7 +35,7 @@ namespace STARGAZER_custom_chart
 
                 LoggerInstance.Msg($"[FocusedTrackViewerProbe] Found type: {type.FullName}. Proceeding with dynamic hooks.");
 
-                // Hook methods of this type, excluding property getters/setters to avoid high-frequency noise and recursion
+                // 고주파 로그와 재귀를 피하려고 프로퍼티 getter/setter를 제외하고 이 타입의 메서드를 후킹합니다.
                 MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                     .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
                     .Where(m => !m.Name.StartsWith("get_", StringComparison.Ordinal) && !m.Name.StartsWith("set_", StringComparison.Ordinal))
@@ -55,7 +55,7 @@ namespace STARGAZER_custom_chart
                     }
                     catch
                     {
-                        // Some methods might fail to patch, which is fine
+                        // 일부 메서드는 패치에 실패할 수 있지만 괜찮습니다.
                     }
                 }
 
@@ -207,7 +207,7 @@ namespace STARGAZER_custom_chart
                     songId = id;
                 }
 
-                // Save to cache
+                // 캐시에 저장합니다.
                 if (!string.IsNullOrEmpty(songId) && songId != "?" && cacheEntry.Count > 0)
                 {
                     lock (_trackLevelsCache)
