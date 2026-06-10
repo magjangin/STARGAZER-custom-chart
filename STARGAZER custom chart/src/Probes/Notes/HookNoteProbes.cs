@@ -29,7 +29,7 @@ namespace STARGAZER_custom_chart
                 PropertyInfo? layersProp = patternType.GetProperty("Layers", flags);
                 if (layersProp is null)
                 {
-                    MelonLogger.Msg($"[NoteProbe][AreaNotes] {source} Layers property not found");
+                    MelonLogger.Msg($"[NoteProbe][AreaNotes] {source} Layers 속성을 찾지 못했습니다.");
                     return;
                 }
 
@@ -40,7 +40,7 @@ namespace STARGAZER_custom_chart
                 }
                 catch
                 {
-                    MelonLogger.Msg($"[NoteProbe][AreaNotes] {source} Layers read failed");
+                    MelonLogger.Msg($"[NoteProbe][AreaNotes] {source} Layers 값을 읽지 못했습니다.");
                     return;
                 }
 

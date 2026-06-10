@@ -271,7 +271,7 @@ namespace STARGAZER_custom_chart
                     ?? TryGetMemberValue(playerBaseInstance, type, "Jacket");
                 if (jacketObj is null)
                 {
-                    MelonLogger.Warning("[PlayerBaseJacket] jacket member not found or null.");
+                    MelonLogger.Warning("[PlayerBaseJacket] 재킷 멤버를 찾지 못했거나 null입니다.");
                     return;
                 }
 

@@ -16,7 +16,7 @@ namespace STARGAZER_custom_chart
                 object? levels = TryGetMemberValue(instance, instance.GetType(), "levels");
                 if (levels is null)
                 {
-                    MelonLogger.Warning("[LevelSelector][Enumerate] 'levels' collection is null.");
+                    MelonLogger.Warning("[LevelSelector][Enumerate] 'levels' 컬렉션이 비어 있습니다.");
                     return;
                 }
 

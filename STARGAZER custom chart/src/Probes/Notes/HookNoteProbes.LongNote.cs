@@ -254,7 +254,7 @@ namespace STARGAZER_custom_chart
                 .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
             if (addMethod is null)
             {
-                MelonLogger.Warning("[ExperimentChart] Add method not found on notes collection.");
+                MelonLogger.Warning("[ExperimentChart] 노트 컬렉션에서 Add 메서드를 찾지 못했습니다.");
                 return false;
             }
 
@@ -272,7 +272,7 @@ namespace STARGAZER_custom_chart
 
             if (property1 is null)
             {
-                MelonLogger.Warning($"[ExperimentChart] source note property not found for linked={linkedState}.");
+                MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 원본 노트 속성을 찾지 못했습니다.");
                 return false;
             }
 
@@ -280,7 +280,7 @@ namespace STARGAZER_custom_chart
             object? property2 = InstantiateIl2CppObject(propType);
             if (property2 is null)
             {
-                MelonLogger.Warning($"[ExperimentChart] failed to instantiate note property for linked={linkedState}.");
+                MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 노트 속성 인스턴스를 생성하지 못했습니다.");
                 return false;
             }
 
@@ -311,7 +311,7 @@ namespace STARGAZER_custom_chart
 
                 if (owner == null || laneUid == null || beatInfo1 == null)
                 {
-                    MelonLogger.Warning($"[ExperimentChart] Failed to duplicate note: missing owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
+                    MelonLogger.Warning($"[ExperimentChart] 노트를 복제하지 못했습니다: owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
                     return false;
                 }
 
@@ -319,14 +319,14 @@ namespace STARGAZER_custom_chart
                 object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
                 if (beatInfo2 == null)
                 {
-                    MelonLogger.Warning("[ExperimentChart] Failed to instantiate beatInfo2.");
+                    MelonLogger.Warning("[ExperimentChart] beatInfo2 인스턴스 생성에 실패했습니다.");
                     return false;
                 }
 
                 if (!TryReadBeatInfoPosition(beatInfo1, out int indexVal, out int splitVal)
                     || !TryCalculateOffsetBeatInfoPosition(beatInfo1, beatOffset, splitOffset, out int newIndex, out int newSplit))
                 {
-                    MelonLogger.Warning("[ExperimentChart] BeatInfo BeatIndex/BeatSplit fields not found.");
+                    MelonLogger.Warning("[ExperimentChart] BeatInfo의 BeatIndex/BeatSplit 필드를 찾을 수 없습니다.");
                     return false;
                 }
 
@@ -351,11 +351,11 @@ namespace STARGAZER_custom_chart
                     try
                     {
                         newNote = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
-                        MelonLogger.Msg("[ExperimentChart] Successfully created note using Note(Area, string, BeatInfo) constructor.");
+                        MelonLogger.Msg("[ExperimentChart] Note(Area, string, BeatInfo) 생성자로 노트를 성공적으로 생성했습니다.");
                     }
                     catch (Exception ex)
                     {
-                        MelonLogger.Warning($"[ExperimentChart] Note(Area, string, BeatInfo) constructor failed: {ex.Message}");
+                        MelonLogger.Warning($"[ExperimentChart] Note(Area, string, BeatInfo) 생성자 호출에 실패했습니다: {ex.Message}");
                     }
                 }
 
@@ -381,11 +381,11 @@ namespace STARGAZER_custom_chart
                         try
                         {
                             newNote = noteCtor4.Invoke(new[] { owner, laneUid, newSplit, newIndex });
-                            MelonLogger.Msg("[ExperimentChart] Successfully created note using Note(Area, string, int, int) constructor.");
+                            MelonLogger.Msg("[ExperimentChart] Note(Area, string, int, int) 생성자로 노트를 성공적으로 생성했습니다.");
                         }
                         catch (Exception ex)
                         {
-                            MelonLogger.Warning($"[ExperimentChart] Note(Area, string, int, int) constructor failed: {ex.Message}");
+                            MelonLogger.Warning($"[ExperimentChart] Note(Area, string, int, int) 생성자 호출에 실패했습니다: {ex.Message}");
                         }
                     }
                 }
@@ -397,7 +397,7 @@ namespace STARGAZER_custom_chart
 
                 if (newNote == null)
                 {
-                    MelonLogger.Warning("[ExperimentChart] All note instantiation strategies failed.");
+                    MelonLogger.Warning("[ExperimentChart] 모든 노트 인스턴스 생성 전략이 실패했습니다.");
                     return false;
                 }
 
@@ -411,7 +411,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[ExperimentChart] Failed to duplicate note: {ex.Message}");
+                MelonLogger.Warning($"[ExperimentChart] 노트 복제에 실패했습니다: {ex.Message}");
             }
 
             return false;
@@ -432,7 +432,7 @@ namespace STARGAZER_custom_chart
                 && TryAddToNotesCollection(notesValue, shortNote))
             {
                 added++;
-                MelonLogger.Msg("[ExperimentChart] Added short note.");
+                MelonLogger.Msg("[ExperimentChart] 짧은 노트를 추가했습니다.");
             }
 
             if (ExperimentChartSettings.EnableLongNoteTest)
@@ -457,7 +457,7 @@ namespace STARGAZER_custom_chart
                     if (startAdded && endAdded)
                     {
                         added += 2;
-                        MelonLogger.Msg("[ExperimentChart] Added long note pair.");
+                        MelonLogger.Msg("[ExperimentChart] 긴 노트 쌍을 추가했습니다.");
                     }
                     else
                     {

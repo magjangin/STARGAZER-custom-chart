@@ -133,7 +133,7 @@ namespace STARGAZER_custom_chart
                 }
                 else
                 {
-                    MelonLogger.Warning("[CustomBgm] Invoke method not found on callback object.");
+                    MelonLogger.Warning("[CustomBgm] 콜백 객체에서 Invoke 메서드를 찾지 못했습니다.");
                 }
             }
             catch (Exception ex)
@@ -182,7 +182,7 @@ namespace STARGAZER_custom_chart
 
                 if (www.result != UnityWebRequest.Result.Success)
                 {
-                    MelonLogger.Error($"[CustomBgm] Failed to load custom BGM: {www.error}");
+                    MelonLogger.Error($"[CustomBgm] 커스텀 BGM 로드에 실패했습니다: {www.error}");
                     CompletePendingCustomBgmCallbacks(filePath, null);
                 }
                 else
@@ -202,7 +202,7 @@ namespace STARGAZER_custom_chart
                     }
                     else
                     {
-                        MelonLogger.Error("[CustomBgm] Loaded clip is null!");
+                        MelonLogger.Error("[CustomBgm] 로드된 클립이 null입니다!");
                         CompletePendingCustomBgmCallbacks(filePath, null);
                     }
                 }
@@ -282,7 +282,7 @@ namespace STARGAZER_custom_chart
                 }
                 else
                 {
-                    MelonLogger.Warning("[CustomBgm] Il2CppStargazer.TrackLoader+INNER_TrackData type not found.");
+                    MelonLogger.Warning("[CustomBgm] Il2CppStargazer.TrackLoader+INNER_TrackData 타입을 찾지 못했습니다.");
                 }
             }
 
@@ -324,7 +324,7 @@ namespace STARGAZER_custom_chart
                         }
                         else
                         {
-                            MelonLogger.Warning($"[CustomBgm] Local file not found: {path}. Falling back to default.");
+                            MelonLogger.Warning($"[CustomBgm] 로컬 파일을 찾지 못했습니다: {path}. 기본값으로 되돌립니다.");
                         }
                     }
                 }

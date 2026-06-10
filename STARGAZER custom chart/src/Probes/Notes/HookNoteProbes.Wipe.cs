@@ -17,7 +17,7 @@ namespace STARGAZER_custom_chart
                 || !TryGetValueByNameCandidates(note, new[] { "targetlaneuid" }, out object? currentLane)
                 || currentLane is null)
             {
-                MelonLogger.Warning("[LaneShiftTest] selected note lane not found.");
+                MelonLogger.Warning("[LaneShiftTest] 선택된 노트 레인을 찾을 수 없습니다.");
                 return;
             }
 
@@ -37,12 +37,12 @@ namespace STARGAZER_custom_chart
                     }
 
                     bool changed = TrySetValueByNameCandidates(note, new[] { "targetlaneuid" }, candidateLane);
-                    MelonLogger.Msg($"[LaneShiftTest] selected note lane {currentLaneText}->{candidateLane} changed={changed}");
+                    MelonLogger.Msg($"[LaneShiftTest] 선택된 노트 레인 {currentLaneText}->{candidateLane} 변경 여부={changed}");
                     return;
                 }
             }
 
-            MelonLogger.Warning($"[LaneShiftTest] alternate lane not found. current={currentLaneText}");
+            MelonLogger.Warning($"[LaneShiftTest] 대체 레인을 찾을 수 없습니다. 현재={currentLaneText}");
         }
 
         private static void TryShiftSelectedNoteBeatInfo(EarliestNoteChoice keepChoice)
@@ -60,7 +60,7 @@ namespace STARGAZER_custom_chart
 
             if (!TryGetValueByNameCandidates(note, new[] { "beatinfo" }, out object? beatInfoObj) || beatInfoObj is null)
             {
-                MelonLogger.Warning("[BeatShiftTest] beatInfo not found on kept note.");
+                MelonLogger.Warning("[BeatShiftTest] 유지된 노트에서 beatInfo를 찾을 수 없습니다.");
                 return;
             }
 
@@ -78,7 +78,7 @@ namespace STARGAZER_custom_chart
             FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
             if (splitField is null || indexField is null)
             {
-                MelonLogger.Warning("[BeatShiftTest] BeatSplit/BeatIndex fields not found.");
+                MelonLogger.Warning("[BeatShiftTest] BeatSplit/BeatIndex 필드를 찾을 수 없습니다.");
                 return;
             }
 
@@ -91,7 +91,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[BeatShiftTest] failed to read BeatInfo fields: {ex.GetType().Name}");
+                MelonLogger.Warning($"[BeatShiftTest] BeatInfo 필드를 읽지 못했습니다: {ex.GetType().Name}");
                 return;
             }
 
@@ -109,12 +109,12 @@ namespace STARGAZER_custom_chart
                 indexField.SetValue(beatInfoObj, newIndex);
                 if (!TrySetValueByNameCandidates(note, new[] { "beatinfo" }, beatInfoObj))
                 {
-                    MelonLogger.Warning("[BeatShiftTest] beatInfo write-back to note failed.");
+                    MelonLogger.Warning("[BeatShiftTest] 노트에 beatInfo를 다시 쓰지 못했습니다.");
                 }
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[BeatShiftTest] failed to write BeatInfo fields: {ex.GetType().Name}");
+                MelonLogger.Warning($"[BeatShiftTest] BeatInfo 필드를 쓰지 못했습니다: {ex.GetType().Name}");
                 return;
             }
 
@@ -124,7 +124,7 @@ namespace STARGAZER_custom_chart
                 : "?";
             string beforeText = beforeBeatValue.HasValue ? beforeBeatValue.Value.ToString("0.###") : "?";
             string afterText = afterBeatValue.HasValue ? afterBeatValue.Value.ToString("0.###") : "?";
-            MelonLogger.Msg($"[BeatShiftTest] keptNote L{keepChoice.Context.LayerIndex}A{keepChoice.Context.AreaIndex}[{keepChoice.NoteIndex}] BeatIndex {oldIndex}->{newIndex}, BeatSplit {oldSplit}->{newSplit}, BeatValue {beforeText}->{afterText}, UniqueHash {beforeHash}->{afterHash}");
+            MelonLogger.Msg($"[BeatShiftTest] 유지 노트 L{keepChoice.Context.LayerIndex}A{keepChoice.Context.AreaIndex}[{keepChoice.NoteIndex}] BeatIndex {oldIndex}->{newIndex}, BeatSplit {oldSplit}->{newSplit}, BeatValue {beforeText}->{afterText}, UniqueHash {beforeHash}->{afterHash}");
         }
 
         private static bool TryKeepOnlySelectedNote(object notesValue, IReadOnlyList<object?> items, int knownCount, int keepIndex, out int removedCount)

@@ -29,7 +29,7 @@ namespace STARGAZER_custom_chart
 
                 if (type is null)
                 {
-                    LoggerInstance.Warning("[FocusedTrackViewerProbe] Il2CppStargazer.Travel.FocusedTrackViewer type not found in loaded assemblies.");
+                    LoggerInstance.Warning("[FocusedTrackViewerProbe] 로드된 어셈블리에서 Il2CppStargazer.Travel.FocusedTrackViewer 타입을 찾지 못했습니다.");
                     return;
                 }
 
@@ -63,7 +63,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                LoggerInstance.Warning($"[FocusedTrackViewerProbe] Failed to apply patches: {ex.GetType().Name}: {ex.Message}");
+                LoggerInstance.Warning($"[FocusedTrackViewerProbe] 패치를 적용하지 못했습니다: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -128,7 +128,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[FocusedTrackViewer] Enumerate failed: {ex.Message}");
+                MelonLogger.Warning($"[FocusedTrackViewer] 열거에 실패했습니다: {ex.Message}");
             }
         }
 
@@ -227,7 +227,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[FocusedTrackViewer] Failed to enumerate '{memberName}': {ex.Message}");
+                MelonLogger.Warning($"[FocusedTrackViewer] '{memberName}' 멤버 열거에 실패했습니다: {ex.Message}");
             }
         }
 

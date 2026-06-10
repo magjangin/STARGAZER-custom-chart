@@ -15,7 +15,7 @@ namespace STARGAZER_custom_chart
                 Assembly? asm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name?.IndexOf("Assembly-CSharp", StringComparison.OrdinalIgnoreCase) >= 0);
                 if (asm is null)
                 {
-                    MelonLogger.Msg("[TypeScan] Assembly-CSharp not loaded yet.");
+                    MelonLogger.Msg("[TypeScan] Assembly-CSharp가 아직 로드되지 않았습니다.");
                     return;
                 }
 

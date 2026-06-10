@@ -24,7 +24,7 @@ namespace STARGAZER_custom_chart
 
                 if (viewerType is null)
                 {
-                    MelonLogger.Warning("[HookPatch][TrackItemViewer] target type not found: Il2CppStargazer.Travel.TrackSelector.TrackItemViewer");
+                    MelonLogger.Warning("[HookPatch][TrackItemViewer] 대상 타입을 찾지 못했습니다: Il2CppStargazer.Travel.TrackSelector.TrackItemViewer");
                     yield break;
                 }
 

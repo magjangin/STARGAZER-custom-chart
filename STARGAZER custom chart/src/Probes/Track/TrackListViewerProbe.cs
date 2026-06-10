@@ -138,7 +138,7 @@ namespace STARGAZER_custom_chart
                 else
                 {
                     // 대체: 찾을 수 있는 null이 아닌 멤버를 모두 나열합니다.
-                    MelonLogger.Msg("[TrackListViewer.MoveCursor] Could not resolve selected track. Dumping members:");
+                    MelonLogger.Msg("[TrackListViewer.MoveCursor] 선택된 트랙을 확인하지 못했습니다. 멤버를 덤프합니다:");
                     foreach (var field in type.GetFields(flags))
                     {
                         try
