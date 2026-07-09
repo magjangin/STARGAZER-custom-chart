@@ -1,0 +1,511 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using MelonLoader;
+
+namespace STARGAZER_custom_chart
+{
+    public sealed partial class GameTypeEnumeratorMod
+    {
+        // 어느 생성 전략이 그 타입에 통했는지만 알면 되는 진단이라 (타입, 전략) 조합마다 한 번만 남긴다.
+        // 노트마다 찍으면 곡 하나에 천 줄이 쌓인다(2026-08-09 실측: 4074줄 중 1105줄).
+        // 실패 로그는 그대로 매번 남긴다 — 드물게 나고, 날 때마다 봐야 한다.
+        private static void LogInstantiateStrategyOnce(Type type, string strategy)
+        {
+            if (LogOnce($"Instantiate.{type.FullName}.{strategy}"))
+            {
+                MelonLogger.Msg($"[Instantiate] Created {type.Name} using {strategy} (이 조합은 처음 1회만 기록합니다)");
+            }
+        }
+
+        // IL2CPP 래퍼 타입의 "빈 인스턴스 생성"을 리플렉션으로 대신하는 범용 헬퍼.
+        // 노트 프로브(이 파일)뿐 아니라 TrackSelectorCloningSupport의 메타데이터 복제에서도 쓰인다.
+        private static object? InstantiateIl2CppObject(Type type)
+        {
+            // 시도 1: ScriptableObject.CreateInstance (스크립터블 오브젝트인 경우)
+            try
+            {
+                Type? scriptableObjectType = Type.GetType("UnityEngine.ScriptableObject, UnityEngine.CoreModule")
+                    ?? Type.GetType("UnityEngine.ScriptableObject, UnityEngine");
+                if (scriptableObjectType != null && scriptableObjectType.IsAssignableFrom(type))
+                {
+                    MethodInfo? createInstanceMethod = scriptableObjectType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                        .FirstOrDefault(m => string.Equals(m.Name, "CreateInstance", StringComparison.Ordinal)
+                            && m.GetParameters().Length == 1
+                            && m.GetParameters()[0].ParameterType == typeof(Type));
+                    if (createInstanceMethod != null)
+                    {
+                        object? obj = createInstanceMethod.Invoke(null, new object[] { type });
+                        if (obj != null)
+                        {
+                            LogInstantiateStrategyOnce(type, "ScriptableObject.CreateInstance");
+                            return obj;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] ScriptableObject.CreateInstance failed for {type.Name}: {ex.Message}");
+            }
+
+            // 시도 2: 매개변수 없는 생성자 (public 또는 non-public)
+            try
+            {
+                ConstructorInfo? paramCtor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Type.EmptyTypes, null);
+                if (paramCtor != null)
+                {
+                    object obj = paramCtor.Invoke(null);
+                    LogInstantiateStrategyOnce(type, "empty constructor");
+                    return obj;
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] Empty constructor failed for {type.Name}: {ex.Message}");
+            }
+
+            // 시도 3: Activator.CreateInstance 호출
+            try
+            {
+                object? obj = Activator.CreateInstance(type);
+                if (obj is not null)
+                {
+                    LogInstantiateStrategyOnce(type, "Activator.CreateInstance");
+                    return obj;
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Instantiate] Activator.CreateInstance failed for {type.Name}: {ex.Message}");
+            }
+
+            // 시도 4: 디버깅을 위해 생성자 정보를 출력합니다.
+            try
+            {
+                ConstructorInfo[] ctors = type.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                MelonLogger.Msg($"[Instantiate] Available constructors for {type.FullName}: {ctors.Length}");
+                foreach (ConstructorInfo ctor in ctors)
+                {
+                    string paramsText = string.Join(", ", ctor.GetParameters().Select(p => $"{p.ParameterType.FullName} {p.Name}"));
+                    MelonLogger.Msg($"  Ctor: {type.Name}({paramsText})");
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        private static object? FindOwnerArea(object note)
+        {
+            Type type = note.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            
+            foreach (PropertyInfo prop in type.GetProperties(flags))
+            {
+                if (prop.CanRead && prop.PropertyType.Name.Contains("Area") && prop.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        object? val = prop.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                if (field.FieldType.Name.Contains("Area"))
+                {
+                    try
+                    {
+                        object? val = field.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            return TryGetMemberValue(note, type, "Owner")
+                ?? TryGetMemberValue(note, type, "owner")
+                ?? TryGetMemberValue(note, type, "_owner");
+        }
+
+        private static object? FindBeatInfo(object note)
+        {
+            Type type = note.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            
+            foreach (PropertyInfo prop in type.GetProperties(flags))
+            {
+                if (prop.CanRead && prop.PropertyType.Name.Contains("BeatInfo") && prop.GetIndexParameters().Length == 0)
+                {
+                    try
+                    {
+                        object? val = prop.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            foreach (FieldInfo field in type.GetFields(flags))
+            {
+                if (field.FieldType.Name.Contains("BeatInfo"))
+                {
+                    try
+                    {
+                        object? val = field.GetValue(note);
+                        if (val != null) return val;
+                    }
+                    catch {}
+                }
+            }
+
+            return TryGetMemberValue(note, type, "beatInfo")
+                ?? TryGetMemberValue(note, type, "BeatInfo");
+        }
+
+        private static bool TryReadBeatInfoPosition(object beatInfo, out int beatIndex, out int beatSplit)
+        {
+            beatIndex = 0;
+            beatSplit = 0;
+            Type beatInfoType = beatInfo.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+            FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+            if (splitField is null || indexField is null)
+            {
+                return false;
+            }
+
+            beatSplit = Convert.ToInt32(splitField.GetValue(beatInfo));
+            beatIndex = Convert.ToInt32(indexField.GetValue(beatInfo));
+            return true;
+        }
+
+        private static bool TryWriteBeatInfoPosition(object beatInfo, int beatIndex, int beatSplit)
+        {
+            Type beatInfoType = beatInfo.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            FieldInfo? splitField = beatInfoType.GetField("BeatSplit", flags);
+            FieldInfo? indexField = beatInfoType.GetField("BeatIndex", flags);
+            if (splitField is null || indexField is null)
+            {
+                return false;
+            }
+
+            splitField.SetValue(beatInfo, beatSplit);
+            indexField.SetValue(beatInfo, beatIndex);
+            return true;
+        }
+
+        private static bool TryCalculateOffsetBeatInfoPosition(object beatInfo1, int beatOffset, int splitOffset, out int beatIndex2, out int beatSplit2)
+        {
+            beatIndex2 = 0;
+            beatSplit2 = 0;
+            if (!TryReadBeatInfoPosition(beatInfo1, out int beatIndex1, out int beatSplit1))
+            {
+                return false;
+            }
+
+            beatSplit2 = beatSplit1;
+            beatIndex2 = beatIndex1 + (beatSplit1 * beatOffset) + splitOffset;
+
+            return true;
+        }
+
+        private static bool TrySetLinkedState(object property, string stateName)
+        {
+            Type propType = property.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            PropertyInfo? linkedProp = propType.GetProperty("linked", flags)
+                ?? propType.GetProperties(flags).FirstOrDefault(p => string.Equals(p.Name, "linked", StringComparison.OrdinalIgnoreCase));
+
+            if (linkedProp is not null && linkedProp.CanWrite)
+            {
+                try
+                {
+                    object state = Enum.Parse(linkedProp.PropertyType, stateName);
+                    linkedProp.SetValue(property, state);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            FieldInfo? linkedField = propType.GetField("linked", flags)
+                ?? propType.GetFields(flags).FirstOrDefault(f => string.Equals(f.Name, "linked", StringComparison.OrdinalIgnoreCase));
+            if (linkedField is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                object state = Enum.Parse(linkedField.FieldType, stateName);
+                linkedField.SetValue(property, state);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryAddToNotesCollection(object notesValue, object note)
+        {
+            Type collectionType = notesValue.GetType();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            MethodInfo? addMethod = collectionType.GetMethods(flags)
+                .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
+            if (addMethod is null)
+            {
+                MelonLogger.Warning("[ExperimentChart] 노트 컬렉션에서 Add 메서드를 찾지 못했습니다.");
+                return false;
+            }
+
+            addMethod.Invoke(notesValue, new[] { note });
+            return true;
+        }
+
+        private static bool TryApplyNotePropertyLinkedState(object sourceNote, object targetNote, string linkedState)
+        {
+            Type noteType = sourceNote.GetType();
+            object? property1 = TryGetMemberValue(sourceNote, noteType, "property")
+                ?? TryGetMemberValue(sourceNote, noteType, "Property")
+                ?? TryGetMemberValue(sourceNote, noteType, "noteProperty")
+                ?? TryGetMemberValue(sourceNote, noteType, "NoteProperty");
+
+            if (property1 is null)
+            {
+                MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 원본 노트 속성을 찾지 못했습니다.");
+                return false;
+            }
+
+            Type propType = property1.GetType();
+            object? property2 = InstantiateIl2CppObject(propType);
+            if (property2 is null)
+            {
+                MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 노트 속성 인스턴스를 생성하지 못했습니다.");
+                return false;
+            }
+
+            object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
+                ?? TryGetMemberValue(property1, propType, "expressionholder")
+                ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
+            TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
+
+            bool linked = TrySetLinkedState(property2, linkedState);
+            bool written = TrySetValueByNameCandidates(targetNote, new[] { "property" }, property2);
+
+            // 노트마다 같은 줄이 반복된다(2026-08-09 실측: 4074줄 중 552줄).
+            // 결과 조합(linked/written)이 처음 나올 때만 남기면 실패도 놓치지 않는다.
+            if (LogOnce($"ExperimentChart.property.{linkedState}.{linked}.{written}"))
+            {
+                string line = $"[ExperimentChart] property linked={linkedState} linkedSet={linked} written={written} (이 결과는 처음 1회만 기록합니다)";
+                if (linked && written)
+                {
+                    MelonLogger.Msg(line);
+                }
+                else
+                {
+                    MelonLogger.Warning(line);
+                }
+            }
+
+            return linked && written;
+        }
+
+        private static bool TryCreateNoteAtOffset(object sourceNote, int beatOffset, int splitOffset, string linkedState, out object? newNote)
+        {
+            newNote = null;
+            try
+            {
+                Type noteType = sourceNote.GetType();
+                BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+                object? owner = FindOwnerArea(sourceNote);
+                object? laneUid = TryGetMemberValue(sourceNote, noteType, "TargetLaneUID")
+                    ?? TryGetMemberValue(sourceNote, noteType, "targetLaneUID")
+                    ?? TryGetMemberValue(sourceNote, noteType, "targetlaneuid");
+                object? beatInfo1 = FindBeatInfo(sourceNote);
+
+                if (owner == null || laneUid == null || beatInfo1 == null)
+                {
+                    MelonLogger.Warning($"[ExperimentChart] 노트를 복제하지 못했습니다: owner={owner != null}, laneUid={laneUid != null}, beatInfo1={beatInfo1 != null}");
+                    return false;
+                }
+
+                Type beatInfoType = beatInfo1.GetType();
+                object? beatInfo2 = InstantiateIl2CppObject(beatInfoType);
+                if (beatInfo2 == null)
+                {
+                    MelonLogger.Warning("[ExperimentChart] beatInfo2 인스턴스 생성에 실패했습니다.");
+                    return false;
+                }
+
+                if (!TryReadBeatInfoPosition(beatInfo1, out int indexVal, out int splitVal)
+                    || !TryCalculateOffsetBeatInfoPosition(beatInfo1, beatOffset, splitOffset, out int newIndex, out int newSplit))
+                {
+                    MelonLogger.Warning("[ExperimentChart] BeatInfo의 BeatIndex/BeatSplit 필드를 찾을 수 없습니다.");
+                    return false;
+                }
+
+                TryWriteBeatInfoPosition(beatInfo2, newIndex, newSplit);
+
+                ConstructorInfo? noteCtor3 = null;
+                foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
+                {
+                    ParameterInfo[] parameters = ctor.GetParameters();
+                    if (parameters.Length == 3
+                        && parameters[0].ParameterType.Name.Contains("Area")
+                        && parameters[1].ParameterType == typeof(string)
+                        && parameters[2].ParameterType.Name.Contains("BeatInfo"))
+                    {
+                        noteCtor3 = ctor;
+                        break;
+                    }
+                }
+
+                if (noteCtor3 != null)
+                {
+                    try
+                    {
+                        newNote = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
+                        if (LogOnce("ExperimentChart.noteCtor.Area_string_BeatInfo"))
+                        {
+                            MelonLogger.Msg("[ExperimentChart] Note(Area, string, BeatInfo) 생성자로 노트를 성공적으로 생성했습니다. (처음 1회만 기록)");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Warning($"[ExperimentChart] Note(Area, string, BeatInfo) 생성자 호출에 실패했습니다: {ex.Message}");
+                    }
+                }
+
+                if (newNote == null)
+                {
+                    ConstructorInfo? noteCtor4 = null;
+                    foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
+                    {
+                        ParameterInfo[] parameters = ctor.GetParameters();
+                        if (parameters.Length == 4
+                            && parameters[0].ParameterType.Name.Contains("Area")
+                            && parameters[1].ParameterType == typeof(string)
+                            && parameters[2].ParameterType == typeof(int)
+                            && parameters[3].ParameterType == typeof(int))
+                        {
+                            noteCtor4 = ctor;
+                            break;
+                        }
+                    }
+
+                    if (noteCtor4 != null)
+                    {
+                        try
+                        {
+                            newNote = noteCtor4.Invoke(new[] { owner, laneUid, newSplit, newIndex });
+                            if (LogOnce("ExperimentChart.noteCtor.Area_string_int_int"))
+                            {
+                                MelonLogger.Msg("[ExperimentChart] Note(Area, string, int, int) 생성자로 노트를 성공적으로 생성했습니다. (처음 1회만 기록)");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MelonLogger.Warning($"[ExperimentChart] Note(Area, string, int, int) 생성자 호출에 실패했습니다: {ex.Message}");
+                        }
+                    }
+                }
+
+                if (newNote == null)
+                {
+                    newNote = InstantiateIl2CppObject(noteType);
+                }
+
+                if (newNote == null)
+                {
+                    MelonLogger.Warning("[ExperimentChart] 모든 노트 인스턴스 생성 전략이 실패했습니다.");
+                    return false;
+                }
+
+                TrySetValueByNameCandidates(newNote, new[] { "targetlaneuid" }, laneUid);
+                TrySetValueByNameCandidates(newNote, new[] { "owner" }, owner);
+                bool beatInfoWritten = TrySetValueByNameCandidates(newNote, new[] { "beatinfo" }, beatInfo2);
+                bool propertyWritten = TryApplyNotePropertyLinkedState(sourceNote, newNote, linkedState);
+
+                MelonLogger.Msg($"[ExperimentChart] created linked={linkedState} BeatIndex {indexVal}->{newIndex}, BeatSplit {splitVal}->{newSplit}, beatInfoWritten={beatInfoWritten}, propertyWritten={propertyWritten}");
+                return beatInfoWritten && propertyWritten;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[ExperimentChart] 노트 복제에 실패했습니다: {ex.Message}");
+            }
+
+            return false;
+        }
+
+        private static bool TryAddExperimentChartNotes(object notesValue, object sourceNote)
+        {
+            int added = 0;
+
+            if (ExperimentChartSettings.EnableShortNoteTest
+                && TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.ShortNoteBeatOffset,
+                    ExperimentChartSettings.ShortNoteSplitOffset,
+                    "None",
+                    out object? shortNote)
+                && shortNote is not null
+                && TryAddToNotesCollection(notesValue, shortNote))
+            {
+                added++;
+                MelonLogger.Msg("[ExperimentChart] 짧은 노트를 추가했습니다.");
+            }
+
+            if (ExperimentChartSettings.EnableLongNoteTest)
+            {
+                bool createdLongStart = TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.LongNoteStartBeatOffset,
+                    ExperimentChartSettings.LongNoteStartSplitOffset,
+                    "StartPoint",
+                    out object? longStart);
+                bool createdLongEnd = TryCreateNoteAtOffset(
+                    sourceNote,
+                    ExperimentChartSettings.LongNoteEndBeatOffset,
+                    ExperimentChartSettings.LongNoteEndSplitOffset,
+                    "EndPoint",
+                    out object? longEnd);
+
+                if (createdLongStart && longStart is not null && createdLongEnd && longEnd is not null)
+                {
+                    bool startAdded = TryAddToNotesCollection(notesValue, longStart);
+                    bool endAdded = TryAddToNotesCollection(notesValue, longEnd);
+                    if (startAdded && endAdded)
+                    {
+                        added += 2;
+                        MelonLogger.Msg("[ExperimentChart] 긴 노트 쌍을 추가했습니다.");
+                    }
+                    else
+                    {
+                        MelonLogger.Warning($"[ExperimentChart] Long note pair add failed startAdded={startAdded} endAdded={endAdded}.");
+                    }
+                }
+                else
+                {
+                    MelonLogger.Warning($"[ExperimentChart] Long note pair creation failed start={createdLongStart} end={createdLongEnd}.");
+                }
+            }
+
+            MelonLogger.Msg($"[ExperimentChart] addedNotes={added} short={ExperimentChartSettings.EnableShortNoteTest} long={ExperimentChartSettings.EnableLongNoteTest}");
+            return added > 0;
+        }
+    }
+}
