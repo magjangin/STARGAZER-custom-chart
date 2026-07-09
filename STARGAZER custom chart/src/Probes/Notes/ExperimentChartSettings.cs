@@ -7,6 +7,7 @@ namespace STARGAZER_custom_chart
         public const bool EnableLaneShiftTest = true;
         public const bool EnableShortNoteTest = true;
         public const bool EnableLongNoteTest = true;
+        public const bool EnableAreaCreationTest = false;
 
         // BeatValue는 사실상 BeatIndex / BeatSplit이며, 1비트 이동은 BeatIndex에 BeatSplit을 더합니다.
         public const int ShortNoteBeatOffset = 1;
