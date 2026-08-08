@@ -16,50 +16,6 @@ namespace STARGAZER_custom_chart
         // 커스텀 트랙 전체에 hwa/ 폴더의 이미지 파일 하나를 공용으로 서빙한다 — BGM 서빙과 동일한 수준.
         private static readonly Dictionary<string, Sprite> CustomJacketCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
 
-        // 정확한 이름을 먼저 시도하고(Windows는 대소문자 구분 안 하니 대소문자 편차는 자동 해결됨),
-        // 없으면 hwa 폴더에서 이미지 확장자를 가진 첫 파일로 폴백한다 — 사용자가 파일명을
-        // "Thumbnail.png", "썸네일.png" 등 자유롭게 지어도 찾도록.
-        private static readonly string[] CustomJacketFileNameCandidates =
-        {
-            "jacket.png", "jacket.jpg", "jacket.jpeg",
-            "cover.png", "cover.jpg", "cover.jpeg",
-            "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg",
-            "자켓.png", "커버.png", "썸네일.png",
-        };
-
-        private static readonly string[] CustomJacketImageExtensions = { ".png", ".jpg", ".jpeg" };
-
-        private static string? FindCustomJacketFile(string hwaPath)
-        {
-            foreach (string name in CustomJacketFileNameCandidates)
-            {
-                string candidate = Path.Combine(hwaPath, name);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-            }
-
-            try
-            {
-                foreach (string file in Directory.EnumerateFiles(hwaPath))
-                {
-                    string ext = Path.GetExtension(file);
-                    if (Array.Exists(CustomJacketImageExtensions, candidateExt => string.Equals(candidateExt, ext, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        MelonLogger.Msg($"[CustomJacket] 이름 후보와 안 맞아 폴더 내 이미지 파일로 대체: {file}");
-                        return file;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[CustomJacket] hwa 폴더 스캔 실패: {ex.Message}");
-            }
-
-            return null;
-        }
-
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
@@ -153,19 +109,14 @@ namespace STARGAZER_custom_chart
 
                     // 공식 트랙에 커스텀 커버가 들어가지 않도록, 우리가 주입한 객체인지로만 판별한다.
                     // (TrackID는 복제 원본인 공식 "Starting Point"와 동일해서 구분 기준이 될 수 없다.)
-                    if (!IsCustomChartTrack(__instance))
+                    // 어느 앨범 폴더의 이미지를 쓸지도 이 조회 결과로 정해진다.
+                    CustomAlbum? album = TryGetAlbumForTrack(__instance);
+                    if (album?.JacketPath is null)
                     {
                         return true;
                     }
 
-                    // TODO: 트랙마다 다른 이미지가 필요해지면 TrackID로 파일명을 분기할 것.
-                    string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
-                    string? path = FindCustomJacketFile(hwaPath);
-                    if (path is null)
-                    {
-                        return true;
-                    }
-
+                    string path = album.JacketPath;
                     Sprite? sprite = LoadCustomJacketSprite(path);
                     if (sprite is null)
                     {

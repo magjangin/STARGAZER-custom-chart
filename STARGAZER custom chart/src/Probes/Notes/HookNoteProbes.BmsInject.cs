@@ -15,19 +15,6 @@ namespace STARGAZER_custom_chart
         // 실제 LaneUID 문자열은 곡마다 다를 수 있어 하드코딩하지 않고, 런타임에 Layer.Lanes에서 순서대로 뽑는다.
         private static readonly int[] BmsChannelLaneOrder = { 16, 12, 13, 11 };
 
-        private static string? FindCustomBmsFile(string hwaPath)
-        {
-            try
-            {
-                return Directory.EnumerateFiles(hwaPath, "*.bms").FirstOrDefault();
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[BmsInject] hwa 폴더 스캔 실패: {ex.Message}");
-                return null;
-            }
-        }
-
         // sourceNote는 위치 정보용이 아니라, Note/Area/NoteProperty의 실제 IL2CPP 타입과
         // NoteProperty의 expressionHolder 샘플 값을 얻기 위한 템플릿으로만 쓰인다.
         private static void TryInjectBmsChart(EarliestNoteChoice keepChoice)
@@ -36,7 +23,9 @@ namespace STARGAZER_custom_chart
             {
                 // 방어적 재확인: Layer.Areas를 통째로 지우는 파괴적 작업이라, 호출부 가드가 뚫려도
                 // 여기서 한 번 더 커스텀 트랙 여부를 확인하고 공식곡이면 절대 실행하지 않는다.
-                if (!IsCustomChartPlayActive)
+                // 어느 앨범의 BMS를 쓸지도 재생 중인 앨범으로 정해진다.
+                CustomAlbum? album = CurrentPlayAlbum;
+                if (!IsCustomChartPlayActive || album is null)
                 {
                     return;
                 }
@@ -85,11 +74,10 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
-                string? bmsPath = FindCustomBmsFile(hwaPath);
+                string? bmsPath = album.BmsPath;
                 if (bmsPath is null)
                 {
-                    MelonLogger.Msg("[BmsInject] hwa 폴더에 .bms 파일이 없어 건너뜁니다.");
+                    MelonLogger.Msg($"[BmsInject] .bms 파일이 없어 건너뜁니다: {album.Name}");
                     return;
                 }
 

@@ -44,6 +44,7 @@ namespace STARGAZER_custom_chart
         private static void UpdateCustomChartPlayState(object? travelArgs)
         {
             IsCustomChartPlayActive = false;
+            CurrentPlayAlbum = null;
             if (travelArgs is null)
             {
                 MelonLogger.Msg("[BgmDebug] play state travelArgs=<null>");
@@ -65,8 +66,10 @@ namespace STARGAZER_custom_chart
                 ?? string.Empty;
             // 표시명은 사용자가 바꿀 수 있고, TrackID는 복제 원본인 공식 트랙과 동일하다.
             // 우리가 주입한 객체인지(객체 동일성)로만 확실하게 판별할 수 있다.
-            IsCustomChartPlayActive = IsCustomChartTrack(track);
-            MelonLogger.Msg($"[BgmDebug] play state custom={IsCustomChartPlayActive} title={title}");
+            // 재생 중인 앨범은 BMS 차트 주입과 플레이 화면 난이도 표시가 쓴다.
+            CurrentPlayAlbum = TryGetAlbumForTrack(track);
+            IsCustomChartPlayActive = CurrentPlayAlbum is not null;
+            MelonLogger.Msg($"[BgmDebug] play state custom={IsCustomChartPlayActive} album={CurrentPlayAlbum?.Name ?? "<none>"} title={title}");
         }
 
         private static void LogBgmDebugInvocation(MethodBase method, object? instance, object[] args)
@@ -303,20 +306,15 @@ namespace STARGAZER_custom_chart
                         ?? string.Empty;
 
                     // 공식 트랙을 건드리지 않도록 우리가 주입한 객체인지로 판별한다(TrackID는 원본과 동일해 못 씀).
-                    if (IsCustomChartTrack(__instance))
+                    // 어느 앨범 폴더의 음원을 쓸지도 이 조회 결과로 정해진다.
+                    CustomAlbum? album = TryGetAlbumForTrack(__instance);
+                    if (album is not null)
                     {
-                        string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
-                        string bgmFile = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
-                            ? "music_preview.ogg"
-                            : "music.ogg";
-                        
-                        string path = Path.Combine(hwaPath, bgmFile);
-                        if (!File.Exists(path) && string.Equals(bgmFile, "music_preview.ogg", StringComparison.Ordinal))
-                        {
-                            path = Path.Combine(hwaPath, "music.ogg");
-                        }
+                        string? path = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
+                            ? album.PreviewPath
+                            : album.MusicPath;
 
-                        if (File.Exists(path))
+                        if (path is not null && File.Exists(path))
                         {
                             if (TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
                             {
@@ -330,7 +328,7 @@ namespace STARGAZER_custom_chart
                         }
                         else
                         {
-                            MelonLogger.Warning($"[CustomBgm] 로컬 파일을 찾지 못했습니다: {path}. 기본값으로 되돌립니다.");
+                            MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
                         }
                     }
                 }

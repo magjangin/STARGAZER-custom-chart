@@ -16,32 +16,17 @@ namespace STARGAZER_custom_chart
         // ELevels 선언 순서. 이름으로 난이도를 못 알아낼 때의 폴백.
         private static readonly string[] LevelOrderFallback = { "Cosmic", "Stellar", "Void" };
 
-        private static bool LevelSelectorShowsCustomTrack;
+        // 지금 난이도 선택 화면에 떠 있는 앨범(없으면 공식 곡). FocusedTrackViewer 판정 결과를 재사용한다.
+        private static CustomAlbum? LevelSelectorAlbum;
 
-        // 플레이 중인 난이도("Cosmic"/"Stellar"/"Void"). PlayerBase.Play 훅에서 TravelArgs.PlayLevel로 채운다.
+        // 플레이 중인 앨범과 난이도("Cosmic"/"Stellar"/"Void"). PlayerBase.Play 훅에서 TravelArgs로 채운다.
+        private static CustomAlbum? CurrentPlayAlbum;
         private static string? CustomChartPlayLevelKey;
-        private static CustomTrackInfo? CachedCustomTrackInfo;
-        private static bool CustomTrackInfoLoaded;
-
-        private static CustomTrackInfo? GetCustomTrackInfo()
-        {
-            if (CustomTrackInfoLoaded)
-            {
-                return CachedCustomTrackInfo;
-            }
-
-            CustomTrackInfoLoaded = true;
-            string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
-            string? infoPath = FindCustomTrackInfoFile(hwaPath);
-            CachedCustomTrackInfo = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
-            return CachedCustomTrackInfo;
-        }
-
         private static void HandleLevelSelectorSetTrack(object? instance, object[] args)
         {
             object? track = args.Length > 0 ? args[0] : null;
-            LevelSelectorShowsCustomTrack = IsCustomChartTrack(track);
-            if (LevelSelectorShowsCustomTrack)
+            LevelSelectorAlbum = TryGetAlbumForTrack(track);
+            if (LevelSelectorAlbum is not null)
             {
                 ApplyCustomLevelDisplay(instance);
             }
@@ -49,8 +34,8 @@ namespace STARGAZER_custom_chart
 
         private static void HandleLevelSelectorRefresh(object? instance)
         {
-            // Refresh는 SetTrack 이후에도 여러 번 불려 표시를 다시 채우므로 그때마다 다시 덮어쓴다.
-            if (LevelSelectorShowsCustomTrack)
+            // 게임이 표시를 다시 채운 뒤 불리는 훅에서 매번 재적용한다.
+            if (LevelSelectorAlbum is not null)
             {
                 ApplyCustomLevelDisplay(instance);
             }
@@ -65,7 +50,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                CustomTrackInfo? info = GetCustomTrackInfo();
+                CustomTrackInfo? info = LevelSelectorAlbum?.Info;
                 if (info is null || info.Levels.Count == 0)
                 {
                     return;
@@ -143,18 +128,13 @@ namespace STARGAZER_custom_chart
             try
             {
                 object? currentTrack = TryGetMemberValue(viewer, viewer.GetType(), "currentTrack");
-                bool isCustom = IsCustomChartTrack(currentTrack);
+                CustomAlbum? album = TryGetAlbumForTrack(currentTrack);
 
                 // 난이도 선택 화면(LevelSelector)은 지금 포커스된 곡으로만 열리므로, 여기서 확정된 판정을
                 // 그대로 재사용한다. LevelSelector.SetTrack은 실제로 호출되지 않아 신뢰할 수 없었다.
-                LevelSelectorShowsCustomTrack = isCustom;
+                LevelSelectorAlbum = album;
 
-                if (!isCustom)
-                {
-                    return;
-                }
-
-                CustomTrackInfo? info = GetCustomTrackInfo();
+                CustomTrackInfo? info = album?.Info;
                 if (info is null || info.Levels.Count == 0)
                 {
                     return;
@@ -229,12 +209,12 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                if (viewer is null || !IsCustomChartPlayActive || CustomChartPlayLevelKey is null)
+                if (viewer is null || CurrentPlayAlbum is null || CustomChartPlayLevelKey is null)
                 {
                     return;
                 }
 
-                CustomTrackInfo? info = GetCustomTrackInfo();
+                CustomTrackInfo? info = CurrentPlayAlbum.Info;
                 if (info is null || !info.Levels.TryGetValue(CustomChartPlayLevelKey, out string? levelValue))
                 {
                     return;
@@ -314,12 +294,7 @@ namespace STARGAZER_custom_chart
                 }
 
                 object? playTrack = TryGetMemberValue(playData, playData.GetType(), "PlayTrack");
-                if (!IsCustomChartTrack(playTrack))
-                {
-                    return;
-                }
-
-                CustomTrackInfo? info = GetCustomTrackInfo();
+                CustomTrackInfo? info = TryGetAlbumForTrack(playTrack)?.Info;
                 if (info is null || info.Levels.Count == 0)
                 {
                     return;

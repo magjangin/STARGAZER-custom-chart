@@ -28,10 +28,11 @@ namespace STARGAZER_custom_chart
             return trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
         }
 
-        // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 집합.
+        // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 -> 그 트랙이 어느 앨범(hwa 하위 폴더)에서 왔는지.
         // 커스텀 트랙은 공식 트랙의 복제본이라 TrackID도, 표시명도(사용자가 info.txt로 바꾸므로)
-        // 식별 기준이 될 수 없다. 우리가 직접 생성한 객체이므로 포인터 동일성이 유일하게 확실한 기준이다.
-        private static readonly HashSet<IntPtr> InjectedCustomTrackPointers = new HashSet<IntPtr>();
+        // 식별 기준이 될 수 없다. 우리가 직접 생성한 객체이므로 포인터 동일성이 유일하게 확실한 기준이고,
+        // 앨범이 여러 개이므로 어느 트랙이 어느 폴더인지도 여기서 같이 관리한다.
+        private static readonly Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums = new Dictionary<IntPtr, CustomAlbum>();
 
         private static IntPtr TryGetIl2CppPointer(object instance)
         {
@@ -44,30 +45,38 @@ namespace STARGAZER_custom_chart
         // 엉뚱한 트랙을 커스텀으로 오인할 수 있다.
         private static void ResetInjectedCustomTracks()
         {
-            InjectedCustomTrackPointers.Clear();
+            InjectedCustomTrackAlbums.Clear();
         }
 
-        private static void RegisterInjectedCustomTrack(object track)
+        private static void RegisterInjectedCustomTrack(object track, CustomAlbum album)
         {
             IntPtr ptr = TryGetIl2CppPointer(track);
             if (ptr == IntPtr.Zero)
             {
-                MelonLogger.Warning("[TrackSelector.Set] 커스텀 트랙 포인터를 얻지 못해 식별 등록에 실패했습니다.");
+                MelonLogger.Warning($"[TrackSelector.Set] 커스텀 트랙 포인터를 얻지 못해 식별 등록에 실패했습니다: {album.Name}");
                 return;
             }
 
-            InjectedCustomTrackPointers.Add(ptr);
+            InjectedCustomTrackAlbums[ptr] = album;
         }
 
-        private static bool IsCustomChartTrack(object? track)
+        private static bool IsCustomChartTrack(object? track) => TryGetAlbumForTrack(track) is not null;
+
+        // 트랙 객체 -> 앨범. 자켓/BGM/차트/난이도 등 모든 커스텀 처리는 이걸로 어느 폴더를 쓸지 정한다.
+        private static CustomAlbum? TryGetAlbumForTrack(object? track)
         {
-            if (track is null || InjectedCustomTrackPointers.Count == 0)
+            if (track is null || InjectedCustomTrackAlbums.Count == 0)
             {
-                return false;
+                return null;
             }
 
             IntPtr ptr = TryGetIl2CppPointer(track);
-            return ptr != IntPtr.Zero && InjectedCustomTrackPointers.Contains(ptr);
+            if (ptr == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            return InjectedCustomTrackAlbums.TryGetValue(ptr, out CustomAlbum? album) ? album : null;
         }
 
         private static bool TryInsertAtStart(object tracks, object item)

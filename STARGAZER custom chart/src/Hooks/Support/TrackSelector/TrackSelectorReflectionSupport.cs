@@ -260,25 +260,6 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static string? FindCustomTrackInfoFile(string hwaPath)
-        {
-            string primary = Path.Combine(hwaPath, "info.txt");
-            if (File.Exists(primary))
-            {
-                return primary;
-            }
-
-            try
-            {
-                return Directory.EnumerateFiles(hwaPath, "*.txt").FirstOrDefault();
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[TrackSelector.Set] hwa 폴더에서 info.txt 탐색 실패: {ex.Message}");
-                return null;
-            }
-        }
-
         private static object? GetTrackMetaDataObject(object concreteTrack)
         {
             BindingFlags searchFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
