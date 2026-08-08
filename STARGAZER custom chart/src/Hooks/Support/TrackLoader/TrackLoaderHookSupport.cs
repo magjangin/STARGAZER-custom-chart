@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -48,6 +49,16 @@ namespace STARGAZER_custom_chart
             {
                 object[] args = __args ?? Array.Empty<object>();
                 if (args.Length == 0 || args[0] is null)
+                {
+                    return;
+                }
+
+                // IL2CPP는 참조 타입 제네릭 메서드의 네이티브 구현을 공유하는 경우가 있어,
+                // Action<List<ITrackData>>.Invoke에 건 패치가 Action<AudioClip>.Invoke 등
+                // 전혀 다른 콜백 호출에도 잘못 걸릴 수 있다(관측됨: LoadPreviewClip 콜백 호출 시
+                // 이 postfix가 같이 발동해 "Loaded 0 tracks successfully"를 잘못 찍는 문제).
+                // 트랙 목록이 아닌 값(Unity 오브젝트나 비-열거형)이면 조용히 무시한다.
+                if (args[0] is UnityEngine.Object || args[0] is not IEnumerable)
                 {
                     return;
                 }

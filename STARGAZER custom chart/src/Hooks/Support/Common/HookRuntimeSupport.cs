@@ -34,7 +34,6 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker",
             // PlaySFX는 HandlePlaySFX (IsInPlayScene 가드 포함)에서만 출력
             "Il2CppStarlike.Sound.SoundPlayer.PlaySFX",
-            "Il2CppStargazer.Starlike.Sound.SoundPlayer.PlaySFX",
         };
         private static readonly object InvocationLogThrottleLock = new object();
         private static readonly Dictionary<string, InvocationLogThrottleEntry> InvocationLogThrottleMap = new Dictionary<string, InvocationLogThrottleEntry>(StringComparer.Ordinal);
@@ -49,7 +48,6 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader._Load_b__5_0",
             "Il2CppStargazer.TrackLoader+INNER_TrackData.LoadBGMClip",
             "Il2CppStargazer.TrackLoader+INNER_TrackData.LoadPreviewClip",
-            "Il2CppStargazer.Starlike.Sound.SoundPlayer.PlayBGM",
             "Il2CppStarlike.Sound.SoundPlayer.PlayBGM",
             "Il2CppStargazer.Play.Widgets.CurrentTrackViewer.Listen",
             "Il2CppStargazer.Travel.Result.PlayInfoViewer.ShowPlayInfo",

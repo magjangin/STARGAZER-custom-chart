@@ -7,6 +7,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <LangVersion>latest</LangVersion>
+    <GamePath Condition="'$(GamePath)' == ''">H:\steam\steamapps\common\Sixtar Gate STARGAZER</GamePath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,4 +44,10 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <Target Name="DeployModToGame" AfterTargets="Build" Condition="Exists('$(GamePath)')">
+    <MakeDir Directories="$(GamePath)\Mods" Condition="!Exists('$(GamePath)\Mods')" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GamePath)\Mods" />
+    <Message Importance="high" Text="[Deploy] Copied $(TargetFileName) to $(GamePath)\Mods" />
+  </Target>
 </Project>

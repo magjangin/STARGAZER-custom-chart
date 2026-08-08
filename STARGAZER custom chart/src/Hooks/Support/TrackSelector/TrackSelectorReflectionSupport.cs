@@ -93,14 +93,15 @@ namespace STARGAZER_custom_chart
             BindingFlags searchFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             Type ct = concreteTrack.GetType();
 
-            FieldInfo? field = ct.GetField("_metaData", searchFlags)
-                               ?? ct.GetField("metaData", searchFlags)
-                               ?? ct.GetField("m_metaData", searchFlags);
-            if (field is not null)
+            // INNER_TrackData._metaData는 auto-property로 선언되어 있어 프로퍼티 조회를 먼저 시도한다.
+            PropertyInfo? property = ct.GetProperty("_metaData", searchFlags)
+                                     ?? ct.GetProperty("metaData", searchFlags)
+                                     ?? ct.GetProperty("MetaData", searchFlags);
+            if (property is not null && property.CanRead)
             {
                 try
                 {
-                    object? metaObj = field.GetValue(concreteTrack);
+                    object? metaObj = property.GetValue(concreteTrack);
                     if (metaObj is not null)
                     {
                         return metaObj;
@@ -111,13 +112,14 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            PropertyInfo? property = ct.GetProperty("metaData", searchFlags)
-                                     ?? ct.GetProperty("MetaData", searchFlags);
-            if (property is not null && property.CanRead)
+            FieldInfo? field = ct.GetField("_metaData", searchFlags)
+                               ?? ct.GetField("metaData", searchFlags)
+                               ?? ct.GetField("m_metaData", searchFlags);
+            if (field is not null)
             {
                 try
                 {
-                    object? metaObj = property.GetValue(concreteTrack);
+                    object? metaObj = field.GetValue(concreteTrack);
                     if (metaObj is not null)
                     {
                         return metaObj;

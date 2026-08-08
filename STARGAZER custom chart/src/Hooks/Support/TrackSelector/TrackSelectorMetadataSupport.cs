@@ -36,35 +36,47 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 내부 metaData 객체에 설정합니다.
-                FieldInfo? metaField = ct.GetField("_metaData", flags)
-                                      ?? ct.GetField("metaData", flags)
-                                      ?? ct.GetField("m_metaData", flags);
-
-                if (metaField is not null)
+                // 내부 metaData 객체에 설정합니다. INNER_TrackData._metaData는 auto-property로 선언되어 있어 프로퍼티 조회를 먼저 시도합니다.
+                object? metaObj = null;
+                PropertyInfo? metaProp = ct.GetProperty("_metaData", flags)
+                                        ?? ct.GetProperty("metaData", flags)
+                                        ?? ct.GetProperty("MetaData", flags);
+                if (metaProp is not null && metaProp.CanRead)
                 {
-                    object? metaObj = metaField.GetValue(track);
-                    if (metaObj is not null)
+                    metaObj = metaProp.GetValue(track);
+                }
+
+                if (metaObj is null)
+                {
+                    FieldInfo? metaField = ct.GetField("_metaData", flags)
+                                          ?? ct.GetField("metaData", flags)
+                                          ?? ct.GetField("m_metaData", flags);
+                    if (metaField is not null)
                     {
-                        Type mt = metaObj.GetType();
-                        PropertyInfo? idProp = mt.GetProperty("trackid", flags)
-                                               ?? mt.GetProperty("trackId", flags)
-                                               ?? mt.GetProperty("TrackID", flags);
-                        if (idProp is not null && idProp.CanWrite)
+                        metaObj = metaField.GetValue(track);
+                    }
+                }
+
+                if (metaObj is not null)
+                {
+                    Type mt = metaObj.GetType();
+                    PropertyInfo? idProp = mt.GetProperty("trackid", flags)
+                                           ?? mt.GetProperty("trackId", flags)
+                                           ?? mt.GetProperty("TrackID", flags);
+                    if (idProp is not null && idProp.CanWrite)
+                    {
+                        idProp.SetValue(metaObj, trackId);
+                        MelonLogger.Msg($"[TrackSelector.Set] trackid 설정 성공: {trackId}");
+                    }
+                    else
+                    {
+                        FieldInfo? idField = mt.GetField("trackid", flags)
+                                             ?? mt.GetField("trackId", flags)
+                                             ?? mt.GetField("TrackID", flags);
+                        if (idField is not null)
                         {
-                            idProp.SetValue(metaObj, trackId);
-                            MelonLogger.Msg($"[TrackSelector.Set] trackid 설정 성공: {trackId}");
-                        }
-                        else
-                        {
-                            FieldInfo? idField = mt.GetField("trackid", flags)
-                                                 ?? mt.GetField("trackId", flags)
-                                                 ?? mt.GetField("TrackID", flags);
-                            if (idField is not null)
-                            {
-                                idField.SetValue(metaObj, trackId);
-                                MelonLogger.Msg($"[TrackSelector.Set] trackid 설정 성공(필드): {trackId}");
-                            }
+                            idField.SetValue(metaObj, trackId);
+                            MelonLogger.Msg($"[TrackSelector.Set] trackid 설정 성공(필드): {trackId}");
                         }
                     }
                 }
@@ -128,24 +140,25 @@ namespace STARGAZER_custom_chart
                         Type ct = concreteTrack.GetType();
                         MelonLogger.Msg($"[TrackSelector.Set.Dump] - Concrete Wrapper Type: {ct.FullName}");
 
-                        // 내부 metaData(INNER_TrackMetaData)를 추출해 덤프합니다.
+                        // 내부 metaData(INNER_TrackMetaData)를 추출해 덤프합니다. _metaData는 auto-property로 선언되어 있어 프로퍼티 조회를 먼저 시도합니다.
                         BindingFlags searchFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                        FieldInfo? f = ct.GetField("_metaData", searchFlags)
-                                      ?? ct.GetField("metaData", searchFlags)
-                                      ?? ct.GetField("m_metaData", searchFlags);
+                        PropertyInfo? p0 = ct.GetProperty("_metaData", searchFlags)
+                                          ?? ct.GetProperty("metaData", searchFlags)
+                                          ?? ct.GetProperty("MetaData", searchFlags);
 
                         object? metaObj = null;
-                        if (f is not null)
+                        if (p0 is not null && p0.CanRead)
                         {
-                            metaObj = f.GetValue(concreteTrack);
+                            metaObj = p0.GetValue(concreteTrack);
                         }
                         else
                         {
-                            PropertyInfo? p = ct.GetProperty("metaData", searchFlags)
-                                               ?? ct.GetProperty("MetaData", searchFlags);
-                            if (p is not null && p.CanRead)
+                            FieldInfo? f = ct.GetField("_metaData", searchFlags)
+                                          ?? ct.GetField("metaData", searchFlags)
+                                          ?? ct.GetField("m_metaData", searchFlags);
+                            if (f is not null)
                             {
-                                metaObj = p.GetValue(concreteTrack);
+                                metaObj = f.GetValue(concreteTrack);
                             }
                         }
 

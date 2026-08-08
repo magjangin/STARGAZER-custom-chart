@@ -142,16 +142,14 @@ namespace STARGAZER_custom_chart
 
 
                 // PlaySFX 오버로드 자동 덤프: PlayBGM이 처음 호출되는 시점에 SoundPlayer 타입에서 PlaySFX 시그니처를 전부 출력
-                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                     || string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal)
                     && LogOnce("SoundPlayer.PlaySFX.overload.dump"))
                 {
                     DumpPlaySFXOverloads(__originalMethod.DeclaringType!);
                 }
 
-                if ((string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Starlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                     || string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal))
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "PlaySFX", StringComparison.Ordinal))
                 {
                     HandlePlaySFX(__originalMethod, args);
