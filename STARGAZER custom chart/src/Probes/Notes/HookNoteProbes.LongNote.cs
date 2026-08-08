@@ -8,6 +8,8 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        // IL2CPP 래퍼 타입의 "빈 인스턴스 생성"을 리플렉션으로 대신하는 범용 헬퍼.
+        // 노트 프로브(이 파일)뿐 아니라 TrackSelectorCloningSupport의 메타데이터 복제에서도 쓰인다.
         private static object? InstantiateIl2CppObject(Type type)
         {
             // 시도 1: ScriptableObject.CreateInstance (스크립터블 오브젝트인 경우)

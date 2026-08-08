@@ -97,6 +97,11 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite"),
+                // 난이도 표시 덮어쓰기용 — SetTrack에서 커스텀 트랙인지 판별한다.
+                // Refresh는 패치하지 않는다: 호출 빈도가 매우 높고, 패치하면 LevelSelector::Refresh에서
+                // NullReferenceException이 계속 발생했다(2026-08-08). 재적용은 FetchTrackRecord/
+                // FetchJacektImage 훅에서 처리한다.
+                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "SetTrack", 1, "ITrackData"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "InitializeSelectLogic", 1, "TravelArgs"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "SingleFlagEvent", 0),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "Build", 0),

@@ -22,6 +22,14 @@ namespace STARGAZER_custom_chart
                     TryPatchTrackLoaderOnLoadedCallback(args);
                 }
 
+                // 난이도 문자열이 패턴 에셋 로딩에 영향을 주는지 추적하기 위한 진단 로그.
+                // LoadPattern 직후 로딩이 멈추는 현상이 난이도 값과만 상관관계를 보였다.
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackData", StringComparison.Ordinal)
+                    && string.Equals(__originalMethod.Name, "LoadPattern", StringComparison.Ordinal))
+                {
+                    LogPatternLoadDiagnostics(__instance, args);
+                }
+
                 // Il2CppStargazer.TrackLoader+INNER_TrackMetaData.GetParser() 호출을 로그로 남깁니다.
                 if (EnableVerboseInvocationLogging
                     && string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackMetaData", StringComparison.Ordinal)
@@ -79,6 +87,8 @@ namespace STARGAZER_custom_chart
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.Widgets.CurrentTrackViewer", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Listen", StringComparison.Ordinal))
                 {
+                    ApplyCustomLevelDisplayToPlayScene(__instance);
+
                     if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
                     {
                         ProbeCurrentTrackViewerImageMembers(__instance, args);
@@ -90,6 +100,8 @@ namespace STARGAZER_custom_chart
                 {
                     IsInPlayScene = false;
                     MelonLogger.Msg("[PlayScene] 결과 화면 진입 — IsInPlayScene=false");
+
+                    HandleResultPlayInfoLevelDisplay(__instance, args);
 
                     if (EnableResultSceneJacketLogging)
                     {
@@ -137,6 +149,18 @@ namespace STARGAZER_custom_chart
                     if (string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
                     {
                         HandleLevelSelectorFetchJacektImage(__instance, args);
+                    }
+
+                    if (string.Equals(__originalMethod.Name, "SetTrack", StringComparison.Ordinal))
+                    {
+                        HandleLevelSelectorSetTrack(__instance, args);
+                    }
+
+                    // Refresh는 패치하면 NRE가 나므로, 게임이 표시를 다시 채운 뒤 불리는 이 두 훅에서 재적용한다.
+                    if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal)
+                        || string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
+                    {
+                        HandleLevelSelectorRefresh(__instance);
                     }
                 }
 

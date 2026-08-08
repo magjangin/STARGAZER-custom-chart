@@ -81,6 +81,9 @@ namespace STARGAZER_custom_chart
             {
                 if (__instance is not null)
                 {
+                    // 게임이 난이도 표시를 채운 뒤에 덮어쓴다(표시 전용 — 메타데이터는 건드리지 않는다).
+                    // 아래 열거 로그가 덮어쓴 결과를 그대로 보여주므로 적용 여부를 로그로 확인할 수 있다.
+                    ApplyCustomLevelDisplayToFocusedViewer(__instance);
                     EnumerateFocusedTrackViewerLevelItems(__instance, __originalMethod.Name);
                 }
             }

@@ -120,6 +120,9 @@ namespace STARGAZER_custom_chart
             return newMeta;
         }
 
+        // 새 IL2CPP 래퍼 인스턴스를 만들고(InstantiateIl2CppObject) writable 필드/프로퍼티를
+        // 복사하는 방식의 수동 복제. 강타입 생성자/복사 생성자를 쓸 수 없어서(어셈블리 미참조)
+        // 리플렉션으로 대신하는 것뿐, 진짜 딥카피가 아니라 "새 래퍼 + 값 복사"임에 유의.
         private static object? CloneIl2CppObject(object source, Type type)
         {
             try

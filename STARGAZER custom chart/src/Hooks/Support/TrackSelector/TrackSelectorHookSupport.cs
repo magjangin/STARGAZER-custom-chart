@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -55,17 +56,18 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 동적 주입 확인
+                // 동적 주입 확인. 공식 startingpoint 트랙도 TrackID가 같으므로 IsStartingPointTrack이 아니라
+                // 우리가 등록해둔 커스텀 트랙 식별(IsCustomChartTrack)로 판정해야 한다.
                 var firstTwo = EnumerateCollectionItems(tracks, 2).ToList();
                 bool alreadyInjected = firstTwo.Count >= 2
-                    && IsStartingPointTrack(firstTwo[0])
-                    && IsStartingPointTrack(firstTwo[1]);
+                    && IsCustomChartTrack(firstTwo[0])
+                    && IsCustomChartTrack(firstTwo[1]);
 
                 if (alreadyInjected)
                 {
                     if (EnableTrackSelectorVerboseLogging)
                     {
-                        MelonLogger.Msg("[TrackSelector.Set] 이미 startingpoint 트랙이 주입되어 있어 추가 주입을 건너뜁니다.");
+                        MelonLogger.Msg("[TrackSelector.Set] 이미 커스텀 트랙이 주입되어 있어 추가 주입을 건너뜁니다.");
                     }
                     return;
                 }
@@ -93,9 +95,24 @@ namespace STARGAZER_custom_chart
 
                 if (track1 is not null && track2 is not null)
                 {
+                    // hwa/info.txt에 곡 제목/아티스트/난이도가 있으면 그걸로 덮어쓴다. 커스텀 트랙 식별은
+                    // 표시명도 TrackID도 아닌 객체 동일성(IsCustomChartTrack)으로 하므로,
+                    // 표시명에는 "테스트 " 같은 내부용 접두를 붙이지 않아도 된다.
+                    string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
+                    string? infoPath = FindCustomTrackInfoFile(hwaPath);
+                    CustomTrackInfo? info = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
+
+                    string displayName = !string.IsNullOrEmpty(info?.Title) ? info!.Title! : "Custom Track";
+                    string composer = !string.IsNullOrEmpty(info?.Artist) ? info!.Artist! : "화영왕";
+
                     Type metadataOverrideTrackType = concreteTrackType ?? track1.GetType();
-                    ApplyStartingPointMetadataOverrides(track1, metadataOverrideTrackType, "테스트 1", "화영왕");
-                    ApplyStartingPointMetadataOverrides(track2, metadataOverrideTrackType, "테스트 2", "화영왕");
+                    ApplyStartingPointMetadataOverrides(track1, metadataOverrideTrackType, displayName, composer, info?.Levels);
+                    ApplyStartingPointMetadataOverrides(track2, metadataOverrideTrackType, displayName, composer, info?.Levels);
+
+                    // BGM/자켓/BMS 주입이 공식 트랙을 건드리지 않도록, 방금 만든 이 두 객체만 커스텀으로 등록한다.
+                    ResetInjectedCustomTracks();
+                    RegisterInjectedCustomTrack(track1);
+                    RegisterInjectedCustomTrack(track2);
                 }
                 else
                 {

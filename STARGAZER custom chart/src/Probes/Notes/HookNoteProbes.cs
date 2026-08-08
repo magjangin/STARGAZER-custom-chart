@@ -50,7 +50,14 @@ namespace STARGAZER_custom_chart
                 }
 
                 bool isPatternLoaderSource = string.Equals(source, "PatternLoader._Load_b__5_0", StringComparison.Ordinal);
-                bool shouldRunWipe = ExperimentChartSettings.EnableKeepEarliestOnlyChart && !NoteWipeTestDone && isPatternLoaderSource;
+                // _Load_b__5_0은 공식곡이든 커스텀곡이든 패턴이 로드될 때마다 호출되므로,
+                // IsCustomChartPlayActive(IsCustomChartTrack/객체 동일성 기준으로 PlayerBase.Play 훅에서
+                // 세팅됨, CustomBgmSupport.cs와 동일)로 커스텀 트랙일 때만 개입하도록 반드시 제한한다.
+                bool isCustomTrackPattern = isPatternLoaderSource && IsCustomChartPlayActive;
+                // BMS 주입은 재시작/재시도마다 새로 로드되는 Pattern에 매번 다시 돌아야 하므로
+                // NoteWipeTestDone(프로세스 생명주기 동안 1회성 가드)에 묶지 않는다.
+                bool shouldRunWipe = (ExperimentChartSettings.EnableKeepEarliestOnlyChart && !NoteWipeTestDone && isCustomTrackPattern)
+                    || (ExperimentChartSettings.EnableBmsChartTest && isCustomTrackPattern);
                 bool shouldProbeLinkHold = !LinkHoldProbeDone && isPatternLoaderSource;
                 bool shouldProbeArea = !AreaProbeDone && isPatternLoaderSource;
                 bool shouldRunAreaCreateTest = ExperimentChartSettings.EnableAreaCreationTest && !AreaCreationTestDone && isPatternLoaderSource;
@@ -194,6 +201,14 @@ namespace STARGAZER_custom_chart
             int wipeTargets = wipeContexts.Count;
             LogNotesBeforeOperation(wipeContexts, "BeforeOperation");
             EarliestNoteChoice? keepChoice = SelectEarliestNote(wipeContexts);
+
+            if (ExperimentChartSettings.EnableBmsChartTest && keepChoice is not null)
+            {
+                TryInjectBmsChart(keepChoice);
+                NoteWipeTestDone = true; // BMS 모드에서는 아래 오프셋 기반 실험 경로가 절대 안 돌게만 막는 용도.
+                LogNotesBeforeOperation(wipeContexts, "AfterOperation(BmsInject)");
+                return;
+            }
 
             if (ExperimentChartSettings.EnableBeatInfoShiftTest && !BeatInfoShiftTestDone && keepChoice is not null)
             {

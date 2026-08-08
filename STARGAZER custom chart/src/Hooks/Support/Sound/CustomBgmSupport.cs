@@ -50,6 +50,9 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
+            // 플레이 화면 난이도 표시에 쓰려고 이 시점에 재생 난이도를 기억해 둔다.
+            CustomChartPlayLevelKey = TryGetMemberValue(travelArgs, travelArgs.GetType(), "PlayLevel")?.ToString();
+
             object? track = TryGetMemberValue(travelArgs, travelArgs.GetType(), "PlayTrack");
             if (track is null)
             {
@@ -60,7 +63,9 @@ namespace STARGAZER_custom_chart
             string title = TryGetMemberValue(track, track.GetType(), "TrackDisplayName")?.ToString()
                 ?? TryGetMemberValue(track, track.GetType(), "TrackDisplayNameEN")?.ToString()
                 ?? string.Empty;
-            IsCustomChartPlayActive = title.StartsWith("테스트 ", StringComparison.Ordinal);
+            // 표시명은 사용자가 바꿀 수 있고, TrackID는 복제 원본인 공식 트랙과 동일하다.
+            // 우리가 주입한 객체인지(객체 동일성)로만 확실하게 판별할 수 있다.
+            IsCustomChartPlayActive = IsCustomChartTrack(track);
             MelonLogger.Msg($"[BgmDebug] play state custom={IsCustomChartPlayActive} title={title}");
         }
 
@@ -297,7 +302,8 @@ namespace STARGAZER_custom_chart
                         ?? TryGetMemberValue(__instance, t, "TrackDisplayNameEN")?.ToString()
                         ?? string.Empty;
 
-                    if (displayName.StartsWith("테스트 ", StringComparison.Ordinal))
+                    // 공식 트랙을 건드리지 않도록 우리가 주입한 객체인지로 판별한다(TrackID는 원본과 동일해 못 씀).
+                    if (IsCustomChartTrack(__instance))
                     {
                         string hwaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
                         string bgmFile = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)

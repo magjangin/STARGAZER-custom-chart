@@ -9,6 +9,9 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        // 복제 원본(공식 "Starting Point")을 찾는 용도로만 쓴다.
+        // 주의: 우리가 주입한 커스텀 트랙도 이 원본의 복제본이라 TrackID가 똑같으므로,
+        // 이 함수로는 커스텀 트랙과 공식 트랙을 구분할 수 없다 — 구분에는 IsCustomChartTrack을 써야 한다.
         private static bool IsStartingPointTrack(object? track)
         {
             if (track is null)
@@ -23,6 +26,48 @@ namespace STARGAZER_custom_chart
             if (trackId is null) return false;
 
             return trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 집합.
+        // 커스텀 트랙은 공식 트랙의 복제본이라 TrackID도, 표시명도(사용자가 info.txt로 바꾸므로)
+        // 식별 기준이 될 수 없다. 우리가 직접 생성한 객체이므로 포인터 동일성이 유일하게 확실한 기준이다.
+        private static readonly HashSet<IntPtr> InjectedCustomTrackPointers = new HashSet<IntPtr>();
+
+        private static IntPtr TryGetIl2CppPointer(object instance)
+        {
+            object? pointer = TryGetMemberValue(instance, instance.GetType(), "Pointer")
+                ?? TryGetMemberValue(instance, instance.GetType(), "m_CachedPtr");
+            return pointer is IntPtr ptr ? ptr : IntPtr.Zero;
+        }
+
+        // 새로 주입할 때마다 이전 목록을 버린다. 오래된 포인터를 남겨두면 해제된 주소가 재사용될 때
+        // 엉뚱한 트랙을 커스텀으로 오인할 수 있다.
+        private static void ResetInjectedCustomTracks()
+        {
+            InjectedCustomTrackPointers.Clear();
+        }
+
+        private static void RegisterInjectedCustomTrack(object track)
+        {
+            IntPtr ptr = TryGetIl2CppPointer(track);
+            if (ptr == IntPtr.Zero)
+            {
+                MelonLogger.Warning("[TrackSelector.Set] 커스텀 트랙 포인터를 얻지 못해 식별 등록에 실패했습니다.");
+                return;
+            }
+
+            InjectedCustomTrackPointers.Add(ptr);
+        }
+
+        private static bool IsCustomChartTrack(object? track)
+        {
+            if (track is null || InjectedCustomTrackPointers.Count == 0)
+            {
+                return false;
+            }
+
+            IntPtr ptr = TryGetIl2CppPointer(track);
+            return ptr != IntPtr.Zero && InjectedCustomTrackPointers.Contains(ptr);
         }
 
         private static bool TryInsertAtStart(object tracks, object item)
