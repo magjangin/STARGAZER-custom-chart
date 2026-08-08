@@ -104,7 +104,13 @@ namespace STARGAZER_custom_chart
                 }
 
                 int areasCreated = 0, notesCreated = 0, notesSkippedChannel = 0;
+                int holdStarts = 0, holdEnds = 0;
                 var skippedChannels = new HashSet<int>();
+
+                string soundKinds = chart.SoundKinds.Count == 0
+                    ? "<none>"
+                    : string.Join(", ", chart.SoundKinds.Select(kvp => $"{kvp.Key}={kvp.Value}"));
+                MelonLogger.Msg($"[BmsInject] 사운드 ID 분류: {soundKinds}");
 
                 foreach (BmsMeasure measure in chart.Measures)
                 {
@@ -154,23 +160,44 @@ namespace STARGAZER_custom_chart
                             continue;
                         }
 
-                        TryApplyNotePropertyLinkedState(templateNote, newNote, "None");
+                        // 롱노트는 시작/끝 노트에 각각 StartPoint/EndPoint를 걸어 한 쌍으로 만든다.
+                        // 홀드가 마디를 넘어가면 시작과 끝이 서로 다른 Area에 들어가는데,
+                        // 게임 원본 차트도 인접 Area에 짝이 나뉘어 있어 같은 방식으로 둔다.
+                        string linkedState = ResolveLinkedState(noteEvent.Kind);
+                        TryApplyNotePropertyLinkedState(templateNote, newNote, linkedState);
 
                         if (TryAddToNotesCollection(notesValue, newNote))
                         {
                             notesCreated++;
+                            if (noteEvent.Kind == BmsNoteKind.HoldStart) holdStarts++;
+                            else if (noteEvent.Kind == BmsNoteKind.HoldEnd) holdEnds++;
                         }
                     }
                 }
 
                 string skippedChannelsText = skippedChannels.Count == 0 ? "<none>" : string.Join(",", skippedChannels.OrderBy(c => c));
-                MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} bpm={chart.Bpm} areasCreated={areasCreated} notesCreated={notesCreated} skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
+                MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} bpm={chart.Bpm} areasCreated={areasCreated} "
+                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝) skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
+
+                if (holdStarts != holdEnds)
+                {
+                    MelonLogger.Warning($"[BmsInject] 롱노트 시작/끝 개수가 맞지 않습니다: 시작={holdStarts} 끝={holdEnds}");
+                }
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[BmsInject] 실패: {ex.GetType().Name} {ex.Message}");
             }
         }
+
+        // BMS 노트 종류 -> 게임의 NoteProperty.linked 열거값 이름.
+        // 값은 실측으로 확인된 것들이다(LinkProbe 로그: None / StartPoint / EndPoint).
+        private static string ResolveLinkedState(BmsNoteKind kind) => kind switch
+        {
+            BmsNoteKind.HoldStart => "StartPoint",
+            BmsNoteKind.HoldEnd => "EndPoint",
+            _ => "None",
+        };
 
         // Layer.Lanes를 순서대로 훑어 UID 문자열을 뽑는다. 곡마다 실제 UID 값이 달라질 수 있어
         // "L0/L1..." 같은 이름을 하드코딩하지 않고 항상 런타임에 조회한다.
