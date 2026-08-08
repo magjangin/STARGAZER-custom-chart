@@ -12,6 +12,10 @@
 # Log files
 *.log
 
+# 게임 어셈블리 디컴파일 결과 (참조용, scripts/decompile.ps1로 재생성)
+decompiled/*
+!decompiled/README.md
+
 # OS generated files
 .DS_Store
 Thumbs.db

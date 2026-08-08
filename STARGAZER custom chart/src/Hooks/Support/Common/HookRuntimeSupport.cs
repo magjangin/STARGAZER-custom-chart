@@ -55,7 +55,8 @@ namespace STARGAZER_custom_chart
         };
         private const int InvocationLogWindowMs = 1000;
         private const int InvocationLogMaxPerWindow = 3;
-        private const bool EnableForceAutoPlayAtPlayerBasePlay = true;
+        // savecustomkey/config.txt의 autoplay 값으로 제어한다. 파일이 없으면 기본 true(기존 동작).
+        private static bool EnableForceAutoPlayAtPlayerBasePlay => CustomConfig.AutoPlay;
         private static bool PlayerBaseJacketLogged;
         private static bool TrackLoaderListLogged;
         private static bool IsInPlayScene;

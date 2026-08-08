@@ -12,17 +12,19 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        private static void LogBgmDebugFileInfo(string hwaPath)
+        private static void LogBgmDebugFileInfo()
         {
-            string path = Path.Combine(hwaPath, "music.ogg");
-            if (!File.Exists(path))
+            foreach (CustomAlbum album in CustomAlbumRegistry.GetAlbums())
             {
-                MelonLogger.Warning($"[BgmDebug] custom file missing path={path}");
-                return;
-            }
+                if (album.MusicPath is null || !File.Exists(album.MusicPath))
+                {
+                    MelonLogger.Warning($"[BgmDebug] 음원 없음: {album.Name}");
+                    continue;
+                }
 
-            var file = new FileInfo(path);
-            MelonLogger.Msg($"[BgmDebug] custom file present path={file.FullName} bytes={file.Length} modified={file.LastWriteTime:O}");
+                var file = new FileInfo(album.MusicPath);
+                MelonLogger.Msg($"[BgmDebug] 음원 확인({album.Name}): {file.Name} bytes={file.Length} modified={file.LastWriteTime:O}");
+            }
         }
 
         private static readonly Dictionary<string, AudioClip> CustomBgmClipCache = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
@@ -30,14 +32,21 @@ namespace STARGAZER_custom_chart
         private static readonly HashSet<string> CustomBgmLoadsInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, List<object>> PendingCustomBgmCallbacks = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
 
-        private static void StartCustomBgmPreload(string hwaPath)
+        // 앨범마다 음원/프리뷰를 미리 디코딩해 둔다. 곡 선택에서 커서를 옮기는 즉시 프리뷰가
+        // 나와야 하는데, 그때 로드를 시작하면 한 박자 늦기 때문이다.
+        private static void StartCustomBgmPreload()
         {
-            StartCustomAudioClipLoad(Path.Combine(hwaPath, "music.ogg"));
-
-            string previewPath = Path.Combine(hwaPath, "music_preview.ogg");
-            if (File.Exists(previewPath))
+            foreach (CustomAlbum album in CustomAlbumRegistry.GetAlbums())
             {
-                StartCustomAudioClipLoad(previewPath);
+                if (album.MusicPath is not null)
+                {
+                    StartCustomAudioClipLoad(album.MusicPath);
+                }
+
+                if (album.PreviewPath is not null && !string.Equals(album.PreviewPath, album.MusicPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    StartCustomAudioClipLoad(album.PreviewPath);
+                }
             }
         }
 

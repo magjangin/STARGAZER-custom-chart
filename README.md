@@ -64,10 +64,15 @@ STARGAZER custom chart/
 
 ---
 
-## 📝 개발 이력 및 로드맵 (Docs)
-상세한 개발 일지와 리서치 기록은 [docs/](file:///h:/source/repos/STARGAZER%20custom%20chart/docs/) 디렉토리 내 문서를 참조하세요:
-* [안정화 및 후킹 운영 기준 일지](file:///h:/source/repos/STARGAZER%20custom%20chart/docs/WORKLOG_01_STABILITY_AND_HOOKS_2026-05-09.md)
-* [노트/런타임 운용 분석 일지](file:///h:/source/repos/STARGAZER%20custom%20chart/docs/WORKLOG_02_NOTE_RUNTIME_FINDINGS_2026-05-09.md)
+## 📝 문서 (Docs)
+
+문서 전체 목록과 분류 기준은 **[docs/README.md](docs/README.md)** 를 보세요.
+
+자주 찾는 문서:
+* [커스텀 곡 만들기 가이드](docs/GUIDE_CUSTOM_ALBUM.md) — `hwa` 폴더 구성, `info.txt`, `config.txt`
+* [BMS 변환 규칙](docs/REFERENCE_BMS_CONVERSION.md) — 채널·레인 매핑, 분수 매핑, 롱노트
+* [커스텀 트랙 파이프라인](docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md) — 어느 훅이 무엇을 하는지
+* [최신 작업 일지 (2026-08-08)](docs/WORKLOG_04_CUSTOM_TRACK_PIPELINE_2026-08-08.md)
 
 ---
 *Created by [magjangin](https://github.com/magjangin)*
