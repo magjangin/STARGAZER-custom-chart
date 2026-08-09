@@ -109,6 +109,73 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 `PlayerBase.Play` Prefix에서 `IsAutoPlay`를 설정합니다.
 켜고 끄는 값은 `savecustomkey/config.txt`의 `autoplay`에서 읽습니다(게임 시작 시 1회).
 
+## 노트 연출 (흔들림 / 속도 카오스)
+
+`savecustomkey/config.txt`의 `NoteSway`, `NoteSpeedChaos`로 켜는 순수 시각 효과입니다.
+설정 항목은 [GUIDE_CUSTOM_ALBUM.md](GUIDE_CUSTOM_ALBUM.md#노트-연출)를 보세요.
+
+구현: [`src/Hooks/Support/Play/NoteMotionSupport.cs`](../STARGAZER%20custom%20chart/src/Hooks/Support/Play/NoteMotionSupport.cs),
+[`src/Hooks/Patches/Play/NoteMotionPatches.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/Play/NoteMotionPatches.cs)
+
+### 왜 판정에 영향이 없나
+
+판정은 `JudgementUnit.Judge(NoteObjectBase)`가 노트의 `Timing`(= `PrimitiveNote.Timing`, 차트 데이터)과
+재생 시각을 `AcceptableTiming`으로 비교해 냅니다. 노트 오브젝트의 `RectTransform`은 이 경로에 들어가지 않습니다.
+그래서 **RectTransform만 옮기는 한** 판정·점수·기록은 그대로입니다.
+
+게임의 속도 관련 필드(`NoteObjectBase.speedMultipleir`, `StargazerNote.MoveSpeed`)는 **건드리지 않습니다.**
+그 값들이 렌더링에만 쓰이는지 타이밍에도 쓰이는지 확인할 방법이 없어서(인터롭에 본문 없음),
+속도 카오스도 "위치를 배율만큼 스케일"하는 방식으로 구현했습니다.
+
+### 훅 지점
+
+| 대상 | 시점 | 하는 일 |
+| --- | --- | --- |
+| `StargazerNote.Behaviour(Single)` | Prefix | 지난 프레임에 우리가 얹은 오프셋을 되돌려 게임에 원래 위치를 돌려준다 |
+| `StargazerLongNote.Behaviour(Single)` | Postfix | 게임이 계산한 위치를 기준으로 오프셋을 다시 얹는다 |
+
+- 인자 `deltatime`은 **판정선까지 남은 초**입니다(`NoteObjectBase.OnUpdate`가 `Timing - 현재시각`을 넘김).
+  판정선을 지나면 음수가 됩니다. 흔들림 감쇠가 이 값을 씁니다.
+- Prefix/Postfix 쌍으로 처리하는 이유는, 게임이 위치를 절대값으로 쓰든 이전 값에 누적하든
+  **오프셋이 쌓이지 않게** 하기 위함입니다.
+- 롱노트는 `Behaviour`를 따로 override하므로 두 타입 모두 후킹합니다.
+  override가 `base.Behaviour`를 부르면 한 프레임에 두 번 들어오는데, 노트별 프레임 가드가 두 번째를 걸러 냅니다.
+- **이 훅은 매 프레임 노트마다 불립니다.** 공용 `HookPrefix`/`HookPostfix`(로깅 포함)를 쓰면 안 됩니다.
+  설정이 전부 꺼져 있으면 `Prepare()`가 `false`를 돌려줘 아예 패치되지 않습니다.
+
+> `TargetMethods()`가 **빈 목록**을 돌려주면 Harmony가 어트리뷰트에서 대상을 찾으려다
+> `"Undefined target method"`로 던집니다. 조건부 패치는 반드시 `Prepare()`로 막아야 합니다.
+
+### 속도 카오스 — 진행 방향은 직접 잰다
+
+**`StargazerNote.posRef`는 판정선 기준점이 아닙니다.** 이름만 보고 "노트가 판정선에 놓였을 때의 위치"로
+가정했다가 틀렸습니다. 2026-08-09 실측에서 노트의 현재 위치와 **값이 완전히 같았습니다.**
+
+```
+[NoteMotion] 첫 노트: pos=(0,1435.7) posRef=(0,1435.7) deltatime=2.991s
+```
+
+그래서 기준점을 추측하지 않고, 노트가 실제로 움직이는 것을 두 프레임 재서 씁니다.
+
+```
+v      = Δ위치 / Δdeltatime          (deltatime = 판정선까지 남은 시간)
+P(t)   = 판정선 + v·t
+P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
+```
+
+판정선 위치를 몰라도 **오프셋만으로** 계산됩니다. `t`가 0으로 갈수록 오프셋도 0이라
+배율이 얼마든 판정선에는 정확히 제때 도착합니다 — 보이는 속도만 달라집니다.
+
+흔들림 축도 이 속도에서 정합니다(`|v.y| >= |v.x|`이면 X축으로 흔듦). 진행 축과 직각으로 흔들어야
+"옆으로 흔들린다"가 되기 때문입니다.
+
+측정에는 두 프레임이 필요하므로, 노트가 생긴 첫 프레임에는 아직 속도를 모릅니다.
+그대로 두면 두 번째 프레임에 오프셋이 한꺼번에 붙어 노트가 튀므로, **레인 단위로 속도를 공유**해
+같은 레인의 다른 노트가 이미 잰 값을 새 노트가 첫 프레임부터 씁니다.
+(레인 키는 노트 부모 Transform의 `InstanceID`.)
+
+곡마다 한 번 `[NoteMotion] 진행 방향 측정: ...` 로그로 실제 측정값을 남깁니다.
+
 ## 차트 주입
 
 `INNER_PatternLoader._Load_b__5_0(Pattern)` Postfix에서 `Layer.Areas`를 통째로 교체합니다.

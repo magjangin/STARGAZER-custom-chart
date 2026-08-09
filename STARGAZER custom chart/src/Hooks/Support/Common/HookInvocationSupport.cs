@@ -43,6 +43,7 @@ namespace STARGAZER_custom_chart
                 {
                     IsInPlayScene = true;
                     UpdateCustomChartPlayState(args.Length > 0 ? args[0] : null);
+                    ResetNoteMotionState();
                     MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
 
                     if (EnableForceAutoPlayAtPlayerBasePlay)
