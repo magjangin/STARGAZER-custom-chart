@@ -155,16 +155,20 @@ namespace STARGAZER_custom_chart
             return candidates.FirstOrDefault(method => method.GetParameters().Length == spec.ParameterCount);
         }
 
-        private static MethodBase ResolveRequiredTargetMethod(PatchSpec spec)
+        // 대상을 못 찾아도 예외를 던지지 않는다 — 단일 훅 하나가 throw하면 Harmony PatchAll이
+        // 그 자리에서 멈춰 나머지 훅까지 전부 안 걸린다(모드 전체 미기동). 나머지 훅들처럼
+        // 경고만 남기고 건너뛴다.
+        private static IEnumerable<MethodBase> ResolveOptionalTargetMethods(PatchSpec spec)
         {
             MethodInfo? target = ResolveTargetMethod(spec);
             if (target is null)
             {
-                throw new MissingMethodException($"Harmony target not found: {spec.TypeName}.{spec.MethodName}");
+                MelonLogger.Warning($"[HookPatch][attr] target not found: {spec.TypeName}.{spec.MethodName}");
+                yield break;
             }
 
             MelonLogger.Msg($"[HookPatch][attr] target: {target.DeclaringType?.FullName}.{target.Name}");
-            return target;
+            yield return target;
         }
 
         private static string BuildMethodPatchKey(MethodInfo method)

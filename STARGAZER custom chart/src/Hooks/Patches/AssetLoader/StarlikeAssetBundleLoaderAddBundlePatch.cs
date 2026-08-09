@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using MelonLoader;
@@ -10,7 +11,7 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class StarlikeAssetBundleLoaderAddBundlePatch
         {
-            private static MethodBase TargetMethod() => ResolveRequiredTargetMethod(new PatchSpec("Il2CppStarlike.AssetLoader.StarlikeAssetBundleLoader", "AddBundle", 2, "String", "AssetBundle"));
+            private static IEnumerable<MethodBase> TargetMethods() => ResolveOptionalTargetMethods(new PatchSpec("Il2CppStarlike.AssetLoader.StarlikeAssetBundleLoader", "AddBundle", 2, "String", "AssetBundle"));
 
             private static void Prefix(MethodBase __originalMethod, object? __instance, object[]? __args)
             {

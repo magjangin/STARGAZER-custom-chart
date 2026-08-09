@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using MelonLoader;
@@ -14,7 +15,7 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class TrackRecordSaveGuardPatch
         {
-            private static MethodBase TargetMethod() => ResolveRequiredTargetMethod(
+            private static IEnumerable<MethodBase> TargetMethods() => ResolveOptionalTargetMethods(
                 new PatchSpec("Il2CppStargazer.UserDataLoader+INNER_TrackRecordModule", "SaveTrackRecord", 1, "ITravelResultData"));
 
             // false를 반환하면 원본 저장 로직을 건너뛴다. 판정이 애매하면(예외 등) 항상 true로
