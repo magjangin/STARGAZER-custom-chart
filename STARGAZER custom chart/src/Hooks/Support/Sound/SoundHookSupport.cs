@@ -109,11 +109,17 @@ namespace STARGAZER_custom_chart
                     overloadLabel = $"[?] paramCount={paramCount}";
                 }
 
-                MelonLogger.Msg(
-                    $"[SoundPlayer][PlaySFX] overload={overloadLabel}" +
-                    $" clip={clipInfo} type={typeInfo}" +
-                    (startTime != "-" ? $" startTime={startTime}" : "") +
-                    (volume    != "-" ? $" volume={volume}"        : ""));
+                // 어느 오버로드가 실제로 쓰이는지 알아보려는 진단이라 한 번만 찍으면 충분하다.
+                // 매번 찍으면 곡 하나에 2천 줄이 쌓인다(2026-08-09 실측: 4074줄 중 1995줄).
+                if (LogOnce($"SoundPlayer.PlaySFX.overload.{overloadLabel}"))
+                {
+                    MelonLogger.Msg(
+                        $"[SoundPlayer][PlaySFX] overload={overloadLabel}" +
+                        $" clip={clipInfo} type={typeInfo}" +
+                        (startTime != "-" ? $" startTime={startTime}" : "") +
+                        (volume    != "-" ? $" volume={volume}"        : "") +
+                        " (이 오버로드는 처음 1회만 기록합니다)");
+                }
             }
             catch (Exception ex)
             {

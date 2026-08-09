@@ -53,7 +53,12 @@ namespace STARGAZER_custom_chart
                     try
                     {
                         object area = ctor.Invoke(new[] { owningLayer });
-                        MelonLogger.Msg("[AreaCreateTest] Area(Layer) 생성자로 Area를 성공적으로 생성했습니다.");
+                        // 마디마다 불리므로 한 번만 남긴다(2026-08-09 실측: 곡 하나에 73줄).
+                        if (LogOnce("AreaCreateTest.AreaLayerCtor"))
+                        {
+                            MelonLogger.Msg("[AreaCreateTest] Area(Layer) 생성자로 Area를 성공적으로 생성했습니다. (처음 1회만 기록)");
+                        }
+
                         return area;
                     }
                     catch (Exception ex)

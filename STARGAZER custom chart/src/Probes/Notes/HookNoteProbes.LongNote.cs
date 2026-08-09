@@ -8,6 +8,17 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        // 어느 생성 전략이 그 타입에 통했는지만 알면 되는 진단이라 (타입, 전략) 조합마다 한 번만 남긴다.
+        // 노트마다 찍으면 곡 하나에 천 줄이 쌓인다(2026-08-09 실측: 4074줄 중 1105줄).
+        // 실패 로그는 그대로 매번 남긴다 — 드물게 나고, 날 때마다 봐야 한다.
+        private static void LogInstantiateStrategyOnce(Type type, string strategy)
+        {
+            if (LogOnce($"Instantiate.{type.FullName}.{strategy}"))
+            {
+                MelonLogger.Msg($"[Instantiate] Created {type.Name} using {strategy} (이 조합은 처음 1회만 기록합니다)");
+            }
+        }
+
         // IL2CPP 래퍼 타입의 "빈 인스턴스 생성"을 리플렉션으로 대신하는 범용 헬퍼.
         // 노트 프로브(이 파일)뿐 아니라 TrackSelectorCloningSupport의 메타데이터 복제에서도 쓰인다.
         private static object? InstantiateIl2CppObject(Type type)
@@ -28,7 +39,7 @@ namespace STARGAZER_custom_chart
                         object? obj = createInstanceMethod.Invoke(null, new object[] { type });
                         if (obj != null)
                         {
-                            MelonLogger.Msg($"[Instantiate] Created {type.Name} using ScriptableObject.CreateInstance");
+                            LogInstantiateStrategyOnce(type, "ScriptableObject.CreateInstance");
                             return obj;
                         }
                     }
@@ -46,7 +57,7 @@ namespace STARGAZER_custom_chart
                 if (paramCtor != null)
                 {
                     object obj = paramCtor.Invoke(null);
-                    MelonLogger.Msg($"[Instantiate] Created {type.Name} using empty constructor");
+                    LogInstantiateStrategyOnce(type, "empty constructor");
                     return obj;
                 }
             }
@@ -61,7 +72,7 @@ namespace STARGAZER_custom_chart
                 object? obj = Activator.CreateInstance(type);
                 if (obj is not null)
                 {
-                    MelonLogger.Msg($"[Instantiate] Created {type.Name} using Activator.CreateInstance");
+                    LogInstantiateStrategyOnce(type, "Activator.CreateInstance");
                     return obj;
                 }
             }
@@ -293,7 +304,22 @@ namespace STARGAZER_custom_chart
 
             bool linked = TrySetLinkedState(property2, linkedState);
             bool written = TrySetValueByNameCandidates(targetNote, new[] { "property" }, property2);
-            MelonLogger.Msg($"[ExperimentChart] property linked={linkedState} linkedSet={linked} written={written}");
+
+            // 노트마다 같은 줄이 반복된다(2026-08-09 실측: 4074줄 중 552줄).
+            // 결과 조합(linked/written)이 처음 나올 때만 남기면 실패도 놓치지 않는다.
+            if (LogOnce($"ExperimentChart.property.{linkedState}.{linked}.{written}"))
+            {
+                string line = $"[ExperimentChart] property linked={linkedState} linkedSet={linked} written={written} (이 결과는 처음 1회만 기록합니다)";
+                if (linked && written)
+                {
+                    MelonLogger.Msg(line);
+                }
+                else
+                {
+                    MelonLogger.Warning(line);
+                }
+            }
+
             return linked && written;
         }
 
@@ -353,7 +379,10 @@ namespace STARGAZER_custom_chart
                     try
                     {
                         newNote = noteCtor3.Invoke(new[] { owner, laneUid, beatInfo2 });
-                        MelonLogger.Msg("[ExperimentChart] Note(Area, string, BeatInfo) 생성자로 노트를 성공적으로 생성했습니다.");
+                        if (LogOnce("ExperimentChart.noteCtor.Area_string_BeatInfo"))
+                        {
+                            MelonLogger.Msg("[ExperimentChart] Note(Area, string, BeatInfo) 생성자로 노트를 성공적으로 생성했습니다. (처음 1회만 기록)");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -383,7 +412,10 @@ namespace STARGAZER_custom_chart
                         try
                         {
                             newNote = noteCtor4.Invoke(new[] { owner, laneUid, newSplit, newIndex });
-                            MelonLogger.Msg("[ExperimentChart] Note(Area, string, int, int) 생성자로 노트를 성공적으로 생성했습니다.");
+                            if (LogOnce("ExperimentChart.noteCtor.Area_string_int_int"))
+                            {
+                                MelonLogger.Msg("[ExperimentChart] Note(Area, string, int, int) 생성자로 노트를 성공적으로 생성했습니다. (처음 1회만 기록)");
+                            }
                         }
                         catch (Exception ex)
                         {
