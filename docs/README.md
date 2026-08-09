@@ -21,6 +21,7 @@
 
 - [REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md) — BMS 파일을 게임 차트로 바꾸는 규칙(채널·레인 매핑, 분수 매핑, 롱노트, 확장 사운드 ID)
 - [REFERENCE_CUSTOM_TRACK_PIPELINE.md](REFERENCE_CUSTOM_TRACK_PIPELINE.md) — 커스텀 트랙이 목록에 뜨고 재생되기까지 어떤 훅이 무엇을 하는지
+- [REFERENCE_DECOMPILED.md](REFERENCE_DECOMPILED.md) — `decompiled/` 폴더가 무엇인지, 무엇이 정확하고 무엇이 없는지, 재생성 방법
 - [TRACK_METADATA_REFERENCE.md](TRACK_METADATA_REFERENCE.md) — 트랙 메타데이터 구조
 - [CAST_AND_WRAPPER_CODE_REFERENCE.md](CAST_AND_WRAPPER_CODE_REFERENCE.md) — IL2CPP 캐스트/래퍼 코드가 왜 필요한지
 - [NATIVE_HOOKS_CLARIFICATION.md](NATIVE_HOOKS_CLARIFICATION.md) — 이 저장소는 네이티브 훅을 쓰지 않는다는 설명
@@ -36,5 +37,6 @@
 
 ## 참고: 디컴파일 자료
 
-게임 어셈블리의 타입/멤버 시그니처는 저장소 루트의 [`decompiled/`](../decompiled/README.md)에 있습니다.
+게임 어셈블리의 타입/멤버 시그니처는 저장소 루트의 `decompiled/`에 있습니다(폴더 전체가 git에 올라가지 않으며,
+[scripts/decompile.ps1](../scripts/decompile.ps1)로 재생성합니다). 자세한 내용은 [REFERENCE_DECOMPILED.md](REFERENCE_DECOMPILED.md)를 보세요.
 메서드 본문은 없으므로 "이 메서드가 내부에서 뭘 하는가"는 런타임 프로브나 로그로 확인해야 합니다.
