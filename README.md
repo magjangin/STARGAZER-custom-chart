@@ -1,6 +1,9 @@
 # 🌟 STARGAZER Custom Chart (식스타게이저 커스텀 차트 모드)
 
-> **식스타게이트 스타트레일 (Sixtar Gate: STARTRAIL)** 을 위한 MelonLoader 기반 런타임 후킹 및 커스텀 차트 지원 모드입니다.
+> **식스타 게이트: 스타게이저 (Sixtar Gate: STARGAZER)** 를 위한 MelonLoader 기반 런타임 후킹 및 커스텀 차트 지원 모드입니다.
+>
+> 이 게임은 커스텀 채보를 **공식적으로 지원하지 않습니다.** 에디터도, Steam 창작마당도 없습니다.
+> 그래서 이 모드는 공식 트랙을 복제하고 런타임에 채보를 갈아끼우는 방식으로 동작합니다.
 
 ⚠️ **중요 안내**: 본 프로젝트는 현재 **활발하게 개발 및 실험 중(Work In Progress)**인 프로젝트입니다. 실구현 상태나 게임 패치에 따라 로직이 지속적으로 업데이트 및 변경될 수 있습니다.
 
@@ -56,7 +59,7 @@ STARGAZER custom chart/
 
 * **언어 및 프레임워크**: C# / .NET 6.0
 * **모딩 툴**: MelonLoader, HarmonyLib
-* **타겟 플랫폼**: PC Steam (Sixtar Gate: STARTRAIL, IL2CPP/Mono)
+* **타겟 플랫폼**: PC Steam (Sixtar Gate: STARGAZER, IL2CPP)
 
 ### 💻 빌드 및 배포 방법
 1. Visual Studio를 통해 `STARGAZER custom chart.slnx` 솔루션을 엽니다.
@@ -75,4 +78,16 @@ STARGAZER custom chart/
 * [최신 작업 일지 (2026-08-08)](docs/WORKLOG_04_CUSTOM_TRACK_PIPELINE_2026-08-08.md)
 
 ---
-*Created by [magjangin](https://github.com/magjangin)*
+
+## 👥 개발자 및 기여자 (Credits)
+
+| 이름 | 역할 |
+| --- | --- |
+| **화영왕** ([@magjangin](https://github.com/magjangin)) | 기획 · 개발 · 실기 검증 |
+| **Claude** (Anthropic) | 코드 작성 및 게임 내부 분석 보조 |
+| **Antigravity** (Google) | 코드 작성 및 게임 내부 분석 보조 |
+
+게임 어셈블리 분석에는 [ILSpy](https://github.com/icsharpcode/ILSpy)를, 런타임 후킹에는
+[MelonLoader](https://github.com/LavaGang/MelonLoader)와 [HarmonyLib](https://github.com/pardeike/Harmony)을 사용합니다.
+
+이 모드는 게임 파일이나 음원을 일절 재배포하지 않습니다. 커스텀 곡의 차트·음원·자켓은 사용자가 직접 준비합니다.
