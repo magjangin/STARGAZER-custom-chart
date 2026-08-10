@@ -176,8 +176,9 @@ namespace STARGAZER_custom_chart
                 }
 
                 string skippedChannelsText = skippedChannels.Count == 0 ? "<none>" : string.Join(",", skippedChannels.OrderBy(c => c));
+                string noiseText = chart.SuppressedNoiseCount > 0 ? $" suppressedNoise={chart.SuppressedNoiseCount}" : string.Empty;
                 MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} bpm={chart.Bpm} areasCreated={areasCreated} "
-                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝) skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
+                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝){noiseText} skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
 
                 if (holdStarts != holdEnds)
                 {
@@ -298,6 +299,13 @@ namespace STARGAZER_custom_chart
             TrySetValueByNameCandidates(newNote, new[] { "owner" }, area);
             TrySetValueByNameCandidates(newNote, new[] { "beatinfo" }, beatInfo);
             return true;
+        }
+
+        private static int Gcd(int a, int b)
+        {
+            if (a == 0) return Math.Max(b, 1);
+            while (b != 0) { (a, b) = (b, a % b); }
+            return Math.Max(a, 1);
         }
     }
 }

@@ -53,6 +53,7 @@ namespace STARGAZER_custom_chart
         private static readonly HashSet<string> IgnoredChannels = new HashSet<string> { "01", "02", "03", "08", "09" };
 
         public double Bpm { get; private set; } = 120;
+        public int SuppressedNoiseCount { get; private set; }
         public List<BmsMeasure> Measures { get; } = new List<BmsMeasure>();
 
         // 사운드 ID -> 노트 종류. 로그로 매핑 결과를 확인할 수 있게 공개해 둔다.
@@ -118,10 +119,16 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (line.StartsWith("#BPM ", StringComparison.OrdinalIgnoreCase))
+                if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length > 4)
                 {
-                    string value = line.Substring(5).Trim();
-                    if (double.TryParse(value, out double parsedBpm))
+                    string valueStr = line.Substring(4).Trim();
+                    int spaceIdx = valueStr.IndexOf(' ');
+                    if (spaceIdx > 0)
+                    {
+                        valueStr = valueStr.Substring(spaceIdx + 1).Trim();
+                    }
+
+                    if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedBpm) && parsedBpm > 0)
                     {
                         bpm = parsedBpm;
                     }
@@ -172,13 +179,14 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (!measuresByIndex.TryGetValue(measureIndex, out BmsMeasure? measure))
+                if (!measuresByIndex.TryGetValue(measureIndex, out BmsMeasure? targetMeasure))
                 {
-                    measure = new BmsMeasure(measureIndex);
-                    measuresByIndex[measureIndex] = measure;
+                    targetMeasure = new BmsMeasure(measureIndex);
+                    measuresByIndex[measureIndex] = targetMeasure;
                 }
 
                 int slotCount = data.Length / chunkWidth;
+
                 for (int slot = 0; slot < slotCount; slot++)
                 {
                     string chunk = data.Substring(slot * chunkWidth, chunkWidth);
@@ -198,11 +206,60 @@ namespace STARGAZER_custom_chart
                         ? found
                         : BmsNoteKind.Normal;
 
-                    measure.Notes.Add(new BmsNoteEvent(channel, numerator, denominator, normalized, kind));
+                    targetMeasure.Notes.Add(new BmsNoteEvent(channel, numerator, denominator, normalized, kind));
                 }
             }
 
-            chart.Measures.AddRange(measuresByIndex.Values.OrderBy(m => m.Index));
+            int suppressedNoiseCount = 0;
+            if (ExperimentChartSettings.EnableNoiseSuppression)
+            {
+                foreach (BmsMeasure measure in measuresByIndex.Values)
+                {
+                    if (measure.Notes.Count > 1)
+                    {
+                        var uniqueNotes = new List<BmsNoteEvent>();
+                        var seenPositions = new HashSet<(int Channel, int Num, int Denom)>();
+
+                        foreach (BmsNoteEvent note in measure.Notes)
+                        {
+                            var key = (note.Channel, note.BeatNumerator, note.BeatDenominator);
+                            if (seenPositions.Add(key))
+                            {
+                                uniqueNotes.Add(note);
+                            }
+                            else
+                            {
+                                suppressedNoiseCount++;
+                                if (ExperimentChartSettings.EnableNoiseSuppressionDebug)
+                                {
+                                    MelonLoader.MelonLogger.Msg($"[BmsNoiseFilter] 마디 {measure.Index} 채널 {note.Channel} 위치 {note.BeatNumerator}/{note.BeatDenominator} 중복/노이즈 노트 억제 (SoundID: {note.SoundId})");
+                                }
+                            }
+                        }
+
+                        measure.Notes.Clear();
+                        measure.Notes.AddRange(uniqueNotes);
+                    }
+                }
+            }
+
+            chart.SuppressedNoiseCount = suppressedNoiseCount;
+
+            // 중간에 비어있는 마디(노트가 없는 마디)가 누락되면 타임라인 영역(Area) 순서가 당겨져
+            // 노트가 곡보다 일찍 끝나고 박자가 어긋나게 된다. 0부터 maxIndex까지 모든 마디를 순서대로 채운다.
+            int maxMeasureIndex = measuresByIndex.Count > 0 ? measuresByIndex.Keys.Max() : 0;
+            for (int i = 0; i <= maxMeasureIndex; i++)
+            {
+                if (measuresByIndex.TryGetValue(i, out BmsMeasure? measure))
+                {
+                    chart.Measures.Add(measure);
+                }
+                else
+                {
+                    chart.Measures.Add(new BmsMeasure(i));
+                }
+            }
+
             return chart;
         }
 
