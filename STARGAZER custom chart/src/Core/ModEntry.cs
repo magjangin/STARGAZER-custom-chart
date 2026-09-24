@@ -5,9 +5,9 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod : MelonMod
     {
-        private static readonly HarmonyLib.Harmony RuntimeHarmonyInstance = new HarmonyLib.Harmony("com.example.stargazer.customchart");
-        private static bool _hooksPatchAttempted;
-        private static bool _hooksApplied;
+        // [HarmonyPatch] 클래스들은 MelonLoader가 모드 어셈블리에 PatchAll을 돌려 자동으로 건다.
+        // 이 인스턴스는 런타임에 동적으로 거는 패치(FocusedTrackViewer 메서드, TrackLoader 콜백)용이다.
+        private static readonly HarmonyLib.Harmony RuntimeHarmonyInstance = new HarmonyLib.Harmony("com.magjangin.stargazer.customchart");
 
         public override void OnInitializeMelon()
         {
@@ -16,7 +16,7 @@ namespace STARGAZER_custom_chart
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
 
                 // 게임 디렉터리에 'hwa' 폴더를 자동으로 생성합니다.
-                string hwaPath = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "hwa");
+                string hwaPath = CustomAlbumRegistry.RootPath;
                 if (!System.IO.Directory.Exists(hwaPath))
                 {
                     System.IO.Directory.CreateDirectory(hwaPath);

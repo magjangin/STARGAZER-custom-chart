@@ -8,92 +8,35 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        private static IReadOnlyList<PatchSpec> GetRuntimeInvocationPatchSpecs()
+        // 공용 HookPrefix/HookPostfix(로깅 + 기능 분기)를 거는 대상 목록.
+        // 기능이 없는 로깅 전용 대상 중 호출 빈도가 높은 것(BGMPlayChecker, TravelPlayHandler.Play,
+        // PlaySFX 4종)과 로그도 기능도 없던 것(TrackSelectLogic.*, OpenStandby, ChangeTrackCursor)은 뺐다.
+        // 플레이 중 매 프레임/매 타격마다 인자 배열 할당과 문자열 비교가 돌던 비용이다.
+        private static IReadOnlyList<PatchSpec> GetInvocationPatchSpecs()
         {
             return new[]
             {
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "PlayStart", 1, "IPlayHandler"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer", "Load", 2, "TravelArgs", "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPattern", 2, "ELevels", "Action"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "Load", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "_Load_b__5_0", 1, "Pattern"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType"),
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "StopBGM", 0),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "BGMPlayChecker", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "Play", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
-                new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
-                new PatchSpec("Il2CppStargazer.TrackLoader", "LoadTracksAsync", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "OpenStandby", 1, "String"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "ChangeTrackCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
-            };
-        }
-
-        private static IReadOnlyList<PatchSpec> GetPlayInvocationPatchSpecs()
-        {
-            return new[]
-            {
+                // 플레이 진입/로딩
                 new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs"),
                 new PatchSpec("Il2CppStargazer.Play.PlayerBase", "PlayStart", 1, "IPlayHandler"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer", "Load", 2, "TravelArgs", "Action"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "Load", 1, "TravelArgs"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "_Load_b__5_0", 1, "Pattern"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "BGMPlayChecker", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "Play", 1, "Single"),
                 new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
-            };
-        }
 
-        private static IReadOnlyList<PatchSpec> GetTrackLoaderInvocationPatchSpecs()
-        {
-            return new[]
-            {
+                // 트랙 데이터 로더
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPattern", 2, "ELevels", "Action"),
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
                 new PatchSpec("Il2CppStargazer.TrackLoader", "LoadTracksAsync", 1, "Action"),
-            };
-        }
 
-        private static IReadOnlyList<PatchSpec> GetSoundInvocationPatchSpecs()
-        {
-            return new[]
-            {
+                // BGM 진단
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType"),
                 new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "StopBGM", 0),
-                // PlaySFX 오버로드 [0]: PlaySFX(AudioClip clip, ESoundType type)
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 2, "AudioClip", "ESoundType"),
-                // PlaySFX 오버로드 [1]: PlaySFX(AudioClip clip, ESoundType type, Single volume)
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "AudioClip", "ESoundType", "Single"),
-                // PlaySFX 오버로드 [2]: PlaySFX(Single startTime, AudioClip clip, ESoundType type)
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 3, "Single", "AudioClip", "ESoundType"),
-                // PlaySFX 오버로드 [3]: PlaySFX(Single startTime, AudioClip clip, ESoundType type, Single volume)
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlaySFX", 4, "Single", "AudioClip", "ESoundType", "Single"),
-            };
-        }
 
-        private static IReadOnlyList<PatchSpec> GetTrackSelectorInvocationPatchSpecs()
-        {
-            return new[]
-            {
+                // 곡 선택 / 난이도 선택 / 결과
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "OpenStandby", 1, "String"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "ChangeTrackCursor", 1, "Int32"),
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
-            };
-        }
-
-        private static IReadOnlyList<PatchSpec> GetTravelInvocationPatchSpecs()
-        {
-            return new[]
-            {
                 new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite"),
@@ -102,20 +45,12 @@ namespace STARGAZER_custom_chart
                 // NullReferenceException이 계속 발생했다(2026-08-08). 재적용은 FetchTrackRecord/
                 // FetchJacektImage 훅에서 처리한다.
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "SetTrack", 1, "ITrackData"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "InitializeSelectLogic", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "SingleFlagEvent", 0),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "Build", 0),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelectLogic", "Cancel", 0),
             };
         }
 
         private static MethodInfo? ResolveTargetMethod(PatchSpec spec)
         {
-            Type? type = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .SelectMany(assembly => spec.TypeNames.Select(typeName => assembly.GetType(typeName, false)))
-                .FirstOrDefault(candidate => candidate is not null);
-
+            Type? type = FindType(spec.TypeName);
             if (type is null)
             {
                 return null;
@@ -155,20 +90,43 @@ namespace STARGAZER_custom_chart
             return candidates.FirstOrDefault(method => method.GetParameters().Length == spec.ParameterCount);
         }
 
-        // 대상을 못 찾아도 예외를 던지지 않는다 — 단일 훅 하나가 throw하면 Harmony PatchAll이
-        // 그 자리에서 멈춰 나머지 훅까지 전부 안 걸린다(모드 전체 미기동). 나머지 훅들처럼
-        // 경고만 남기고 건너뛴다.
-        private static IEnumerable<MethodBase> ResolveOptionalTargetMethods(PatchSpec spec)
+        // Harmony는 TargetMethods()가 빈 목록을 돌려주면 어트리뷰트에서 대상을 찾으려다
+        // "Undefined target method"로 던지고, MelonLoader의 PatchAll은 그 자리에서 멈춘다(모드 전체 미기동).
+        // 그래서 대상 해석은 Prepare()에서 끝내고, 하나도 못 찾으면 false를 돌려 그 패치 클래스만 건너뛴다.
+        // Harmony는 원본마다 Prepare를 다시 부르므로, 이미 해석했으면 바로 true를 돌려준다.
+        private static bool PrepareTargets(List<MethodBase> resolved, string label, IEnumerable<PatchSpec> specs)
         {
-            MethodInfo? target = ResolveTargetMethod(spec);
-            if (target is null)
+            if (resolved.Count > 0)
             {
-                MelonLogger.Warning($"[HookPatch][attr] target not found: {spec.TypeName}.{spec.MethodName}");
-                yield break;
+                return true;
             }
 
-            MelonLogger.Msg($"[HookPatch][attr] target: {target.DeclaringType?.FullName}.{target.Name}");
-            yield return target;
+            foreach (PatchSpec spec in specs)
+            {
+                MethodInfo? target = ResolveTargetMethod(spec);
+                if (target is null)
+                {
+                    MelonLogger.Warning($"[HookPatch][{label}] target not found: {spec.TypeName}.{spec.MethodName}");
+                    continue;
+                }
+
+                // 시그니처 폴백으로 두 스펙이 같은 메서드를 가리키면 같은 훅이 두 번 걸린다.
+                if (resolved.Contains(target))
+                {
+                    continue;
+                }
+
+                MelonLogger.Msg($"[HookPatch][{label}] target: {target.DeclaringType?.FullName}.{target.Name}");
+                resolved.Add(target);
+            }
+
+            if (resolved.Count == 0)
+            {
+                MelonLogger.Warning($"[HookPatch][{label}] 대상을 하나도 찾지 못해 이 패치를 건너뜁니다.");
+                return false;
+            }
+
+            return true;
         }
 
         private static string BuildMethodPatchKey(MethodInfo method)
@@ -182,23 +140,15 @@ namespace STARGAZER_custom_chart
             public PatchSpec(string typeName, string methodName, int parameterCount, params string[] parameterTypeNameContains)
             {
                 TypeName = typeName;
-                TypeNames = new[] { typeName };
                 MethodName = methodName;
                 ParameterCount = parameterCount;
                 ParameterTypeNameContains = parameterTypeNameContains;
             }
 
             public string TypeName { get; }
-            public string[] TypeNames { get; private set; }
             public string MethodName { get; }
             public int ParameterCount { get; }
             public string[] ParameterTypeNameContains { get; }
-
-            public PatchSpec WithTypeFallback(params string[] fallbackTypeNames)
-            {
-                TypeNames = new[] { TypeName }.Concat(fallbackTypeNames).ToArray();
-                return this;
-            }
         }
     }
 }

@@ -46,7 +46,9 @@ namespace STARGAZER_custom_chart
                     ResetNoteMotionState();
                     MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
 
-                    if (EnableForceAutoPlayAtPlayerBasePlay)
+                    // 오토플레이는 커스텀 곡에만 건다. 기록 저장 차단(TrackRecordSaveGuardPatch)도 커스텀 곡만
+                    // 막으므로, 공식곡에 오토를 걸면 오토 기록이 공식곡 기록으로 저장될 수 있다.
+                    if (EnableForceAutoPlayAtPlayerBasePlay && IsCustomChartPlayActive)
                     {
                         TryEnablePlayerBaseAutoPlay(__instance);
                     }
@@ -118,7 +120,10 @@ namespace STARGAZER_custom_chart
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "_Load_b__5_0", StringComparison.Ordinal))
                 {
-                    if (EnableRuntimeProbeLogging)
+                    // 커스텀 곡이면 로그 설정과 무관하게 반드시 들어가야 한다 — BMS 차트 주입이 이 안에서 돈다.
+                    // 예전에는 EnableRuntimeProbeLogging에만 묶여 있어서, 로그를 끄면 조용히 원본 차트가 나왔다.
+                    // 구조 덤프 같은 순수 진단은 ProbeNoteArrayMembers 안에서 로그 설정을 따로 본다.
+                    if (IsCustomChartPlayActive || EnableRuntimeProbeLogging)
                     {
                         ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
                     }
@@ -163,21 +168,6 @@ namespace STARGAZER_custom_chart
                     {
                         HandleLevelSelectorRefresh(__instance);
                     }
-                }
-
-
-                // PlaySFX 오버로드 자동 덤프: PlayBGM이 처음 호출되는 시점에 SoundPlayer 타입에서 PlaySFX 시그니처를 전부 출력
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal)
-                    && LogOnce("SoundPlayer.PlaySFX.overload.dump"))
-                {
-                    DumpPlaySFXOverloads(__originalMethod.DeclaringType!);
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "PlaySFX", StringComparison.Ordinal))
-                {
-                    HandlePlaySFX(__originalMethod, args);
                 }
             }
             catch (Exception ex)
@@ -325,11 +315,6 @@ namespace STARGAZER_custom_chart
             }
 
             string methodFullName = $"{method.DeclaringType?.FullName}.{method.Name}";
-            if (SuppressedInvocationMethods.Contains(methodFullName))
-            {
-                return true;
-            }
-
             if (EnableFocusedHarmonyInvocationLogging && !FocusedHarmonyInvocationMethods.Contains(methodFullName))
             {
                 return true;

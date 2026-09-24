@@ -13,7 +13,7 @@
 - `src/Hooks/Support/TrackSelector/TrackSelectorCloningSupport.cs` — Il2Cpp 객체 복제 및 `Pointer` 비교
 - `src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs` — `IntPtr` 생성자 시도 및 컬렉션 주입
 - `src/Hooks/Support/Sound/CustomBgmSupport.cs` — `AudioClip`의 포인터 기술 및 Unity 네이티브 핸들 접근
-- `src/Hooks/Support/Sound/SoundHookSupport.cs` — `PlayBGM`/`PlaySFX` 오버로드 패치(매니지드 레벨)
+- `src/Hooks/Patches/InvocationPatches.cs` — `PlayBGM`/`StopBGM` 등 공용 훅 대상(매니지드 레벨 Harmony 패치)
 
 간단한 기술적 정정
 - "Pointer/IntPtr 사용" = 네이티브 훅 아님: IL2CPP 래퍼가 네이티브 핸들을 보관하거나 표시하기 위해 `IntPtr`을 제공할 수 있습니다. 이는 네이티브 메모리 패치나 P/Invoke 선언을 포함하지 않습니다.

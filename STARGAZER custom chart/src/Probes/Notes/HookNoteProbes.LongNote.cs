@@ -19,6 +19,14 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        // BMS 주입이 노트마다(BeatInfo, NoteProperty) 부르므로 타입/메서드 조회는 한 번만 한다.
+        private static readonly Lazy<Type?> ScriptableObjectType = new Lazy<Type?>(() =>
+            Type.GetType("UnityEngine.ScriptableObject, UnityEngine.CoreModule")
+            ?? Type.GetType("UnityEngine.ScriptableObject, UnityEngine"));
+
+        private static readonly Dictionary<Type, ConstructorInfo?> NoteAreaLaneBeatCtorCache = new Dictionary<Type, ConstructorInfo?>();
+        private static readonly Dictionary<Type, MethodInfo?> CollectionAddMethodCache = new Dictionary<Type, MethodInfo?>();
+
         // IL2CPP 래퍼 타입의 "빈 인스턴스 생성"을 리플렉션으로 대신하는 범용 헬퍼.
         // 노트 프로브(이 파일)뿐 아니라 TrackSelectorCloningSupport의 메타데이터 복제에서도 쓰인다.
         private static object? InstantiateIl2CppObject(Type type)
@@ -26,8 +34,7 @@ namespace STARGAZER_custom_chart
             // 시도 1: ScriptableObject.CreateInstance (스크립터블 오브젝트인 경우)
             try
             {
-                Type? scriptableObjectType = Type.GetType("UnityEngine.ScriptableObject, UnityEngine.CoreModule")
-                    ?? Type.GetType("UnityEngine.ScriptableObject, UnityEngine");
+                Type? scriptableObjectType = ScriptableObjectType.Value;
                 if (scriptableObjectType != null && scriptableObjectType.IsAssignableFrom(type))
                 {
                     MethodInfo? createInstanceMethod = scriptableObjectType.GetMethods(BindingFlags.Public | BindingFlags.Static)
@@ -259,12 +266,18 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        // List<T>.Add를 리플렉션으로 호출한다. Area.notes / Layer.Areas 모두 여기로 들어오므로 메서드는 타입별로 캐시한다.
         private static bool TryAddToNotesCollection(object notesValue, object note)
         {
             Type collectionType = notesValue.GetType();
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            MethodInfo? addMethod = collectionType.GetMethods(flags)
-                .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
+            if (!CollectionAddMethodCache.TryGetValue(collectionType, out MethodInfo? addMethod))
+            {
+                BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                addMethod = collectionType.GetMethods(flags)
+                    .FirstOrDefault(method => string.Equals(method.Name, "Add", StringComparison.Ordinal) && method.GetParameters().Length == 1);
+                CollectionAddMethodCache[collectionType] = addMethod;
+            }
+
             if (addMethod is null)
             {
                 MelonLogger.Warning("[ExperimentChart] 노트 컬렉션에서 Add 메서드를 찾지 못했습니다.");
@@ -275,32 +288,86 @@ namespace STARGAZER_custom_chart
             return true;
         }
 
-        private static bool TryApplyNotePropertyLinkedState(object sourceNote, object targetNote, string linkedState)
+        // Note(Area, string laneUid, BeatInfo) 생성자. 노트 타입별로 한 번만 찾는다.
+        private static ConstructorInfo? FindNoteAreaLaneBeatConstructor(Type noteType)
+        {
+            if (NoteAreaLaneBeatCtorCache.TryGetValue(noteType, out ConstructorInfo? cached))
+            {
+                return cached;
+            }
+
+            ConstructorInfo? found = null;
+            foreach (ConstructorInfo ctor in noteType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                ParameterInfo[] parameters = ctor.GetParameters();
+                if (parameters.Length == 3
+                    && parameters[0].ParameterType.Name.Contains("Area")
+                    && parameters[1].ParameterType == typeof(string)
+                    && parameters[2].ParameterType.Name.Contains("BeatInfo"))
+                {
+                    found = ctor;
+                    break;
+                }
+            }
+
+            NoteAreaLaneBeatCtorCache[noteType] = found;
+            return found;
+        }
+
+        // 원본 노트의 NoteProperty에서 새 노트마다 똑같이 쓰는 부분(타입, expressionHolder)만 한 번 뽑아 둔다.
+        private sealed class NotePropertyTemplate
+        {
+            public NotePropertyTemplate(Type propertyType, object? expressionHolder)
+            {
+                PropertyType = propertyType;
+                ExpressionHolder = expressionHolder;
+            }
+
+            public Type PropertyType { get; }
+            public object? ExpressionHolder { get; }
+        }
+
+        private static NotePropertyTemplate? CreateNotePropertyTemplate(object sourceNote)
         {
             Type noteType = sourceNote.GetType();
             object? property1 = TryGetMemberValue(sourceNote, noteType, "property")
                 ?? TryGetMemberValue(sourceNote, noteType, "Property")
                 ?? TryGetMemberValue(sourceNote, noteType, "noteProperty")
                 ?? TryGetMemberValue(sourceNote, noteType, "NoteProperty");
-
             if (property1 is null)
+            {
+                return null;
+            }
+
+            Type propType = property1.GetType();
+            object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
+                ?? TryGetMemberValue(property1, propType, "expressionholder")
+                ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
+            return new NotePropertyTemplate(propType, exprHolder);
+        }
+
+        private static bool TryApplyNotePropertyLinkedState(object sourceNote, object targetNote, string linkedState)
+        {
+            NotePropertyTemplate? template = CreateNotePropertyTemplate(sourceNote);
+            if (template is null)
             {
                 MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 원본 노트 속성을 찾지 못했습니다.");
                 return false;
             }
 
-            Type propType = property1.GetType();
-            object? property2 = InstantiateIl2CppObject(propType);
+            return TryApplyNotePropertyLinkedState(template, targetNote, linkedState);
+        }
+
+        private static bool TryApplyNotePropertyLinkedState(NotePropertyTemplate template, object targetNote, string linkedState)
+        {
+            object? property2 = InstantiateIl2CppObject(template.PropertyType);
             if (property2 is null)
             {
                 MelonLogger.Warning($"[ExperimentChart] linked={linkedState}에 대한 노트 속성 인스턴스를 생성하지 못했습니다.");
                 return false;
             }
 
-            object? exprHolder = TryGetMemberValue(property1, propType, "expressionHolder")
-                ?? TryGetMemberValue(property1, propType, "expressionholder")
-                ?? TryGetMemberValue(property1, propType, "ExpressionHolder");
-            TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, exprHolder);
+            TrySetValueByNameCandidates(property2, new[] { "expressionholder" }, template.ExpressionHolder);
 
             bool linked = TrySetLinkedState(property2, linkedState);
             bool written = TrySetValueByNameCandidates(targetNote, new[] { "property" }, property2);
@@ -360,20 +427,7 @@ namespace STARGAZER_custom_chart
 
                 TryWriteBeatInfoPosition(beatInfo2, newIndex, newSplit);
 
-                ConstructorInfo? noteCtor3 = null;
-                foreach (ConstructorInfo ctor in noteType.GetConstructors(flags))
-                {
-                    ParameterInfo[] parameters = ctor.GetParameters();
-                    if (parameters.Length == 3
-                        && parameters[0].ParameterType.Name.Contains("Area")
-                        && parameters[1].ParameterType == typeof(string)
-                        && parameters[2].ParameterType.Name.Contains("BeatInfo"))
-                    {
-                        noteCtor3 = ctor;
-                        break;
-                    }
-                }
-
+                ConstructorInfo? noteCtor3 = FindNoteAreaLaneBeatConstructor(noteType);
                 if (noteCtor3 != null)
                 {
                     try

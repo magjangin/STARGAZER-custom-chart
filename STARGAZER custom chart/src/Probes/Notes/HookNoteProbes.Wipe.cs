@@ -205,6 +205,22 @@ namespace STARGAZER_custom_chart
             return false;
         }
 
+        private static EarliestNoteChoice? SelectFirstNote(IReadOnlyList<NoteCollectionContext> contexts)
+        {
+            foreach (NoteCollectionContext context in contexts)
+            {
+                for (int i = 0; i < context.Items.Count; i++)
+                {
+                    if (context.Items[i] is not null)
+                    {
+                        return new EarliestNoteChoice(context, i, null, 0);
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private static EarliestNoteChoice? SelectEarliestNote(IReadOnlyList<NoteCollectionContext> contexts)
         {
             EarliestNoteChoice? best = null;
@@ -290,7 +306,8 @@ namespace STARGAZER_custom_chart
 
             foreach (MethodInfo method in noteType.GetMethods(flags))
             {
-                if (method.GetParameters().Length != 0)
+                // "judge", "start" 같은 후보에 Judge()/Start()가 걸리지 않도록 게터 모양만 호출한다.
+                if (method.GetParameters().Length != 0 || !IsGetterLikeMethod(method))
                 {
                     continue;
                 }

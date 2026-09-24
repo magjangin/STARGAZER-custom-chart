@@ -4,7 +4,7 @@ using System.IO;
 
 namespace STARGAZER_custom_chart
 {
-    // hwa/info.txt 파서. 게임/리플렉션 의존성 없는 순수 텍스트 파싱.
+    // hwa/<앨범 폴더>/info.txt 파서. 게임/리플렉션 의존성 없는 순수 텍스트 파싱.
     // 형식: 한 줄에 "키 : 값" 또는 "키 = 값". 곡 제목/아티스트/난이도(cosmic,stellar,void)를 인식한다.
     internal sealed class CustomTrackInfo
     {

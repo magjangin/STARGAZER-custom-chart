@@ -56,10 +56,10 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                // 항상 목록 맨 앞에 주입하므로, 첫 항목이 우리 트랙이면 이미 주입된 것으로 본다.
+                // 목록 어디에든 우리 트랙이 있으면 이미 주입된 것으로 본다. 게임이 같은 목록을 다시
+                // 정렬해서 넘기면 우리 트랙이 맨 앞이 아닐 수 있어, 첫 항목만 보면 중복 주입된다.
                 // 공식 startingpoint 트랙도 TrackID가 같아서 IsStartingPointTrack으로는 판정할 수 없다.
-                object? firstItem = EnumerateCollectionItems(tracks, 1).FirstOrDefault();
-                if (IsCustomChartTrack(firstItem))
+                if (items.Any(IsCustomChartTrack))
                 {
                     if (EnableTrackSelectorVerboseLogging)
                     {
@@ -75,48 +75,15 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? source = items.FirstOrDefault(IsStartingPointTrack);
-                if (source is null)
+                // 앨범(hwa 하위 폴더)마다 startingpoint를 하나씩 복제해 독립 트랙으로 만든다. 세션에서 처음 한 번만
+                // 만들고, 이후 새 목록에는 같은 복제본을 다시 넣는다(InjectedCustomTracks 주석 참고).
+                bool created = InjectedCustomTracks.Count == 0;
+                if (created && !TryCreateCustomTrackClones(items, albums))
                 {
-                    MelonLogger.Msg("[TrackSelector.Set] startingpoint 트랙을 찾지 못했습니다. 복사 삽입을 건너뜁니다.");
                     return;
                 }
 
-                Type? concreteTrackType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
-                Type? concreteMetaType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackMetaData");
-                if (concreteTrackType is null || concreteMetaType is null)
-                {
-                    MelonLogger.Warning("[TrackSelector.Set] INNER_TrackData/INNER_TrackMetaData 타입을 찾지 못해 주입을 건너뜁니다.");
-                    return;
-                }
-
-                // 앨범(hwa 하위 폴더)마다 startingpoint를 하나씩 복제해 독립 트랙으로 만든다.
-                ResetInjectedCustomTracks();
-                var pending = new List<(object Track, CustomAlbum Album)>();
-
-                foreach (CustomAlbum album in albums)
-                {
-                    object? clone = CloneTrackData(source, concreteTrackType, concreteMetaType);
-                    if (clone is null)
-                    {
-                        MelonLogger.Warning($"[TrackSelector.Set] 트랙 복제 실패로 건너뜁니다: {album.Name}");
-                        continue;
-                    }
-
-                    // 커스텀 트랙 식별은 표시명도 TrackID도 아닌 객체 동일성으로 하므로,
-                    // 표시명에는 "테스트 " 같은 내부용 접두를 붙이지 않는다.
-                    ApplyStartingPointMetadataOverrides(clone, concreteTrackType, album.DisplayName, album.Artist, album.Info?.Levels);
-
-                    // 자켓/BGM/차트가 공식 트랙을 건드리지 않도록, 방금 만든 이 객체만 앨범과 함께 등록한다.
-                    RegisterInjectedCustomTrack(clone, album);
-                    pending.Add((clone, album));
-                }
-
-                if (pending.Count == 0)
-                {
-                    MelonLogger.Warning("[TrackSelector.Set] 독립 트랙 복제에 모두 실패하여 주입을 건너뜁니다.");
-                    return;
-                }
+                IReadOnlyList<(object Track, CustomAlbum Album)> pending = InjectedCustomTracks;
 
                 // 맨 앞에 하나씩 밀어넣으므로 역순으로 넣어야 앨범 순서대로 보인다.
                 int applied = 0;
@@ -139,7 +106,8 @@ namespace STARGAZER_custom_chart
                 {
                     int updatedCount = TryGetCollectionCount(tracks) ?? (trackCount + applied);
                     string names = string.Join(", ", pending.Select(p => p.Album.DisplayName));
-                    MelonLogger.Msg($"[TrackSelector.Set] 커스텀 트랙을 주입했습니다! 적용={applied}/{albums.Count} 현재 트랙 수: {updatedCount} ({names})");
+                    string how = created ? "새로 만들어" : "기존 복제본을 다시";
+                    MelonLogger.Msg($"[TrackSelector.Set] 커스텀 트랙을 {how} 주입했습니다! 적용={applied}/{albums.Count} 현재 트랙 수: {updatedCount} ({names})");
                     if (EnableTrackSelectorMetadataDump)
                     {
                         DumpInjectedTracksMetadata(tracks);
@@ -154,6 +122,50 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[TrackSelector.Set] 처리 실패: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        private static bool TryCreateCustomTrackClones(IReadOnlyList<object?> items, IReadOnlyList<CustomAlbum> albums)
+        {
+            object? source = items.FirstOrDefault(IsStartingPointTrack);
+            if (source is null)
+            {
+                MelonLogger.Msg("[TrackSelector.Set] startingpoint 트랙을 찾지 못했습니다. 복사 삽입을 건너뜁니다.");
+                return false;
+            }
+
+            Type? concreteTrackType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
+            Type? concreteMetaType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackMetaData");
+            if (concreteTrackType is null || concreteMetaType is null)
+            {
+                MelonLogger.Warning("[TrackSelector.Set] INNER_TrackData/INNER_TrackMetaData 타입을 찾지 못해 주입을 건너뜁니다.");
+                return false;
+            }
+
+            foreach (CustomAlbum album in albums)
+            {
+                object? clone = CloneTrackData(source, concreteTrackType, concreteMetaType);
+                if (clone is null)
+                {
+                    MelonLogger.Warning($"[TrackSelector.Set] 트랙 복제 실패로 건너뜁니다: {album.Name}");
+                    continue;
+                }
+
+                // 커스텀 트랙 식별은 표시명도 TrackID도 아닌 객체 동일성으로 하므로,
+                // 표시명에는 "테스트 " 같은 내부용 접두를 붙이지 않는다.
+                ApplyStartingPointMetadataOverrides(clone, concreteTrackType, album.DisplayName, album.Artist, album.Info?.Levels);
+
+                // 자켓/BGM/차트가 공식 트랙을 건드리지 않도록, 방금 만든 이 객체만 앨범과 함께 등록한다.
+                // 식별 등록에 실패한 복제본은 목록에 넣지 않는다 — 넣으면 공식곡처럼 동작한다.
+                RegisterInjectedCustomTrack(clone, album);
+            }
+
+            if (InjectedCustomTracks.Count == 0)
+            {
+                MelonLogger.Warning("[TrackSelector.Set] 독립 트랙 복제에 모두 실패하여 주입을 건너뜁니다.");
+                return false;
+            }
+
+            return true;
         }
     }
 }

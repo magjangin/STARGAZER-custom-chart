@@ -58,8 +58,9 @@ namespace STARGAZER_custom_chart
                 // NoteWipeTestDone(프로세스 생명주기 동안 1회성 가드)에 묶지 않는다.
                 bool shouldRunWipe = (ExperimentChartSettings.EnableKeepEarliestOnlyChart && !NoteWipeTestDone && isCustomTrackPattern)
                     || (ExperimentChartSettings.EnableBmsChartTest && isCustomTrackPattern);
-                bool shouldProbeLinkHold = !LinkHoldProbeDone && isPatternLoaderSource;
-                bool shouldProbeArea = !AreaProbeDone && isPatternLoaderSource;
+                // 아래는 순수 진단이라 로그 설정을 따른다. 차트 주입(shouldRunWipe)은 로그 설정과 무관하다.
+                bool shouldProbeLinkHold = EnableRuntimeProbeLogging && !LinkHoldProbeDone && isPatternLoaderSource;
+                bool shouldProbeArea = EnableRuntimeProbeLogging && !AreaProbeDone && isPatternLoaderSource;
                 bool shouldRunAreaCreateTest = ExperimentChartSettings.EnableAreaCreationTest && !AreaCreationTestDone && isPatternLoaderSource;
 
                 var wipeContexts = shouldRunWipe ? new List<NoteCollectionContext>() : null;
@@ -166,8 +167,10 @@ namespace STARGAZER_custom_chart
                 if (LoggedNoteArrayHits.Add(hit))
                     MelonLogger.Msg($"[NoteProbe][AreaNotes] {hit}");
             }
-            catch
+            catch (Exception ex)
             {
+                // 차트 주입이 이 안에서 돌기 때문에 조용히 삼키면 "왜 원본 차트가 나오는지" 알 길이 없다.
+                MelonLogger.Warning($"[NoteProbe] {source} 처리 실패: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -198,17 +201,27 @@ namespace STARGAZER_custom_chart
 
         private static void ExecuteWipePhase(List<NoteCollectionContext> wipeContexts)
         {
+            if (ExperimentChartSettings.EnableBmsChartTest)
+            {
+                // BMS 모드에서 원본 노트는 Note/Area/BeatInfo 타입과 NoteProperty 샘플을 얻는 템플릿일 뿐이라
+                // 어느 노트든 상관없다. "가장 이른 노트"를 고르려고 노트마다 리플렉션으로 시간을 읽을 필요가 없다.
+                EarliestNoteChoice? template = SelectFirstNote(wipeContexts);
+                if (template is null)
+                {
+                    MelonLogger.Warning("[BmsInject] 원본 패턴에 템플릿으로 쓸 노트가 없어 주입을 건너뜁니다.");
+                }
+                else
+                {
+                    TryInjectBmsChart(template);
+                }
+
+                NoteWipeTestDone = true; // BMS 모드에서는 아래 오프셋 기반 실험 경로가 절대 안 돌게만 막는 용도.
+                return;
+            }
+
             int wipeTargets = wipeContexts.Count;
             LogNotesBeforeOperation(wipeContexts, "BeforeOperation");
             EarliestNoteChoice? keepChoice = SelectEarliestNote(wipeContexts);
-
-            if (ExperimentChartSettings.EnableBmsChartTest && keepChoice is not null)
-            {
-                TryInjectBmsChart(keepChoice);
-                NoteWipeTestDone = true; // BMS 모드에서는 아래 오프셋 기반 실험 경로가 절대 안 돌게만 막는 용도.
-                LogNotesBeforeOperation(wipeContexts, "AfterOperation(BmsInject)");
-                return;
-            }
 
             if (ExperimentChartSettings.EnableBeatInfoShiftTest && !BeatInfoShiftTestDone && keepChoice is not null)
             {

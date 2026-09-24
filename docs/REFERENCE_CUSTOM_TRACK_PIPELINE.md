@@ -12,7 +12,7 @@
 hwa/<폴더>/                     CustomAlbum      폴더 하나 = 곡 하나
       │
       ▼
-TrackSelector.Set(List)         앨범 개수만큼 startingpoint 복제 → 목록 맨 앞에 주입
+TrackSelector.Set(List)         앨범 개수만큼 startingpoint 복제(세션에 한 번) → 목록 맨 앞에 주입
       │                         복제본의 네이티브 포인터 → 앨범 매핑을 등록
       ▼
 INNER_TrackData.LoadJacketSprite   자켓 교체    ┐
@@ -20,10 +20,13 @@ INNER_TrackData.LoadBGMClip        음원 교체    ├ 매핑 조회로 "내 �
 INNER_TrackData.LoadPreviewClip    프리뷰 교체  ┘
       │
       ▼
-PlayerBase.Play(TravelArgs)     재생 중인 앨범/난이도 기억, 오토플레이 설정 적용
+PlayerBase.Play(TravelArgs)     재생 중인 앨범/난이도 기억, 커스텀 곡이면 오토플레이 설정 적용
       │
       ▼
 INNER_PatternLoader._Load_b__5_0(Pattern)   Layer.Areas를 BMS 차트로 교체
+      │
+      ▼
+UserDataLoader.TrackRecordModule.SaveTrackRecord   커스텀 곡이면 저장 차단(공식 기록 보호)
 ```
 
 ## 커스텀 트랙 식별 — 객체 동일성
@@ -34,6 +37,8 @@ INNER_PatternLoader._Load_b__5_0(Pattern)   Layer.Areas를 BMS 차트로 교체
 - `TrackID`는 복제 원본과 **완전히 같습니다**(`startingpoint`). `StartsWith` 비교를 쓰면
   공식 "Starting Point"와 "Starting Point (yomoha Jazz Arrange)"까지 커스텀으로 오인해
   공식 곡에 커스텀 자켓·차트가 주입됩니다. 실제로 발생했던 버그입니다.
+  같은 이유로 복제 **원본**을 찾을 때도 `startingpoint`와 정확히 일치하는 트랙만 씁니다
+  (접두어 비교면 재즈 어레인지가 목록에서 먼저 나올 때 그 곡이 원본이 됩니다).
 
 그래서 **우리가 직접 만든 객체의 IL2CPP 네이티브 포인터**를 주입 시점에 기록하고,
 그 포인터를 가진 객체만 커스텀으로 판정합니다.
@@ -43,7 +48,13 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 ```
 
 포인터가 곧 "어느 앨범인가"까지 알려주므로, 자켓·음원·차트·난이도가 모두 이 한 번의 조회로 자기 폴더를 찾습니다.
-주입할 때마다 이전 목록을 비웁니다(해제된 주소가 재사용되어 생기는 오탐 방지).
+
+복제본은 **세션에 한 번만 만들고**, 곡 목록이 새로 들어올 때마다 같은 객체를 다시 넣습니다.
+모드가 복제본 래퍼를 붙잡고 있으므로(IL2CPP GC 핸들) 네이티브 객체가 해제되지 않아, 주소 재사용으로 인한 오탐이 없습니다.
+
+> 예전에는 주입할 때마다 매핑을 비우고 새 복제본을 만들었습니다. 그러면 목록에 남아 있던 이전 복제본이
+> "공식곡"으로 취급되어, 그걸 플레이하면 원본 차트·자켓·음원이 나오고 **기록 저장 차단도 풀렸습니다.**
+> 이미 주입됐는지도 첫 항목이 아니라 **목록 전체**에서 확인합니다(게임이 목록을 재정렬해도 중복 주입되지 않도록).
 
 관련 함수: `IsCustomChartTrack`, `TryGetAlbumForTrack`, `RegisterInjectedCustomTrack`
 (`src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs`)
@@ -64,8 +75,15 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 콜백은 일반 `Action<T>`가 아니라 IL2CPP delegate 래퍼라서, 리플렉션으로 `Invoke`를 찾아 호출합니다
 ([CAST_AND_WRAPPER_CODE_REFERENCE.md](CAST_AND_WRAPPER_CODE_REFERENCE.md) 참고).
 
-음원은 `UnityWebRequestMultimedia.GetAudioClip`으로 디코딩해 캐시하고,
+음원은 `UnityWebRequestMultimedia.GetAudioClip`으로 로드해 캐시하고,
 로딩이 끝나기 전에 요청이 오면 콜백을 큐에 넣었다가 완료 시 한꺼번에 호출합니다.
+
+- 게임 시작 시 모든 앨범의 음원/프리뷰를 미리 로드합니다(커서를 옮기자마자 프리뷰가 나오도록).
+- 이때 `DownloadHandlerAudioClip.compressed = true`로 **압축(Vorbis) 상태 그대로** 메모리에 둡니다.
+  풀어서(PCM) 두면 3분 스테레오 곡 하나가 수십 MB라 앨범 수에 비례해 메모리가 커집니다.
+  게임 빌드에 이 세터가 없으면(스트리핑) 경고를 한 번 남기고 예전처럼 풀어서 로드합니다.
+  `config.txt`의 `CompressBgmInMemory=0`으로 끌 수 있습니다(싱크 문제가 의심될 때).
+- 파일 경로의 `%`, `#`는 URI에서 특수 문자라 이스케이프합니다(그 외 한글·일본어 경로는 그대로).
 
 ## 난이도 표시
 
@@ -107,7 +125,17 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 ## 오토플레이
 
 `PlayerBase.Play` Prefix에서 `IsAutoPlay`를 설정합니다.
-켜고 끄는 값은 `savecustomkey/config.txt`의 `autoplay`에서 읽습니다(게임 시작 시 1회).
+켜고 끄는 값은 `savecustomkey/config.txt`의 `autoplay`에서 읽습니다(게임 시작 시 1회, 기본 `false`).
+
+**커스텀 곡에만 적용합니다.** 기록 저장 차단은 커스텀 곡만 막으므로, 공식곡에 오토를 걸면
+오토플레이 결과가 공식곡 기록으로 저장될 수 있기 때문입니다.
+
+## 기록 저장 차단
+
+커스텀 곡은 TrackID가 Starting Point와 같아서, 그대로 두면 결과가 진짜 Starting Point 기록을 덮어씁니다.
+`UserDataLoader+INNER_TrackRecordModule.SaveTrackRecord` Prefix에서 커스텀 곡이면 저장을 건너뜁니다.
+
+같은 이유로 난이도 선택 화면의 **최고 기록 표시는 Starting Point의 기록**이 나옵니다(아직 미해결).
 
 ## 노트 연출 (흔들림 / 속도 카오스)
 
@@ -129,10 +157,12 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 
 ### 훅 지점
 
-| 대상 | 시점 | 하는 일 |
-| --- | --- | --- |
-| `StargazerNote.Behaviour(Single)` | Prefix | 지난 프레임에 우리가 얹은 오프셋을 되돌려 게임에 원래 위치를 돌려준다 |
-| `StargazerLongNote.Behaviour(Single)` | Postfix | 게임이 계산한 위치를 기준으로 오프셋을 다시 얹는다 |
+대상은 `StargazerNote.Behaviour(Single)`과 `StargazerLongNote.Behaviour(Single)` 두 개이고, **둘 다** 아래 Prefix/Postfix가 걸립니다.
+
+| 시점 | 하는 일 |
+| --- | --- |
+| Prefix | 지난 프레임에 우리가 얹은 오프셋을 되돌려 게임에 원래 위치를 돌려준다 |
+| Postfix | 게임이 계산한 위치를 기준으로 오프셋을 다시 얹는다 |
 
 - 인자 `deltatime`은 **판정선까지 남은 초**입니다(`NoteObjectBase.OnUpdate`가 `Timing - 현재시각`을 넘김).
   판정선을 지나면 음수가 됩니다. 흔들림 감쇠가 이 값을 씁니다.
@@ -142,9 +172,15 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
   override가 `base.Behaviour`를 부르면 한 프레임에 두 번 들어오는데, 노트별 프레임 가드가 두 번째를 걸러 냅니다.
 - **이 훅은 매 프레임 노트마다 불립니다.** 공용 `HookPrefix`/`HookPostfix`(로깅 포함)를 쓰면 안 됩니다.
   설정이 전부 꺼져 있으면 `Prepare()`가 `false`를 돌려줘 아예 패치되지 않습니다.
+- 노트의 `RectTransform`은 첫 프레임에 한 번 얻어 캐시합니다. 매 프레임 `TryCast<Component>()`/`transform`/
+  `TryCast<RectTransform>()`을 부르면 노트마다 IL2CPP 래퍼가 새로 할당돼 GC 부담(끊김)이 생깁니다.
+- 게임이 노트 오브젝트를 재사용(풀링)하면 같은 포인터로 새 노트가 옵니다. 남은 시간(`deltatime`)이
+  갑자기 늘면 새 노트로 보고 상태를 새로 만듭니다(이전 노트의 위치·속도를 물려받아 튀는 것 방지).
 
 > `TargetMethods()`가 **빈 목록**을 돌려주면 Harmony가 어트리뷰트에서 대상을 찾으려다
-> `"Undefined target method"`로 던집니다. 조건부 패치는 반드시 `Prepare()`로 막아야 합니다.
+> `"Undefined target method"`로 던지고, MelonLoader의 PatchAll이 거기서 멈춰 **모드 전체가 기동하지 않습니다.**
+> 그래서 모든 `[HarmonyPatch]` 클래스는 대상 해석을 `Prepare()`에서 끝내고(`PrepareTargets` 헬퍼),
+> 하나도 못 찾으면 `false`를 돌려 그 클래스만 건너뜁니다. 게임 업데이트로 메서드 이름이 바뀌어도 나머지 기능은 살아 있습니다.
 
 ### 속도 카오스 — 진행 방향은 직접 잰다
 
@@ -181,11 +217,14 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
 `INNER_PatternLoader._Load_b__5_0(Pattern)` Postfix에서 `Layer.Areas`를 통째로 교체합니다.
 자세한 규칙은 [REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md)를 보세요.
 
-주의할 점 두 가지:
+주의할 점 세 가지:
 
 - 이 콜백은 **공식 곡이든 커스텀 곡이든 패턴이 로드될 때마다** 불립니다.
   커스텀 트랙일 때만 개입하도록 반드시 막아야 합니다(`IsCustomChartPlayActive`).
   파괴적 작업이라 주입 함수 안에서도 한 번 더 확인합니다.
+- 주입은 **로그 설정과 무관하게** 돌아야 합니다. 예전에는 `EnableRuntimeProbeLogging`이 켜져 있을 때만
+  불려서, 로그를 끄면 조용히 원본 차트가 나왔습니다. 지금은 커스텀 곡이면 항상 들어가고,
+  구조 덤프 같은 순수 진단만 로그 설정을 따릅니다.
 - 곡 재시작마다 패턴이 새로 로드되므로 **매번 다시 주입해야 합니다.**
   "한 번만 실행" 가드에 묶으면 재시작 시 원본 차트가 나옵니다.
 

@@ -29,6 +29,10 @@ namespace STARGAZER_custom_chart
         private static readonly Dictionary<int, NoteMotionLane> NoteMotionLanes = new Dictionary<int, NoteMotionLane>();
         private static readonly System.Random NoteMotionRandom = new System.Random();
 
+        // 같은 포인터인데 남은 시간이 이만큼(초) 이상 늘면 재사용된 오브젝트의 새 노트로 본다.
+        // 오디오 시계 보정으로 생기는 작은 역행은 넘기도록 여유를 둔다.
+        private const float NoteMotionReuseDeltatimeJump = 0.25f;
+
         private static int NoteMotionLastPruneFrame;
         private static int NoteMotionCachedFrame = -1;
         private static float NoteMotionCachedTime;
@@ -66,7 +70,9 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                RectTransform? transform = TryGetNoteRectTransform(note);
+                // Postfix에서 캐시해 둔 RectTransform을 쓴다. 노트마다 매 프레임 TryCast/transform으로
+                // IL2CPP 래퍼를 새로 만들면 GC 할당이 쌓여 플레이 중 끊김의 원인이 된다.
+                RectTransform? transform = state.Transform;
                 if (transform == null)
                 {
                     return;
@@ -94,24 +100,34 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                RectTransform? transform = TryGetNoteRectTransform(note);
-                if (transform == null)
-                {
-                    return;
-                }
-
                 int frame = Time.frameCount;
                 IntPtr pointer = note.Pointer;
-                Vector2 basePosition = transform.anchoredPosition;
 
                 // 한동안 갱신되지 않았던 항목은 해제된 주소를 재사용한 새 노트일 수 있어 새로 만든다.
                 // (일시정지 후 복귀에도 걸리는데, 그때는 위상과 배율이 새로 뽑혀 한 번 튄다.)
-                bool isNewNote = !NoteMotionStates.TryGetValue(pointer, out NoteMotionState? known) || frame - known.LastFrame > 5;
+                // 남은 시간(deltatime)은 같은 노트라면 줄어들기만 한다. 크게 늘었다면 게임이 오브젝트를
+                // 재사용(풀링)해 새 노트를 띄운 것이므로, 이전 노트의 위치/속도를 물려받지 않게 새로 만든다.
+                bool isNewNote = !NoteMotionStates.TryGetValue(pointer, out NoteMotionState? known)
+                    || frame - known.LastFrame > 5
+                    || deltatime > known.LastDeltatime + NoteMotionReuseDeltatimeJump;
                 if (!isNewNote && known!.LastFrame == frame)
                 {
                     // 롱노트는 override가 base.Behaviour를 부르므로 한 프레임에 두 번 들어온다.
                     return;
                 }
+
+                // 이미 아는 노트면 캐시한 RectTransform을 쓴다(래퍼 할당 없음). 파괴됐으면(== null) 다시 얻는다.
+                RectTransform? transform = isNewNote ? null : known!.Transform;
+                if (transform == null)
+                {
+                    transform = TryGetNoteRectTransform(note);
+                    if (transform == null)
+                    {
+                        return;
+                    }
+                }
+
+                Vector2 basePosition = transform.anchoredPosition;
 
                 NoteMotionState state;
                 if (isNewNote)
@@ -125,6 +141,7 @@ namespace STARGAZER_custom_chart
                     UpdateNoteVelocity(state, basePosition, deltatime);
                 }
 
+                state.Transform = transform;
                 state.BasePosition = basePosition;
                 state.LastDeltatime = deltatime;
                 state.HasBase = true;
@@ -398,6 +415,7 @@ namespace STARGAZER_custom_chart
 
         private sealed class NoteMotionState
         {
+            public RectTransform? Transform;
             public Vector2 BasePosition;
             public bool HasBase;
             public int LastFrame = -1;

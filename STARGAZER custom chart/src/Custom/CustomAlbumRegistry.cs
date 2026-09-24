@@ -53,7 +53,7 @@ namespace STARGAZER_custom_chart
 
                     if (!album.IsPlayable)
                     {
-                        MelonLogger.Warning($"[Album] 건너뜀(차트/음원 없음): {album.Name}");
+                        MelonLogger.Warning($"[Album] 건너뜀({album.MissingPartsDescription}): {album.Name}");
                         continue;
                     }
 
@@ -65,7 +65,7 @@ namespace STARGAZER_custom_chart
                 MelonLogger.Warning($"[Album] hwa 하위 폴더 스캔 실패: {ex.GetType().Name}: {ex.Message}");
             }
 
-            // 하위 폴더가 하나도 없으면 예전 방식(hwa 바로 아래에 파일을 두는 구성)으로 간주한다.
+            // 쓸 수 있는 하위 폴더가 하나도 없으면 예전 방식(hwa 바로 아래에 파일을 두는 구성)으로 간주한다.
             if (result.Count == 0)
             {
                 CustomAlbum? legacy = CustomAlbum.TryLoad(root);

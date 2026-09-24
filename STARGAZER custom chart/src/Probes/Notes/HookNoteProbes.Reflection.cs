@@ -81,7 +81,7 @@ namespace STARGAZER_custom_chart
 
             foreach (MethodInfo method in type.GetMethods(flags))
             {
-                if (method.GetParameters().Length != 0)
+                if (method.GetParameters().Length != 0 || !IsGetterLikeMethod(method))
                 {
                     continue;
                 }
@@ -105,6 +105,23 @@ namespace STARGAZER_custom_chart
             }
 
             return false;
+        }
+
+        // 이름 부분일치로 고른 메서드를 실제로 호출하므로 게터 모양(get_X / GetX, 반환값 있음)만 허용한다.
+        // 제한이 없으면 "clear"로 Clear(), "start"로 Start(), "judge"로 Judge()처럼 게임 상태를 바꾸는
+        // 메서드까지 로그용 조회 중에 불릴 수 있다.
+        private static bool IsGetterLikeMethod(MethodInfo method)
+        {
+            return method.ReturnType != typeof(void)
+                && (method.Name.StartsWith("get_", StringComparison.Ordinal)
+                    || method.Name.StartsWith("Get", StringComparison.Ordinal));
+        }
+
+        // 쓰기 쪽도 같은 이유로 세터 모양(set_X / SetX)만 호출한다.
+        private static bool IsSetterLikeMethod(MethodInfo method)
+        {
+            return method.Name.StartsWith("set_", StringComparison.Ordinal)
+                || method.Name.StartsWith("Set", StringComparison.Ordinal);
         }
 
         private static bool NameMatchesAny(string sourceName, IReadOnlyList<string> candidates)
@@ -204,7 +221,7 @@ namespace STARGAZER_custom_chart
 
             foreach (MethodInfo method in type.GetMethods(flags))
             {
-                if (method.GetParameters().Length != 1)
+                if (method.GetParameters().Length != 1 || !IsSetterLikeMethod(method))
                 {
                     continue;
                 }

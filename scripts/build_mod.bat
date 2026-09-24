@@ -13,7 +13,8 @@ echo.
 set "PROJECT_NAME=STARGAZER custom chart"
 set "PROJECT_DIR=STARGAZER custom chart"
 set "SOLUTION_FILE=STARGAZER custom chart.csproj"
-set "GAME_PATH=H:\steam\steamapps\common\Sixtar Gate STARGAZER"
+:: Game path: use the GAME_PATH environment variable if set, otherwise the default below.
+if not defined GAME_PATH set "GAME_PATH=H:\steam\steamapps\common\Sixtar Gate STARGAZER"
 set "SOURCE_ROOT=%~dp0..\"
 
 :: Build paths
@@ -26,7 +27,7 @@ set "TARGET_DLL=%MODS_DIR%\%DLL_NAME%"
 
 :: Find MSBuild
 set "MSBUILD_PATH="
-for %%v in (2026 2022 2019 18 17) do (
+for %%v in (18 2026 2022 2019 17) do (
     for %%e in (Community Professional Enterprise BuildTools) do (
         if exist "C:\Program Files\Microsoft Visual Studio\%%v\%%e\MSBuild\Current\Bin\MSBuild.exe" (
             set "MSBUILD_PATH=C:\Program Files\Microsoft Visual Studio\%%v\%%e\MSBuild\Current\Bin\MSBuild.exe"
@@ -57,10 +58,10 @@ taskkill /IM VBCSCompiler.exe /F >nul 2>&1
 :: Restore + Build with MSBuild when available, otherwise dotnet fallback.
 if not "!MSBUILD_PATH!"=="" (
     echo [INFO] Restoring NuGet packages via MSBuild...
-    "!MSBUILD_PATH!" "!SOLUTION_PATH!" /p:Configuration=Debug /p:Platform="Any CPU" /p:GamePath="!GAME_PATH!" /p:UseSharedCompilation=false /nr:false /t:Restore /v:minimal /nologo
+    "!MSBUILD_PATH!" "!SOLUTION_PATH!" /p:Configuration=Debug /p:Platform="AnyCPU" /p:GamePath="!GAME_PATH!" /p:UseSharedCompilation=false /nr:false /t:Restore /v:minimal /nologo
 
     echo [INFO] Building project via MSBuild...
-    "!MSBUILD_PATH!" "!SOLUTION_PATH!" /p:Configuration=Debug /p:Platform="Any CPU" /p:GamePath="!GAME_PATH!" /p:UseSharedCompilation=false /nr:false /t:Build /v:minimal /nologo
+    "!MSBUILD_PATH!" "!SOLUTION_PATH!" /p:Configuration=Debug /p:Platform="AnyCPU" /p:GamePath="!GAME_PATH!" /p:UseSharedCompilation=false /nr:false /t:Build /v:minimal /nologo
 ) else (
     echo [WARN] MSBuild not found. Falling back to dotnet build.
     dotnet restore "!SOLUTION_PATH!" -v minimal
@@ -87,16 +88,10 @@ if exist "!SOURCE_DLL!" (
     set "SELECTED_SOURCE_DLL=!SOURCE_DLL!"
 )
 
-if exist "!SOURCE_DLL_ALT!" (
-    if defined SELECTED_SOURCE_DLL (
-        for %%A in ("!SELECTED_SOURCE_DLL!") do set "SELECTED_TIME=%%~tA"
-        for %%B in ("!SOURCE_DLL_ALT!") do set "ALT_TIME=%%~tB"
-        if "!ALT_TIME!" GTR "!SELECTED_TIME!" (
-            set "SELECTED_SOURCE_DLL=!SOURCE_DLL_ALT!"
-        )
-    ) else (
-        set "SELECTED_SOURCE_DLL=!SOURCE_DLL_ALT!"
-    )
+:: Building with Platform="AnyCPU" puts the DLL in bin\Debug\net6.0.
+:: The old "Any CPU" output folder is only a fallback (no more locale-dependent timestamp string compare).
+if not defined SELECTED_SOURCE_DLL if exist "!SOURCE_DLL_ALT!" (
+    set "SELECTED_SOURCE_DLL=!SOURCE_DLL_ALT!"
 )
 
 if not defined SELECTED_SOURCE_DLL (

@@ -15,8 +15,14 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class TrackRecordSaveGuardPatch
         {
-            private static IEnumerable<MethodBase> TargetMethods() => ResolveOptionalTargetMethods(
-                new PatchSpec("Il2CppStargazer.UserDataLoader+INNER_TrackRecordModule", "SaveTrackRecord", 1, "ITravelResultData"));
+            private static readonly List<MethodBase> Targets = new List<MethodBase>();
+
+            private static bool Prepare() => PrepareTargets(Targets, "SaveGuard", new[]
+            {
+                new PatchSpec("Il2CppStargazer.UserDataLoader+INNER_TrackRecordModule", "SaveTrackRecord", 1, "ITravelResultData"),
+            });
+
+            private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
             // false를 반환하면 원본 저장 로직을 건너뛴다. 판정이 애매하면(예외 등) 항상 true로
             // 원본 동작(=저장)을 그대로 둔다 — 공식 트랙 저장까지 막아버리는 쪽이 더 위험하다.

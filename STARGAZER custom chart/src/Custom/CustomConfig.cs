@@ -24,7 +24,12 @@ namespace STARGAZER_custom_chart
         private static readonly ConfigEntry[] Entries =
         {
             new ConfigEntry("autoplay", "false",
-                "오토플레이 강제 사용 여부 (true = 자동 연주, false = 직접 플레이)"),
+                "커스텀 곡 오토플레이 사용 여부 (true = 자동 연주, false = 직접 플레이)",
+                "공식곡에는 적용되지 않습니다(공식곡 기록 보호)."),
+
+            new ConfigEntry("CompressBgmInMemory", "1",
+                "커스텀 음원을 압축(Vorbis) 상태로 메모리에 둠 (1 = 켜짐, 메모리 절약 / 0 = 꺼짐, 풀어서 로드)",
+                "음원 싱크나 재생이 이상하면 0으로 바꿔 보세요."),
 
             new ConfigEntry("NoteSway", "0",
                 "노트가 눈송이처럼 좌우로 흔들리며 내려오는 연출 (1 = 켜짐, 0 = 꺼짐)",
@@ -51,7 +56,9 @@ namespace STARGAZER_custom_chart
         };
 
         private static bool _loaded;
-        private static bool _autoPlay = true;
+        // 필드 기본값은 Entries의 기본값과 같아야 한다 — 파일을 못 읽었을 때도 파일이 있을 때와 똑같이 동작하도록.
+        private static bool _autoPlay;
+        private static bool _compressBgmInMemory = true;
         private static bool _noteSway;
         private static float _noteSwayAmplitude = 20f;
         private static float _noteSwaySpeed = 0.8f;
@@ -62,13 +69,22 @@ namespace STARGAZER_custom_chart
         private static float _noteSpeedChaosMax = 1.8f;
         private static bool _noteSpeedChaosPerLane = true;
 
-        // 기본값 true는 기존 동작(오토플레이 강제)과 같다. config.txt가 생기면 그 값이 우선한다.
+        // 커스텀 곡을 오토플레이로 돌릴지(기본 false). 공식곡에는 적용하지 않는다(HookInvocationSupport 참고).
         public static bool AutoPlay
         {
             get
             {
                 EnsureLoaded();
                 return _autoPlay;
+            }
+        }
+
+        public static bool CompressBgmInMemory
+        {
+            get
+            {
+                EnsureLoaded();
+                return _compressBgmInMemory;
             }
         }
 
@@ -189,6 +205,7 @@ namespace STARGAZER_custom_chart
                 AppendMissingEntries(values);
 
                 _autoPlay = ReadBool(values, "autoplay", _autoPlay);
+                _compressBgmInMemory = ReadBool(values, "CompressBgmInMemory", _compressBgmInMemory);
 
                 _noteSway = ReadBool(values, "NoteSway", _noteSway);
                 _noteSwayAmplitude = Math.Max(0f, ReadFloat(values, "NoteSwayAmplitude", _noteSwayAmplitude));
@@ -202,7 +219,7 @@ namespace STARGAZER_custom_chart
                 _noteSpeedChaosPerLane = ReadBool(values, "NoteSpeedChaosPerLane", _noteSpeedChaosPerLane);
                 NormalizeSpeedChaosRange();
 
-                MelonLogger.Msg($"[Config] autoplay={_autoPlay}");
+                MelonLogger.Msg($"[Config] autoplay={_autoPlay} CompressBgmInMemory={_compressBgmInMemory}");
                 MelonLogger.Msg($"[Config] NoteSway={_noteSway} amplitude={_noteSwayAmplitude} speed={_noteSwaySpeed} damping={_noteSwayDamping}/{_noteSwayDampingTime}s");
                 MelonLogger.Msg($"[Config] NoteSpeedChaos={_noteSpeedChaos} range={_noteSpeedChaosMin}~{_noteSpeedChaosMax} perLane={_noteSpeedChaosPerLane}");
             }

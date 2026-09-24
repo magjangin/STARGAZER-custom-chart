@@ -12,8 +12,8 @@ namespace STARGAZER_custom_chart
     {
         // INNER_TrackData.LoadJacketSprite(Action<Sprite>)는 LoadBGMClip/LoadPreviewClip과
         // 시그니처가 동일한 트랙별 콜백 로더다(decompiled/Assembly-CSharp/Il2CppStargazer/TrackLoader.cs).
-        // 뼈대 단계라 트랙별 개별 이미지 매핑은 아직 없고, IsCustomChartTrack(객체 동일성 기준)으로 식별된
-        // 커스텀 트랙 전체에 hwa/ 폴더의 이미지 파일 하나를 공용으로 서빙한다 — BGM 서빙과 동일한 수준.
+        // TryGetAlbumForTrack(객체 동일성 기준)으로 어느 앨범(hwa 하위 폴더)의 트랙인지 찾아
+        // 그 앨범의 자켓 이미지를 서빙한다 — BGM 서빙과 같은 방식.
         private static readonly Dictionary<string, Sprite> CustomJacketCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
 
         private static Sprite? LoadCustomJacketSprite(string filePath)
@@ -76,22 +76,14 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class CustomJacketLoaderPatch
         {
-            private static IEnumerable<MethodBase> TargetMethods()
-            {
-                Type? trackDataType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
-                if (trackDataType is null)
-                {
-                    MelonLogger.Warning("[CustomJacket] Il2CppStargazer.TrackLoader+INNER_TrackData 타입을 찾지 못했습니다.");
-                    yield break;
-                }
+            private static readonly List<MethodBase> Targets = new List<MethodBase>();
 
-                MethodInfo? loadJacket = trackDataType.GetMethod("LoadJacketSprite", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (loadJacket is not null)
-                {
-                    MelonLogger.Msg($"[CustomJacket] Found target LoadJacketSprite: {loadJacket.DeclaringType?.FullName}.{loadJacket.Name}");
-                    yield return loadJacket;
-                }
-            }
+            private static bool Prepare() => PrepareTargets(Targets, "CustomJacket", new[]
+            {
+                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadJacketSprite", 1, "Action"),
+            });
+
+            private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
             private static bool Prefix(object __instance, object[] __args)
             {
@@ -101,11 +93,6 @@ namespace STARGAZER_custom_chart
                     {
                         return true;
                     }
-
-                    Type t = __instance.GetType();
-                    string displayName = TryGetMemberValue(__instance, t, "TrackDisplayName")?.ToString()
-                        ?? TryGetMemberValue(__instance, t, "TrackDisplayNameEN")?.ToString()
-                        ?? string.Empty;
 
                     // 공식 트랙에 커스텀 커버가 들어가지 않도록, 우리가 주입한 객체인지로만 판별한다.
                     // (TrackID는 복제 원본인 공식 "Starting Point"와 동일해서 구분 기준이 될 수 없다.)
@@ -123,7 +110,7 @@ namespace STARGAZER_custom_chart
                         return true;
                     }
 
-                    MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{displayName}': {path}");
+                    MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{album.DisplayName}': {path}");
                     InvokeActionOfSprite(__args[0], sprite);
                     return false;
                 }

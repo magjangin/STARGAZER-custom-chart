@@ -13,9 +13,7 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class NoteMotionPatches
         {
-            // TargetMethods가 빈 목록을 돌려주면 Harmony가 어트리뷰트에서 대상을 찾으려다
-            // "Undefined target method"로 던진다. 그래서 대상 해석은 Prepare에서 끝내고,
-            // 하나도 못 찾으면 패치 자체를 건너뛴다.
+            // 대상 해석은 Prepare에서 끝낸다(PrepareTargets 주석 참고).
             private static readonly List<MethodBase> ResolvedTargets = new List<MethodBase>();
 
             private static bool Prepare()
@@ -34,32 +32,11 @@ namespace STARGAZER_custom_chart
                 // 롱노트는 Behaviour를 따로 override하므로 두 타입 모두 잡는다.
                 // override가 base.Behaviour를 부르면 한 프레임에 두 번 들어오는데,
                 // ApplyNoteMotion의 프레임 가드가 두 번째 호출을 걸러 낸다.
-                var specs = new[]
+                return PrepareTargets(ResolvedTargets, "NoteMotion", new[]
                 {
                     new PatchSpec("Il2CppStargazer.Play.StargazerNote", "Behaviour", 1, "Single"),
                     new PatchSpec("Il2CppStargazer.Play.StargazerLongNote", "Behaviour", 1, "Single"),
-                };
-
-                foreach (PatchSpec spec in specs)
-                {
-                    MethodInfo? target = ResolveTargetMethod(spec);
-                    if (target is null)
-                    {
-                        MelonLogger.Warning($"[NoteMotion] 대상을 찾지 못했습니다: {spec.TypeName}.{spec.MethodName}");
-                        continue;
-                    }
-
-                    MelonLogger.Msg($"[NoteMotion] 훅 대상: {target.DeclaringType?.FullName}.{target.Name}");
-                    ResolvedTargets.Add(target);
-                }
-
-                if (ResolvedTargets.Count == 0)
-                {
-                    MelonLogger.Warning("[NoteMotion] 노트 타입을 하나도 찾지 못해 연출을 켜지 못했습니다.");
-                    return false;
-                }
-
-                return true;
+                });
             }
 
             private static IEnumerable<MethodBase> TargetMethods() => ResolvedTargets;

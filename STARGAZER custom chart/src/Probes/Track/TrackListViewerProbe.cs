@@ -8,47 +8,6 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        // tracklist setter의 arg0 = List<ITrackData> 를 직접 받아 열거
-        private static void DumpTrackListViewerTracks(object tracklist)
-        {
-            try
-            {
-                var items = EnumerateCollectionItems(tracklist, 1024).ToList();
-                if (items.Count == 0)
-                {
-                    MelonLogger.Warning("[TrackList] tracklist가 비어 있습니다.");
-                    return;
-                }
-
-                MelonLogger.Msg($"[TrackList] ===== 전체 트랙 목록 ({items.Count}개) =====");
-                int idx = 1;
-                foreach (object? item in items)
-                {
-                    if (item is null) { MelonLogger.Msg($"  [{idx++:D3}] null"); continue; }
-
-                    Type t = item.GetType();
-                    string id            = TryGetMemberValue(item, t, "TrackID")?.ToString() ?? "?";
-                    string title         = TryGetMemberValue(item, t, "TrackDisplayName")?.ToString()
-                                           ?? TryGetMemberValue(item, t, "TrackDisplayNameEN")?.ToString()
-                                           ?? "?";
-                    string artist        = TryGetMemberValue(item, t, "ArtistDisplayName")?.ToString() ?? "?";
-                    string order         = TryGetMemberValue(item, t, "order")?.ToString() ?? "?";
-                    string bundle        = TryGetMemberValue(item, t, "BundleID")?.ToString() ?? "?";
-                    string episode       = TryGetMemberValue(item, t, "EpisodeID")?.ToString() ?? "?";
-                    string isUnlocked    = TryGetMemberValue(item, t, "IsUnlocked")?.ToString() ?? "?";
-                    string lockType      = TryGetMemberValue(item, t, "LockType")?.ToString() ?? "?";
-
-                    MelonLogger.Msg($"  [{idx++:D3}] id={id} order={order} unlocked={isUnlocked} lock={lockType} | {title} / {artist} | bundle={bundle} ep={episode}");
-                }
-                MelonLogger.Msg($"[TrackList] ===== 끝 =====");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[TrackList] DumpTrackListViewerTracks 실패: {ex.Message}");
-            }
-        }
-
-
         private static object? _lastSelectedTrack;
 
         private static void HandleTrackListViewerMoveCursor(object? instance, object[] args)
@@ -57,7 +16,6 @@ namespace STARGAZER_custom_chart
             try
             {
                 int delta = args.Length > 0 && args[0] is int d ? d : 0;
-                MelonLogger.Msg($"[TrackListViewer.MoveCursor] delta={delta}");
 
                 Type type = instance.GetType();
                 BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -128,17 +86,18 @@ namespace STARGAZER_custom_chart
                                    ?? "?";
                     string artist = TryGetMemberValue(trackObj, t, "ArtistDisplayName")?.ToString() ?? "?";
 
-                    MelonLogger.Msg($"[TrackSelection] === Selected Track changed! ===");
-                    MelonLogger.Msg($"[TrackSelection] Title  : {title}");
-                    MelonLogger.Msg($"[TrackSelection] Artist : {artist}");
-                    MelonLogger.Msg($"[TrackSelection] ID     : {id}");
-                    MelonLogger.Msg($"[TrackSelection] Type   : {t.FullName}");
-                    MelonLogger.Msg($"[TrackSelection] ===============================");
+                    // 커서를 옮길 때마다 불리므로 한 줄로만 남긴다(예전엔 7줄씩 찍혀 곡 목록을 훑으면 로그가 폭주했다).
+                    MelonLogger.Msg($"[TrackSelection] delta={delta} title={title} artist={artist} id={id} custom={IsCustomChartTrack(trackObj)}");
                 }
                 else
                 {
-                    // 대체: 찾을 수 있는 null이 아닌 멤버를 모두 나열합니다.
-                    MelonLogger.Msg("[TrackListViewer.MoveCursor] 선택된 트랙을 확인하지 못했습니다. 멤버를 덤프합니다:");
+                    // 대체: 찾을 수 있는 null이 아닌 멤버를 모두 나열합니다. 커서 이동마다 반복되지 않게 한 번만.
+                    if (!LogOnce("TrackListViewer.MoveCursor.memberDump"))
+                    {
+                        return;
+                    }
+
+                    MelonLogger.Msg("[TrackListViewer.MoveCursor] 선택된 트랙을 확인하지 못했습니다. 멤버를 덤프합니다(처음 1회만):");
                     foreach (var field in type.GetFields(flags))
                     {
                         try

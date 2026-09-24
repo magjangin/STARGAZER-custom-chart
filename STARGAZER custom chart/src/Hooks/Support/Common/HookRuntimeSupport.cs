@@ -27,14 +27,6 @@ namespace STARGAZER_custom_chart
 
         private static readonly HashSet<string> LoggedCurrentTrackViewerImageHits = new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<string> LoggedResultImageHits = new HashSet<string>(StringComparer.Ordinal);
-        private static readonly HashSet<string> SuppressedInvocationMethods = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "Il2CppStargazer.Play.PlayerBase.SetupPlay",
-            "Il2CppStargazer.Play.TravelPlayer.SetupPlay",
-            "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker",
-            // PlaySFX는 HandlePlaySFX (IsInPlayScene 가드 포함)에서만 출력
-            "Il2CppStarlike.Sound.SoundPlayer.PlaySFX",
-        };
         private static readonly object InvocationLogThrottleLock = new object();
         private static readonly Dictionary<string, InvocationLogThrottleEntry> InvocationLogThrottleMap = new Dictionary<string, InvocationLogThrottleEntry>(StringComparer.Ordinal);
         private static readonly HashSet<string> TrackLoaderCallbackPatchedMethods = new HashSet<string>(StringComparer.Ordinal);
@@ -53,29 +45,15 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Travel.Result.PlayInfoViewer.ShowPlayInfo",
             "Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchJacektImage",
         };
+        // 메서드별로 1초에 최대 3줄(PRE와 POST가 같은 한도를 나눠 쓴다).
         private const int InvocationLogWindowMs = 1000;
         private const int InvocationLogMaxPerWindow = 3;
-        // savecustomkey/config.txt의 autoplay 값으로 제어한다. 파일이 없으면 기본 true(기존 동작).
+        // savecustomkey/config.txt의 autoplay 값으로 제어한다(기본 false). 커스텀 곡에만 적용된다.
         private static bool EnableForceAutoPlayAtPlayerBasePlay => CustomConfig.AutoPlay;
         private static bool PlayerBaseJacketLogged;
         private static bool TrackLoaderListLogged;
         private static bool IsInPlayScene;
         private static bool IsCustomChartPlayActive;
-
-        private void TryApplyHarmonyAttributePatches(string phase)
-        {
-            if (_hooksPatchAttempted)
-            {
-                LoggerInstance.Msg($"[HookPatch][{phase}] skip patching (already attempted, appliedAll={_hooksApplied}).");
-                return;
-            }
-
-            _hooksPatchAttempted = true;
-            MelonLogger.Msg($"[HookPatch][{phase}] begin patching. mode=harmony-attributes");
-            RuntimeHarmonyInstance.PatchAll(typeof(GameTypeEnumeratorMod).Assembly);
-            _hooksApplied = true;
-            LoggerInstance.Msg($"[HookPatch][{phase}] patch summary: appliedAll={_hooksApplied}");
-        }
 
         private sealed class InvocationLogThrottleEntry
         {

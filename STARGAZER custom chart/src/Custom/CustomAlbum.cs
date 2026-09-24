@@ -36,8 +36,20 @@ namespace STARGAZER_custom_chart
         public string DisplayName => string.IsNullOrEmpty(Info?.Title) ? Name : Info!.Title!;
         public string Artist => string.IsNullOrEmpty(Info?.Artist) ? "화영왕" : Info!.Artist!;
 
-        // 곡으로 인정하는 최소 조건: 차트나 음원 중 하나는 있어야 한다.
-        public bool IsPlayable => BmsPath is not null || MusicPath is not null;
+        // 곡으로 인정하는 조건: 차트와 음원이 둘 다 있어야 한다.
+        // 하나만 있으면 나머지는 복제 원본(Starting Point)의 것이 나와 차트와 음악이 어긋난다
+        // (음원만 있으면 Starting Point 채보로, 차트만 있으면 Starting Point 음악으로 플레이됨).
+        public bool IsPlayable => BmsPath is not null && MusicPath is not null;
+
+        public string MissingPartsDescription
+        {
+            get
+            {
+                if (BmsPath is null && MusicPath is null) return "차트(.bms)와 음원(.ogg) 없음";
+                if (BmsPath is null) return "차트(.bms) 없음";
+                return MusicPath is null ? "음원(.ogg) 없음" : "없음";
+            }
+        }
 
         public static CustomAlbum? TryLoad(string directoryPath)
         {

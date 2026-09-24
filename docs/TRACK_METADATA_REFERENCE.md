@@ -8,6 +8,10 @@
 
 아래 로그는 곡 선택 화면에서 `startingpoint` (오리지널 및 복제 주입본) 트랙의 내부 데이터에 접근할 때 감지되어 파싱된 실제 런타임 덤프 로그입니다.
 
+> 이 로그를 찍던 `[Accessor]` 게터 후킹(`get_TrackDisplayName` 등의 Postfix)은 지금 코드에 없습니다.
+> 표시명·작곡가는 이제 복제 시점에 `INNER_TrackMetaData`에 직접 씁니다(`ApplyStartingPointMetadataOverrides`).
+> 멤버 구조를 참고하는 용도로만 보세요. 같은 덤프가 다시 필요하면 `EnableTrackSelectorMetadataDump`를 켭니다.
+
 ```log
 [22:17:29.411] [STARGAZER custom chart] [Accessor][TrackDisplayName] trackId=startingpoint result=Starting Point
 [22:17:29.412] [STARGAZER custom chart] [TrackMetaDump] caller=Accessor.TrackDisplayNamePostfix metaType=Il2CppStargazer.TrackLoader+INNER_TrackMetaData id=startingpoint display=Starting Point displayEN=? bundle=<none> episode=<none>
