@@ -41,34 +41,39 @@ namespace STARGAZER_custom_chart
                 return result;
             }
 
+            string[] directories;
             try
             {
-                foreach (string dir in Directory.GetDirectories(root).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
-                {
-                    CustomAlbum? album = CustomAlbum.TryLoad(dir);
-                    if (album is null)
-                    {
-                        continue;
-                    }
-
-                    if (!album.IsPlayable)
-                    {
-                        MelonLogger.Warning($"[Album] 건너뜀(차트/음원 없음): {album.Name}");
-                        continue;
-                    }
-
-                    result.Add(album);
-                }
+                directories = Directory.GetDirectories(root);
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[Album] hwa 하위 폴더 스캔 실패: {ex.GetType().Name}: {ex.Message}");
+                directories = Array.Empty<string>();
             }
 
-            // 하위 폴더가 하나도 없으면 예전 방식(hwa 바로 아래에 파일을 두는 구성)으로 간주한다.
+            // 예외는 폴더마다 따로 잡는다. 한 폴더의 info.txt를 못 읽었다고 그 뒤 앨범까지 전부 빠지면 안 된다.
+            foreach (string dir in directories.OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+            {
+                CustomAlbum? album = TryLoadAlbum(dir);
+                if (album is null)
+                {
+                    continue;
+                }
+
+                if (!album.IsPlayable)
+                {
+                    MelonLogger.Warning($"[Album] 건너뜀(차트/음원 없음): {album.Name}");
+                    continue;
+                }
+
+                result.Add(album);
+            }
+
+            // 곡으로 인정된 하위 폴더가 하나도 없으면 예전 방식(hwa 바로 아래에 파일을 두는 구성)으로 간주한다.
             if (result.Count == 0)
             {
-                CustomAlbum? legacy = CustomAlbum.TryLoad(root);
+                CustomAlbum? legacy = TryLoadAlbum(root);
                 if (legacy is not null && legacy.IsPlayable)
                 {
                     MelonLogger.Msg("[Album] 하위 폴더가 없어 hwa 루트를 앨범 하나로 사용합니다.");
@@ -85,6 +90,19 @@ namespace STARGAZER_custom_chart
 
             MelonLogger.Msg($"[Album] 총 {result.Count}개 앨범을 찾았습니다.");
             return result;
+        }
+
+        private static CustomAlbum? TryLoadAlbum(string directoryPath)
+        {
+            try
+            {
+                return CustomAlbum.TryLoad(directoryPath);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[Album] 건너뜀(폴더 읽기 실패): {directoryPath}: {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
 
         private static string Describe(string? path) => path is null ? "<none>" : Path.GetFileName(path);

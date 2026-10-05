@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
-using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
@@ -10,21 +9,11 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class SoundInvocationPatches
         {
-            private static IEnumerable<MethodBase> TargetMethods()
-            {
-                foreach (PatchSpec spec in GetSoundInvocationPatchSpecs())
-                {
-                    MethodInfo? target = ResolveTargetMethod(spec);
-                    if (target is null)
-                    {
-                        MelonLogger.Warning($"[HookPatch][attr] target not found: {spec.TypeName}.{spec.MethodName}");
-                        continue;
-                    }
+            private static readonly List<MethodBase> Targets = new List<MethodBase>();
 
-                    MelonLogger.Msg($"[HookPatch][attr] target: {target.DeclaringType?.FullName}.{target.Name}");
-                    yield return target;
-                }
-            }
+            private static bool Prepare() => PrepareTargets(Targets, GetSoundInvocationPatchSpecs());
+
+            private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
             private static void Prefix(MethodBase __originalMethod, object? __instance, object[]? __args) => HookPrefix(__originalMethod, __instance, __args);
             private static void Postfix(MethodBase __originalMethod, object? __instance, object[]? __args) => HookPostfix(__originalMethod, __instance, __args);

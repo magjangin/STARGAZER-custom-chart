@@ -10,7 +10,8 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        // 이 프로젝트는 게임의 IL2CPP 인터롭 어셈블리(Il2CppStargazer.dll 등)를 참조하지 않는다
+        // 이 프로젝트는 게임의 IL2CPP 인터롭 어셈블리(Il2CppStargazer 네임스페이스가 든 Assembly-CSharp.dll,
+        // Il2CppMikazuki.dll 등)를 참조하지 않는다
         // (게임 버전마다 재생성되는 산출물이라 컴파일 타임 의존을 피함). 그래서 강타입 참조 대신
         // 문자열 타입명으로 타입을 찾는다 — 정상적인 모드였다면 `typeof(PlayerBase)`로 끝날 일이다.
         private static Type? FindType(string typeName)

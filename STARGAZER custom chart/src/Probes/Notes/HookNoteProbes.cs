@@ -206,7 +206,9 @@ namespace STARGAZER_custom_chart
             {
                 TryInjectBmsChart(keepChoice);
                 NoteWipeTestDone = true; // BMS 모드에서는 아래 오프셋 기반 실험 경로가 절대 안 돌게만 막는 용도.
-                LogNotesBeforeOperation(wipeContexts, "AfterOperation(BmsInject)");
+                // 주입 후 노트 로그는 남기지 않는다. wipeContexts는 Layer.Areas에서 빠진 원본 Area의
+                // 노트 목록이라, 다시 찍어도 새 차트가 아니라 버려진 원본 노트가 나온다.
+                // 주입 결과는 TryInjectBmsChart의 "[BmsInject] 완료" 로그로 확인한다.
                 return;
             }
 

@@ -51,7 +51,7 @@ namespace STARGAZER_custom_chart
         };
 
         private static bool _loaded;
-        private static bool _autoPlay = true;
+        private static bool _autoPlay;
         private static bool _noteSway;
         private static float _noteSwayAmplitude = 20f;
         private static float _noteSwaySpeed = 0.8f;
@@ -62,7 +62,8 @@ namespace STARGAZER_custom_chart
         private static float _noteSpeedChaosMax = 1.8f;
         private static bool _noteSpeedChaosPerLane = true;
 
-        // 기본값 true는 기존 동작(오토플레이 강제)과 같다. config.txt가 생기면 그 값이 우선한다.
+        // 기본값 false는 config.txt를 새로 만들 때 쓰는 값(Entries의 "autoplay")과 같다.
+        // 파일을 못 읽거나 값을 해석하지 못해도 오토플레이가 멋대로 켜지지 않게 맞춰 둔다.
         public static bool AutoPlay
         {
             get

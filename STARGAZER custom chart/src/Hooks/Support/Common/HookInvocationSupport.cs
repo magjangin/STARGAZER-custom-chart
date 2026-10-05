@@ -118,7 +118,9 @@ namespace STARGAZER_custom_chart
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "_Load_b__5_0", StringComparison.Ordinal))
                 {
-                    if (EnableRuntimeProbeLogging)
+                    // BMS 차트 주입도 ProbeNoteArrayMembers 안에서 일어난다. 로그 플래그만 보고 막으면
+                    // 로그를 끄는 순간 커스텀 곡이 조용히 원본 차트로 나오므로, 커스텀 곡일 때는 항상 부른다.
+                    if (EnableRuntimeProbeLogging || IsCustomChartPlayActive)
                     {
                         ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
                     }

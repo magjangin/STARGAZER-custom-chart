@@ -13,6 +13,7 @@ namespace STARGAZER_custom_chart
         // levelString을 바꾸면 패턴 에셋 로딩이 멈추기 때문이다
         // (ExperimentChartSettings.EnableTrackLevelOverride 주석의 실측 근거 참고).
         // 게임 자체의 세터인 LevelItem.FetchLevelText(string)를 호출해 원본 서식을 그대로 유지한다.
+
         // ELevels 선언 순서. 이름으로 난이도를 못 알아낼 때의 폴백.
         private static readonly string[] LevelOrderFallback = { "Cosmic", "Stellar", "Void" };
 

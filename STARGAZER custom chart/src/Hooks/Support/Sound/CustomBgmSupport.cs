@@ -278,30 +278,15 @@ namespace STARGAZER_custom_chart
         [HarmonyPatch]
         private static class CustomBgmLoaderPatch
         {
-            private static IEnumerable<MethodBase> TargetMethods()
-            {
-                Type? trackDataType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
-                if (trackDataType != null)
-                {
-                    MethodInfo? loadBgm = trackDataType.GetMethod("LoadBGMClip", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadBgm != null)
-                    {
-                        MelonLogger.Msg($"[CustomBgm] Found target LoadBGMClip: {loadBgm.DeclaringType?.FullName}.{loadBgm.Name}");
-                        yield return loadBgm;
-                    }
+            private static readonly List<MethodBase> Targets = new List<MethodBase>();
 
-                    MethodInfo? loadPreview = trackDataType.GetMethod("LoadPreviewClip", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadPreview != null)
-                    {
-                        MelonLogger.Msg($"[CustomBgm] Found target LoadPreviewClip: {loadPreview.DeclaringType?.FullName}.{loadPreview.Name}");
-                        yield return loadPreview;
-                    }
-                }
-                else
-                {
-                    MelonLogger.Warning("[CustomBgm] Il2CppStargazer.TrackLoader+INNER_TrackData 타입을 찾지 못했습니다.");
-                }
-            }
+            private static bool Prepare() => PrepareTargets(Targets, new[]
+            {
+                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
+                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
+            });
+
+            private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
             private static bool Prefix(MethodBase __originalMethod, object __instance, object[] __args)
             {

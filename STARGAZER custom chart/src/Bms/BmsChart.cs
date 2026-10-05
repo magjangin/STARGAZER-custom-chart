@@ -5,7 +5,8 @@ using System.Linq;
 
 namespace STARGAZER_custom_chart
 {
-    // 순수 BMS 텍스트 파서. 게임/Harmony/Unity 의존성이 전혀 없어 독립적으로 검증 가능하다.
+    // BMS 텍스트 파서. 게임/Harmony/Unity 객체는 건드리지 않는다. 다만 중복 노트 억제 설정
+    // (ExperimentChartSettings)과 그 디버그 로그(MelonLogger)에는 의존한다.
     // 뼈대 단계 범위: 고정 BPM(#BPM 헤더 하나), 고정 4/4 마디 길이(채널 02 미지원).
     // 롱노트는 #WAV 파일명으로 구분한다(아래 BmsNoteKind 참고).
     internal enum BmsNoteKind
@@ -119,14 +120,11 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length > 4)
+                // 곡 BPM 헤더는 "#BPM 140" 형태만이다. "#BPM01 180"처럼 번호가 붙은 줄은 채널 08(BPM 변경)이
+                // 참조하는 정의라, 같이 읽으면 마지막 정의 값이 곡 전체 BPM을 덮어쓴다.
+                if (line.Length > 4 && line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && char.IsWhiteSpace(line[4]))
                 {
                     string valueStr = line.Substring(4).Trim();
-                    int spaceIdx = valueStr.IndexOf(' ');
-                    if (spaceIdx > 0)
-                    {
-                        valueStr = valueStr.Substring(spaceIdx + 1).Trim();
-                    }
 
                     if (double.TryParse(valueStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedBpm) && parsedBpm > 0)
                     {
