@@ -129,10 +129,12 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 
 ### 훅 지점
 
-| 대상 | 시점 | 하는 일 |
-| --- | --- | --- |
-| `StargazerNote.Behaviour(Single)` | Prefix | 지난 프레임에 우리가 얹은 오프셋을 되돌려 게임에 원래 위치를 돌려준다 |
-| `StargazerLongNote.Behaviour(Single)` | Postfix | 게임이 계산한 위치를 기준으로 오프셋을 다시 얹는다 |
+대상은 `StargazerNote.Behaviour(Single)`와 `StargazerLongNote.Behaviour(Single)` 두 개이며, **둘 다** Prefix와 Postfix를 겁니다.
+
+| 시점 | 하는 일 |
+| --- | --- |
+| Prefix | 지난 프레임에 우리가 얹은 오프셋을 되돌려 게임에 원래 위치를 돌려준다 |
+| Postfix | 게임이 계산한 위치를 기준으로 오프셋을 다시 얹는다 |
 
 - 인자 `deltatime`은 **판정선까지 남은 초**입니다(`NoteObjectBase.OnUpdate`가 `Timing - 현재시각`을 넘김).
   판정선을 지나면 음수가 됩니다. 흔들림 감쇠가 이 값을 씁니다.
@@ -145,6 +147,7 @@ Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
 
 > `TargetMethods()`가 **빈 목록**을 돌려주면 Harmony가 어트리뷰트에서 대상을 찾으려다
 > `"Undefined target method"`로 던집니다. 조건부 패치는 반드시 `Prepare()`로 막아야 합니다.
+> 이 규칙은 노트 연출만이 아니라 **모든 패치 클래스**에 적용됩니다 — 아래 [패치 대상 해석](#패치-대상-해석) 참고.
 
 ### 속도 카오스 — 진행 방향은 직접 잰다
 
@@ -188,6 +191,41 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
   파괴적 작업이라 주입 함수 안에서도 한 번 더 확인합니다.
 - 곡 재시작마다 패턴이 새로 로드되므로 **매번 다시 주입해야 합니다.**
   "한 번만 실행" 가드에 묶으면 재시작 시 원본 차트가 나옵니다.
+- 주입은 노트 프로브(`ProbeNoteArrayMembers`) 안에서 일어나지만 **로그 설정과 무관하게** 돕니다.
+  `EnableRuntimeProbeLogging`이 꺼져 있어도 커스텀 곡(`IsCustomChartPlayActive`)이면 프로브를 부릅니다.
+- 앨범에 `.bms`가 없으면 주입을 건너뛰어 **Starting Point 원본 차트**가 그대로 나옵니다.
+
+## 기록 저장 차단
+
+커스텀 트랙은 `TrackID`가 Starting Point와 같아서, 결과를 그대로 저장하면 **공식 Starting Point 기록을 덮어씁니다.**
+
+| 훅 | 방식 |
+| --- | --- |
+| `UserDataLoader+INNER_TrackRecordModule.SaveTrackRecord(ITravelResultData)` | Prefix에서 `PlayData.PlayTrack`이 우리가 주입한 객체면 `return false`로 저장을 건너뜀 |
+
+판정 중 예외가 나면 `return true`로 원본 저장을 그대로 둡니다. 공식 곡 저장까지 막는 쪽이 더 위험하기 때문입니다.
+구현: [`src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs)
+
+> **확인 필요.** 막는 것은 `SaveTrackRecord` 하나뿐입니다. 결과 화면의 `ResultViewer.UpdateStatistics(ITravelResultData)`,
+> `ResultViewer.CheckAchievement()`는 건드리지 않으므로, 커스텀 곡 플레이가 Starting Point 통계나 도전과제로
+> 집계되는지는 아직 확인하지 않았습니다.
+
+## 패치 대상 해석
+
+모든 `[HarmonyPatch]` 클래스는 대상 메서드를 `Prepare()`에서 찾습니다
+([`PatchTargetSupport.PrepareTargets`](../STARGAZER%20custom%20chart/src/Hooks/Support/Common/PatchTargetSupport.cs)).
+
+```csharp
+private static readonly List<MethodBase> Targets = new List<MethodBase>();
+private static bool Prepare() => PrepareTargets(Targets, specs);
+private static IEnumerable<MethodBase> TargetMethods() => Targets;
+```
+
+- 대상을 하나도 못 찾으면 `Prepare()`가 `false`를 돌려줘 **그 클래스만** 건너뜁니다(로그에 `target not found`).
+- `TargetMethods()`가 빈 목록을 돌려주는 방식은 안 됩니다. Harmony가 `"Undefined target method"`로 던지고,
+  MelonLoader의 `PatchAll`이 그 자리에서 멈춰 **나머지 훅이 전부 안 걸립니다.**
+  게임 업데이트로 로그용 훅 하나만 사라져도 세이브 보호·음원·자켓 훅까지 같이 죽는다는 뜻입니다.
+- `Prepare()`는 클래스 단위로 한 번, 대상마다 한 번씩 더 불리므로 찾은 결과를 `Targets`에 담아 재사용합니다.
 
 ## 기타 실측 메모
 

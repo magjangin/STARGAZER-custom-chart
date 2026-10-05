@@ -13,21 +13,28 @@
 
 ## ✨ 주요 기능 (Key Features)
 
-### 🏷️ 트랙 정보 동적 오버라이드 (Track Info Overrides)
-* 게임의 트랙 메타데이터 및 디스플레이 명칭 로직을 실시간으로 Harmony 후킹합니다.
-* `TrackDisplayName`, `TrackDisplayNameEN`, `displayName` 등의 Property를 동적으로 감지하고 커스텀 차트에 걸맞은 이름으로 오버라이드합니다.
+### 🎵 커스텀 곡 추가 (Custom Albums)
+* 게임 폴더의 `hwa/` 아래 폴더 하나가 곡 하나가 됩니다. 공식 곡 "Starting Point"를 폴더 수만큼 복제해 곡 목록 맨 앞에 넣습니다.
+* 제목·아티스트(`info.txt`), 자켓, 음원·프리뷰(`.ogg`)를 폴더 내용으로 바꿉니다. 난이도 숫자는 화면 표시만 바꿉니다.
 
-### 🤖 오토플레이 강제 제어 (Force AutoPlay)
-* 플레이 시작 단계(`PlayerBase.Play`)의 `PRE` 훅에서 `IsAutoPlay` 값을 강제로 설정하여 안정적인 오토플레이 구동을 지원합니다.
-* 오토플레이 제어와 판정 축을 독립적으로 운영하여 로직 충돌을 방지합니다.
+### 🎼 BMS 차트 주입 (BMS Chart Injection)
+* 커스텀 곡을 플레이하면 패턴이 로드된 직후 차트 전체를 폴더의 `.bms` 내용으로 교체합니다.
+* BMS 마디 하나를 게임의 `Area` 하나로, 마디 안 위치를 `BeatInfo` 분수로 그대로 옮깁니다.
+
+### 💾 기록 보호 (Save Guard)
+* 커스텀 곡은 Starting Point의 복제본이라 TrackID가 같습니다. 그대로 저장하면 공식 Starting Point 기록을 덮어쓰므로 커스텀 곡의 기록 저장을 막습니다.
+
+### ⚙️ 설정 (`savecustomkey/config.txt`)
+* 오토플레이(`PlayerBase.Play` 진입 시 `IsAutoPlay` 설정)와 노트 연출(흔들림, 낙하 속도 카오스)을 켜고 끌 수 있습니다.
+* 노트 연출은 그려지는 위치만 바꾸며 판정·점수에는 영향이 없습니다.
 
 ### 🔍 자켓 및 UI 탐색기 (Jacket & UI Probing)
 * `CurrentTrackViewer`, `Result.PlayInfoViewer` 등의 인게임 UI 컴포넌트를 관측합니다.
 * 트랜스폼 경로(Transform Path), 게임 오브젝트 이름 및 연결된 자켓 이미지를 스냅샷 형태로 분석하고 로깅합니다.
 
-### ⏱️ 지능형 로깅 스로틀링 (Log Throttling)
-* 고주파(High-frequency)로 호출되는 후킹 지점의 로그 과다 발생을 방지하기 위한 스로틀링(Throttling) 메커니즘이 내장되어 있습니다.
-* 1초에 최대 6회 호출로 제한하여 성능 부하와 로그 크기를 최적화합니다.
+### ⏱️ 로그 스로틀링 (Log Throttling)
+* 자주 불리는 후킹 지점의 로그가 쌓이지 않도록, 같은 메서드의 PRE/POST 로그를 합쳐 1초에 최대 3줄까지만 남깁니다
+  (`HookRuntimeSupport.cs`의 `InvocationLogMaxPerWindow`).
 
 ---
 
@@ -35,22 +42,27 @@
 
 ```text
 STARGAZER custom chart/
-├── STARGAZER custom chart.slnx          # Visual Studio 2022 최신 솔루션 파일
-├── .gitignore                           # 빌드 산출물 및 VS 설정 무시
+├── STARGAZER custom chart.slnx          # Visual Studio 솔루션 파일
+├── .gitignore                           # 빌드 산출물, VS 설정, decompiled/ 제외
 ├── README.md                            # 본 문서
+├── build.bat                            # 모드 빌드 및 Mods 폴더 배포 스크립트
 ├── scripts/
-│   └── build_mod.bat                    # 모드 빌드 및 Mods 폴더 자동 배포 스크립트
-├── docs/
-│   ├── WORKLOG_...                      # 개발/안정화 및 분석 일지
-│   └── TODAY_WORK_...                   # 일일 작업 일지 및 로드맵
+│   ├── build_mod.bat                    # 모드 빌드 및 Mods 폴더 배포 스크립트
+│   ├── decompile.ps1                    # 게임 어셈블리를 decompiled/로 디컴파일
+│   └── strip_bodies.py                  # 디컴파일 결과에서 시그니처만 추출 (decompile.ps1이 호출)
+├── docs/                                # 문서 (목록과 분류는 docs/README.md)
 └── STARGAZER custom chart/
-    ├── STARGAZER custom chart.csproj    # C# 프로젝트 파일
+    ├── STARGAZER custom chart.csproj    # C# 프로젝트 파일 (빌드 후 게임 Mods 폴더로 자동 복사)
     ├── Properties/                      # 어셈블리 정보
     └── src/                             # 소스 코드
         ├── Core/                        # 모드 진입점 (MelonMod 상속)
-        ├── Hooks/                       # 주요 Harmony 패치 및 오토 플레이 제어
-        ├── Overrides/                   # 트랙 표시 명칭 등 데이터 오버라이드
-        └── Probes/                      # 노트 런타임 탐색 및 자켓 스냅샷
+        ├── Custom/                      # hwa 앨범 스캔, info.txt / config.txt 파서
+        ├── Bms/                         # BMS 파서
+        ├── Hooks/
+        │   ├── Patches/                 # Harmony 패치 클래스
+        │   └── Support/                 # 패치가 호출하는 처리 (트랙 주입, 자켓·음원, 난이도 표시, 노트 연출 등)
+        ├── Probes/                      # 런타임 탐색 로그, BMS 차트 주입 (Probes/Notes)
+        └── Diagnostics/                 # 타입 덤프 유틸
 ```
 
 ---
@@ -64,6 +76,9 @@ STARGAZER custom chart/
 ### 💻 빌드 및 배포 방법
 1. Visual Studio를 통해 `STARGAZER custom chart.slnx` 솔루션을 엽니다.
 2. 빌드를 실행하거나, `scripts/build_mod.bat` 스크립트를 사용하여 최신 빌드된 DLL 파일을 게임 디렉토리 내 `Mods/` 폴더에 자동으로 복사해 배포할 수 있습니다.
+
+빌드에는 게임 폴더의 `MelonLoader/Il2CppAssemblies/`(MelonLoader가 게임 실행 시 생성하는 인터롭 DLL)가 필요합니다.
+이 폴더가 없으면 게임을 MelonLoader와 함께 한 번 실행한 뒤 빌드하세요.
 
 ---
 

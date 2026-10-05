@@ -13,7 +13,8 @@
 - `src/Hooks/Support/TrackSelector/TrackSelectorCloningSupport.cs` — Il2Cpp 객체 복제 및 `Pointer` 비교
 - `src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs` — `IntPtr` 생성자 시도 및 컬렉션 주입
 - `src/Hooks/Support/Sound/CustomBgmSupport.cs` — `AudioClip`의 포인터 기술 및 Unity 네이티브 핸들 접근
-- `src/Hooks/Support/Sound/SoundHookSupport.cs` — `PlayBGM`/`PlaySFX` 오버로드 패치(매니지드 레벨)
+- `src/Hooks/Support/Sound/SoundHookSupport.cs` — `PlaySFX` 오버로드 목록 덤프와 호출 로깅(패치 자체는 `src/Hooks/Patches/Sound/SoundInvocationPatches.cs`, 매니지드 레벨)
+- `src/Hooks/Support/Play/NoteMotionSupport.cs` — `Il2CppObjectBase.Pointer`를 노트별 상태 키로 사용
 
 간단한 기술적 정정
 - "Pointer/IntPtr 사용" = 네이티브 훅 아님: IL2CPP 래퍼가 네이티브 핸들을 보관하거나 표시하기 위해 `IntPtr`을 제공할 수 있습니다. 이는 네이티브 메모리 패치나 P/Invoke 선언을 포함하지 않습니다.
@@ -22,5 +23,3 @@
 권장 주의사항(문서용 짧은 안내)
 - 이 저장소를 검토하거나 확장할 때는 `DllImport`, `extern`, `SetWindowsHookEx`, `MinHook`, `Detours` 등의 존재 여부를 먼저 확인하세요. 현재 레포에는 해당 네이티브 훅 구현이 없습니다.
 - 네이티브 훅이 정말로 필요할 경우에는 별도의 네이티브 모듈(명확한 ABI, 버전 관리, 테스트 행렬)을 설계하고, 사전에 팀 합의 및 사용자 고지(안티치트 영향 등)를 수행하세요.
-
-문의가 있으면 이 문서에 코멘트로 남겨 주세요. 필요하면 이 문서를 기존 WORKLOG에 병합하거나 README에 요약본을 추가해 드리겠습니다.
