@@ -26,6 +26,9 @@ namespace STARGAZER_custom_chart
             new ConfigEntry("autoplay", "false",
                 "오토플레이 강제 사용 여부 (true = 자동 연주, false = 직접 플레이)"),
 
+            new ConfigEntry("AllPerfect", "true",
+                "올 퍼펙트 판정 모드 (true = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, false = 기본 판정)"),
+
             new ConfigEntry("NoteSway", "0",
                 "노트가 눈송이처럼 좌우로 흔들리며 내려오는 연출 (1 = 켜짐, 0 = 꺼짐)",
                 "판정에는 전혀 영향이 없는 순수 시각 효과입니다."),
@@ -52,6 +55,7 @@ namespace STARGAZER_custom_chart
 
         private static bool _loaded;
         private static bool _autoPlay;
+        private static bool _allPerfect = true;
         private static bool _noteSway;
         private static float _noteSwayAmplitude = 20f;
         private static float _noteSwaySpeed = 0.8f;
@@ -71,6 +75,16 @@ namespace STARGAZER_custom_chart
                 EnsureLoaded();
                 return _autoPlay;
             }
+        }
+
+        public static bool AllPerfect
+        {
+            get
+            {
+                EnsureLoaded();
+                return _allPerfect;
+            }
+            set => _allPerfect = value;
         }
 
         public static bool NoteSway
@@ -190,6 +204,7 @@ namespace STARGAZER_custom_chart
                 AppendMissingEntries(values);
 
                 _autoPlay = ReadBool(values, "autoplay", _autoPlay);
+                _allPerfect = ReadBool(values, "AllPerfect", _allPerfect);
 
                 _noteSway = ReadBool(values, "NoteSway", _noteSway);
                 _noteSwayAmplitude = Math.Max(0f, ReadFloat(values, "NoteSwayAmplitude", _noteSwayAmplitude));

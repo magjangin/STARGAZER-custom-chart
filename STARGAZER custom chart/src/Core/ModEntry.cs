@@ -34,11 +34,29 @@ namespace STARGAZER_custom_chart
                 LogBgmDebugFileInfo();
                 StartCustomBgmPreload();
                 TryApplyFocusedTrackViewerPatches();
+                JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
             }
             catch (Exception ex)
             {
                 LoggerInstance.Warning($"[Mod] initialization failed: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        public override void OnLateInitializeMelon()
+        {
+            try
+            {
+                JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
+            }
+            catch (Exception ex)
+            {
+                LoggerInstance.Warning($"[Mod] OnLateInitializeMelon failed: {ex.Message}");
+            }
+        }
+
+        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+        {
+            JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
         }
     }
 }

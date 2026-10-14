@@ -21,6 +21,7 @@
 
 - [REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md) — BMS 파일을 게임 차트로 바꾸는 규칙(채널·레인 매핑, 분수 매핑, 롱노트, 확장 사운드 ID)
 - [REFERENCE_CUSTOM_TRACK_PIPELINE.md](REFERENCE_CUSTOM_TRACK_PIPELINE.md) — 커스텀 트랙이 목록에 뜨고 재생되기까지 어떤 훅이 무엇을 하는지
+- [REFERENCE_ALL_PERFECT.md](REFERENCE_ALL_PERFECT.md) — 올 퍼펙트(All-Perfect) 판정 시스템 구조 및 4중 후킹(시간차 오차 제거, 헤드 판정, 결과 버퍼 집계, UI 연출)
 - [REFERENCE_DECOMPILED.md](REFERENCE_DECOMPILED.md) — `decompiled/` 폴더가 무엇인지, 무엇이 정확하고 무엇이 없는지, 재생성 방법
 - [TRACK_METADATA_REFERENCE.md](TRACK_METADATA_REFERENCE.md) — 트랙 메타데이터 구조
 - [CAST_AND_WRAPPER_CODE_REFERENCE.md](CAST_AND_WRAPPER_CODE_REFERENCE.md) — IL2CPP 캐스트/래퍼 코드가 왜 필요한지

@@ -47,6 +47,18 @@
       <HintPath>H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Il2CppAssemblies\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppMikazuki">
+      <HintPath>H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Il2CppAssemblies\Il2CppMikazuki.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppMikazuki.Player">
+      <HintPath>H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Il2CppAssemblies\Il2CppMikazuki.Player.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="DeployModToGame" AfterTargets="Build" Condition="Exists('$(GamePath)')">

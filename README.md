@@ -21,11 +21,16 @@
 * 커스텀 곡을 플레이하면 패턴이 로드된 직후 차트 전체를 폴더의 `.bms` 내용으로 교체합니다.
 * BMS 마디 하나를 게임의 `Area` 하나로, 마디 안 위치를 `BeatInfo` 분수로 그대로 옮깁니다.
 
+### 🎯 올 퍼펙트 판정 모드 (All-Perfect Mode)
+* 키 입력 시 타이밍 오차 없이 무조건 BLUE(BLUESTAR) 최고 판정으로 유도하고 결과/점수/콤보 100% 반영 및 연출을 고정합니다.
+* `JudgementExtension.FromTimeDiffernce`, `JudgementExtension.TryJudgeHead`, `TravelPlayer.INNER_Result.BufferProcess`, `JudgementWidget.Watch` 4중 런타임 패치 적용.
+* `savecustomkey/config.txt`의 `AllPerfect` 옵션(`true`/`false`)으로 손쉽게 켜고 끌 수 있습니다.
+
 ### 💾 기록 보호 (Save Guard)
 * 커스텀 곡은 Starting Point의 복제본이라 TrackID가 같습니다. 그대로 저장하면 공식 Starting Point 기록을 덮어쓰므로 커스텀 곡의 기록 저장을 막습니다.
 
 ### ⚙️ 설정 (`savecustomkey/config.txt`)
-* 오토플레이(`PlayerBase.Play` 진입 시 `IsAutoPlay` 설정)와 노트 연출(흔들림, 낙하 속도 카오스)을 켜고 끌 수 있습니다.
+* 오토플레이(`autoplay`), 올 퍼펙트 모드(`AllPerfect`), 노트 연출(흔들림, 낙하 속도 카오스)을 켜고 끌 수 있습니다.
 * 노트 연출은 그려지는 위치만 바꾸며 판정·점수에는 영향이 없습니다.
 
 ### 🔍 자켓 및 UI 탐색기 (Jacket & UI Probing)
@@ -90,6 +95,7 @@ STARGAZER custom chart/
 * [커스텀 곡 만들기 가이드](docs/GUIDE_CUSTOM_ALBUM.md) — `hwa` 폴더 구성, `info.txt`, `config.txt`
 * [BMS 변환 규칙](docs/REFERENCE_BMS_CONVERSION.md) — 채널·레인 매핑, 분수 매핑, 롱노트
 * [커스텀 트랙 파이프라인](docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md) — 어느 훅이 무엇을 하는지
+* [올 퍼펙트 판정 시스템](docs/REFERENCE_ALL_PERFECT.md) — 4중 후킹을 통한 무조건 최고 판정 유도 구조
 * [최신 작업 일지 (2026-08-08)](docs/WORKLOG_04_CUSTOM_TRACK_PIPELINE_2026-08-08.md)
 
 ---
