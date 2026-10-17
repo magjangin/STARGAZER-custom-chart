@@ -8,34 +8,6 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        private static IReadOnlyList<PatchSpec> GetRuntimeInvocationPatchSpecs()
-        {
-            return new[]
-            {
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "PlayStart", 1, "IPlayHandler"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer", "Load", 2, "TravelArgs", "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPattern", 2, "ELevels", "Action"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "Load", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "_Load_b__5_0", 1, "Pattern"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType"),
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "StopBGM", 0),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "BGMPlayChecker", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "Play", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
-                new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
-                new PatchSpec("Il2CppStargazer.TrackLoader", "LoadTracksAsync", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "OpenStandby", 1, "String"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "ChangeTrackCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
-            };
-        }
-
         private static IReadOnlyList<PatchSpec> GetPlayInvocationPatchSpecs()
         {
             return new[]
@@ -204,16 +176,10 @@ namespace STARGAZER_custom_chart
             }
 
             public string TypeName { get; }
-            public string[] TypeNames { get; private set; }
+            public string[] TypeNames { get; }
             public string MethodName { get; }
             public int ParameterCount { get; }
             public string[] ParameterTypeNameContains { get; }
-
-            public PatchSpec WithTypeFallback(params string[] fallbackTypeNames)
-            {
-                TypeNames = new[] { TypeName }.Concat(fallbackTypeNames).ToArray();
-                return this;
-            }
         }
     }
 }

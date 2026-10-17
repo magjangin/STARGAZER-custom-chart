@@ -9,62 +9,6 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        private static void EnumerateLevelSelectorLevels(object instance)
-        {
-            try
-            {
-                object? levels = TryGetMemberValue(instance, instance.GetType(), "levels");
-                if (levels is null)
-                {
-                    MelonLogger.Warning("[LevelSelector][Enumerate] 'levels' 컬렉션이 비어 있습니다.");
-                    return;
-                }
-
-                var items = EnumerateCollectionItems(levels, 12).ToList();
-                if (items.Count == 0)
-                {
-                    return;
-                }
-
-                var levelSummary = new List<string>();
-                foreach (object? item in items)
-                {
-                    if (item is null)
-                    {
-                        levelSummary.Add("null");
-                        continue;
-                    }
-
-                    string levelName = "?";
-                    string levelText = "?";
-                    try
-                    {
-                        object? levelItem = TryGetMemberValue(item, item.GetType(), "item");
-                        if (levelItem is not null)
-                        {
-                            levelName = TryGetMemberValue(levelItem, levelItem.GetType(), "name")?.ToString() ?? "?";
-                            object? tp = TryGetMemberValue(levelItem, levelItem.GetType(), "levelText");
-                            if (tp is not null && TryGetExactPropertyValue(tp, "Text", out object? textValue) && textValue is not null)
-                            {
-                                levelText = textValue.ToString() ?? "?";
-                            }
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    levelSummary.Add($"{levelName}={levelText}");
-                }
-
-                MelonLogger.Msg($"[LevelSelector] levels: [{string.Join(", ", levelSummary)}]");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[LevelSelector][Enumerate] Failed: {ex.Message}");
-            }
-        }
-
         private static string TryScanForNumericDifficulty(object? obj)
         {
             if (obj is null) return "?";
@@ -183,52 +127,6 @@ namespace STARGAZER_custom_chart
                 }
             }
             return false;
-        }
-
-        private static void DumpObjectValues(string label, object? obj)
-        {
-            if (obj is null) return;
-            try
-            {
-                Type type = obj.GetType();
-                var list = new List<string>();
-                const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                
-                foreach (var prop in type.GetProperties(Flags))
-                {
-                    if (prop.CanRead && prop.GetIndexParameters().Length == 0)
-                    {
-                        try
-                        {
-                            object? val = prop.GetValue(obj);
-                            list.Add($"P:{prop.Name}={val ?? "null"} ({prop.PropertyType.Name})");
-                        }
-                        catch (Exception ex)
-                        {
-                            list.Add($"P:{prop.Name}=<error: {ex.Message}>");
-                        }
-                    }
-                }
-                
-                foreach (var field in type.GetFields(Flags))
-                {
-                    try
-                    {
-                        object? val = field.GetValue(obj);
-                        list.Add($"F:{field.Name}={val ?? "null"} ({field.FieldType.Name})");
-                    }
-                    catch (Exception ex)
-                    {
-                        list.Add($"F:{field.Name}=<error: {ex.Message}>");
-                    }
-                }
-                
-                MelonLogger.Msg($"[DumpValues][{label}] Type={type.FullName}:\n  {string.Join("\n  ", list)}");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[DumpValues][{label}] Failed: {ex.Message}");
-            }
         }
     }
 }

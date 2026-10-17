@@ -62,21 +62,6 @@ namespace STARGAZER_custom_chart
         private static bool IsInPlayScene;
         private static bool IsCustomChartPlayActive;
 
-        private void TryApplyHarmonyAttributePatches(string phase)
-        {
-            if (_hooksPatchAttempted)
-            {
-                LoggerInstance.Msg($"[HookPatch][{phase}] skip patching (already attempted, appliedAll={_hooksApplied}).");
-                return;
-            }
-
-            _hooksPatchAttempted = true;
-            MelonLogger.Msg($"[HookPatch][{phase}] begin patching. mode=harmony-attributes");
-            RuntimeHarmonyInstance.PatchAll(typeof(GameTypeEnumeratorMod).Assembly);
-            _hooksApplied = true;
-            LoggerInstance.Msg($"[HookPatch][{phase}] patch summary: appliedAll={_hooksApplied}");
-        }
-
         private sealed class InvocationLogThrottleEntry
         {
             public InvocationLogThrottleEntry(long windowStartMs, int count)

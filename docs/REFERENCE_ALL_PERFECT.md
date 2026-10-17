@@ -49,10 +49,16 @@
 구현 파일: [`JudgeAllPerfectPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/Play/JudgeAllPerfectPatch.cs)
 
 ### 3.1 동적 패치 초기화 (`Initialize`)
-게임 내 `JudgementExtension`, `TravelPlayer+INNER_Result`, `JudgementWidget`은 정적 리플렉션을 통해 타입을 획득하며, 중복 패치를 방지하는 `_initialized` 가드를 포함합니다:
+게임 내 `JudgementExtension`, `TravelPlayer+INNER_Result`, `JudgementWidget`은 정적 리플렉션을 통해 타입을 획득합니다.
+`Initialize`는 아래 세 시점에서 불립니다:
 - `ModEntry.OnInitializeMelon()`: 모드 로드 시 1차 초기화
 - `ModEntry.OnLateInitializeMelon()`: 늦은 초기화 시점 보강
 - `ModEntry.OnSceneWasLoaded()`: 플레이 씬 진입 시 확실한 바인딩 보장
+
+4개가 모두 걸릴 때까지는 **빠진 패치만 다시 시도**하고, 이미 건 패치는 이름(`_patched` 집합)으로 기록해 다시 걸지 않습니다.
+4개가 모두 걸린 뒤에는 `Initialize`가 바로 반환합니다. 일부만 걸렸다면 로그에
+`[JudgePatch] 올 퍼펙트 패치가 N/4개만 적용됐습니다` 경고가 남고, 다음 호출에서 재시도합니다.
+(이전에는 성공 개수와 무관하게 첫 호출 뒤 `_initialized`를 켜서, 일부가 실패해도 재시도하지 않았습니다.)
 
 ### 3.2 중첩 클래스(Nested Type) 처리
 `TravelPlayer+INNER_Result`는 컴파일러가 생성한 비공개 내부 클래스이므로:

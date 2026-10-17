@@ -66,8 +66,7 @@ STARGAZER custom chart/
         ├── Hooks/
         │   ├── Patches/                 # Harmony 패치 클래스
         │   └── Support/                 # 패치가 호출하는 처리 (트랙 주입, 자켓·음원, 난이도 표시, 노트 연출 등)
-        ├── Probes/                      # 런타임 탐색 로그, BMS 차트 주입 (Probes/Notes)
-        └── Diagnostics/                 # 타입 덤프 유틸
+        └── Probes/                      # 런타임 탐색 로그, BMS 차트 주입 (Probes/Notes)
 ```
 
 ---
