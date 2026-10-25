@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -29,6 +29,9 @@ namespace STARGAZER_custom_chart
             new ConfigEntry("AllPerfect", "true",
                 "올 퍼펙트 판정 모드 (true = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, false = 기본 판정)"),
 
+            new ConfigEntry("UnlockAll", "true",
+                "전곡 해금 및 볼트 제한 해제 (true = 볼트/DLC/어드벤처 잠금 없이 모든 공식 수록곡 즉시 플레이 가능, false = 기본 잠금 유지)"),
+
             new ConfigEntry("NoteSway", "0",
                 "노트가 눈송이처럼 좌우로 흔들리며 내려오는 연출 (1 = 켜짐, 0 = 꺼짐)",
                 "판정에는 전혀 영향이 없는 순수 시각 효과입니다."),
@@ -56,6 +59,7 @@ namespace STARGAZER_custom_chart
         private static bool _loaded;
         private static bool _autoPlay;
         private static bool _allPerfect = true;
+        private static bool _unlockAll = true;
         private static bool _noteSway;
         private static float _noteSwayAmplitude = 20f;
         private static float _noteSwaySpeed = 0.8f;
@@ -85,6 +89,16 @@ namespace STARGAZER_custom_chart
                 return _allPerfect;
             }
             set => _allPerfect = value;
+        }
+
+        public static bool UnlockAll
+        {
+            get
+            {
+                EnsureLoaded();
+                return _unlockAll;
+            }
+            set => _unlockAll = value;
         }
 
         public static bool NoteSway
@@ -205,6 +219,7 @@ namespace STARGAZER_custom_chart
 
                 _autoPlay = ReadBool(values, "autoplay", _autoPlay);
                 _allPerfect = ReadBool(values, "AllPerfect", _allPerfect);
+                _unlockAll = ReadBool(values, "UnlockAll", _unlockAll);
 
                 _noteSway = ReadBool(values, "NoteSway", _noteSway);
                 _noteSwayAmplitude = Math.Max(0f, ReadFloat(values, "NoteSwayAmplitude", _noteSwayAmplitude));
@@ -219,6 +234,7 @@ namespace STARGAZER_custom_chart
                 NormalizeSpeedChaosRange();
 
                 MelonLogger.Msg($"[Config] autoplay={_autoPlay}");
+                MelonLogger.Msg($"[Config] UnlockAll={_unlockAll}");
                 MelonLogger.Msg($"[Config] NoteSway={_noteSway} amplitude={_noteSwayAmplitude} speed={_noteSwaySpeed} damping={_noteSwayDamping}/{_noteSwayDampingTime}s");
                 MelonLogger.Msg($"[Config] NoteSpeedChaos={_noteSpeedChaos} range={_noteSpeedChaosMin}~{_noteSpeedChaosMax} perLane={_noteSpeedChaosPerLane}");
             }

@@ -33,6 +33,7 @@ namespace STARGAZER_custom_chart
                 StartCustomBgmPreload();
                 TryApplyFocusedTrackViewerPatches();
                 JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
+                TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
             }
             catch (Exception ex)
             {
@@ -45,6 +46,7 @@ namespace STARGAZER_custom_chart
             try
             {
                 JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
+                TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
             }
             catch (Exception ex)
             {
@@ -55,6 +57,7 @@ namespace STARGAZER_custom_chart
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
             JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
+            TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
         }
     }
 }
