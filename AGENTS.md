@@ -30,7 +30,12 @@
   - 인터롭 어셈블리 생성 위치: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Il2CppAssemblies\`
   - 런타임 인터롭 래퍼는 C# 표준 리플렉션과 unmanaged 포인터를 동시 사용
 - **정적 분석 및 스켈레톤 추출 경로**:
+  - `il2cpp_dump/`: Il2CppDumper 산출물 (`dump.cs`, `script.json`, `il2cpp.h`, `stringliteral.json`, `DummyDll/`)
+  - `slices/`: `pe_slice.py` 및 `il2cpp_asm.py`를 통한 특정 클래스/메서드 조각 PE 및 어셈블리 디스어셈블리 (.dll, .asm)
   - `decompiled/`: 시그니처 덤프 및 복원 코드 보관
+  - `scripts/dump_il2cpp.ps1`: 게임 바이너리 기반 Il2CppDumper 자동 실행
+  - `scripts/disasm.ps1`: `il2cpp_asm.py` 기반 메서드/클래스 심볼 주석 어셈블리 덤프
+  - `scripts/slice.ps1`: `pe_slice.py` 기반 REA/Ghidra 분석용 조각 PE 추출
   - `scripts/decompile.ps1`: `Cpp2IL` / `ilspycmd` 추출 파이프라인
   - `scripts/strip_bodies.py`: 메서드 바디를 제거하고 `.cs` 시그니처 스켈레톤만 정제 추출하는 툴
   - 주요 분석 어셈블리:
