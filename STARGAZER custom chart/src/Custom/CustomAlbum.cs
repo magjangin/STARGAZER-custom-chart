@@ -14,6 +14,26 @@ namespace STARGAZER_custom_chart
             "cover.png", "cover.jpg", "cover.jpeg",
             "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg",
             "자켓.png", "커버.png", "썸네일.png",
+            "封面.png", "封面.jpg", "封面.jpeg",
+            "封套.png", "封套.jpg", "封套.jpeg",
+            "曲绘.png", "曲绘.jpg", "曲绘.jpeg",
+            "插图.png", "插图.jpg", "插图.jpeg",
+        };
+
+        private static readonly string[] MusicNameCandidates =
+        {
+            "music.ogg", "music.mp3", "music.wav",
+            "bgm.ogg", "bgm.mp3", "bgm.wav",
+            "audio.ogg", "audio.mp3", "audio.wav",
+            "song.ogg", "song.mp3", "song.wav",
+            "track.ogg", "track.mp3", "track.wav",
+        };
+
+        private static readonly string[] PreviewNameCandidates =
+        {
+            "music_preview.ogg", "music_preview.mp3", "music_preview.wav",
+            "preview.ogg", "preview.mp3", "preview.wav",
+            "bgm_preview.ogg", "bgm_preview.mp3", "bgm_preview.wav",
         };
 
         private static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg" };
@@ -59,16 +79,32 @@ namespace STARGAZER_custom_chart
 
             album.BmsPath = FirstWithExtension(files, ".bms");
 
-            // 음원은 music.ogg를 우선한다. 폴더에는 BMS 키음(*.wav)도 같이 들어있으므로
-            // 확장자 폴백은 .ogg로만 한정해서 키음을 곡 음원으로 오인하지 않게 한다.
-            album.MusicPath = FirstNamed(files, "music.ogg") ?? FirstWithExtension(files, ".ogg");
-            album.PreviewPath = FirstNamed(files, "music_preview.ogg") ?? album.MusicPath;
+            // 음원은 MusicNameCandidates 후보를 우선하고, 없으면 .ogg/.mp3/.wav 순으로 찾는다.
+            // 폴더 내 BMS 키음(*.wav)과의 충돌을 피하기 위해 명시적인 음악 파일명 후보군을 우선시한다.
+            album.MusicPath = FindFirstCandidate(files, MusicNameCandidates)
+                ?? FirstWithExtension(files, ".ogg")
+                ?? FirstWithExtension(files, ".mp3");
+
+            album.PreviewPath = FindFirstCandidate(files, PreviewNameCandidates) ?? album.MusicPath;
             album.JacketPath = FindJacket(files);
 
             string? infoPath = FirstNamed(files, "info.txt") ?? FirstWithExtension(files, ".txt");
             album.Info = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
 
             return album;
+        }
+
+        private static string? FindFirstCandidate(string[] files, string[] candidates)
+        {
+            foreach (string candidate in candidates)
+            {
+                string? hit = FirstNamed(files, candidate);
+                if (hit is not null)
+                {
+                    return hit;
+                }
+            }
+            return null;
         }
 
         private static string? FirstNamed(string[] files, string fileName)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -345,9 +345,9 @@ namespace STARGAZER_custom_chart
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string rawLine in File.ReadAllLines(path))
+            foreach (string rawLine in SafeTextReader.ReadAllLines(path))
             {
-                string line = rawLine.Trim();
+                string line = rawLine.Trim().TrimStart('\uFEFF');
                 if (line.Length == 0 || line[0] == '#')
                 {
                     continue;
@@ -390,6 +390,11 @@ namespace STARGAZER_custom_chart
                 case "1":
                 case "켜기":
                 case "사용":
+                case "是":
+                case "开":
+                case "开启":
+                case "启用":
+                case "对":
                     return true;
                 case "false":
                 case "off":
@@ -397,6 +402,11 @@ namespace STARGAZER_custom_chart
                 case "0":
                 case "끄기":
                 case "사용안함":
+                case "否":
+                case "关":
+                case "关闭":
+                case "禁用":
+                case "错":
                     return false;
                 default:
                     MelonLogger.Warning($"[Config] {key} 값을 해석하지 못해 기본값({fallback})을 씁니다: {text}");

@@ -35,7 +35,11 @@ namespace STARGAZER_custom_chart
                 if (!_patched.Contains(nameof(FromTimeDiffernce_Postfix)))
                 {
                     var fromTimeDiffMethod = AccessTools.Method(typeof(JudgementExtension), "FromTimeDiffernce",
-                        new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() });
+                        new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() })
+                        ?? AccessTools.Method(typeof(JudgementExtension), "FromTimeDifference",
+                            new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() })
+                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementExtension).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static),
+                            m => m.Name.IndexOf("TimeDiffer", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 3);
                     if (fromTimeDiffMethod != null)
                     {
                         var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(FromTimeDiffernce_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
@@ -53,7 +57,9 @@ namespace STARGAZER_custom_chart
                 if (!_patched.Contains(nameof(TryJudgeHead_Postfix)))
                 {
                     var tryJudgeHeadMethod = AccessTools.Method(typeof(JudgementExtension), "TryJudgeHead",
-                        new[] { typeof(LaneIndex), typeof(float), typeof(EJudgements).MakeByRefType() });
+                        new[] { typeof(LaneIndex), typeof(float), typeof(EJudgements).MakeByRefType() })
+                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementExtension).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static),
+                            m => m.Name.IndexOf("JudgeHead", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 3);
                     if (tryJudgeHeadMethod != null)
                     {
                         var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(TryJudgeHead_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
@@ -71,10 +77,14 @@ namespace STARGAZER_custom_chart
                 // TravelPlayer는 Il2CppStargazer.Play 네임스페이스에 위치하며, INNER_Result는 private nested 타입입니다.
                 if (!_patched.Contains(nameof(BufferProcess_Prefix)))
                 {
-                    var innerResultType = typeof(TravelPlayer).GetNestedType("INNER_Result", BindingFlags.NonPublic | BindingFlags.Public);
+                    var innerResultType = typeof(TravelPlayer).GetNestedType("INNER_Result", BindingFlags.NonPublic | BindingFlags.Public)
+                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(TravelPlayer).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Public),
+                            t => t.Name.IndexOf("Result", StringComparison.OrdinalIgnoreCase) >= 0);
                     if (innerResultType != null)
                     {
-                        var bufferProcessMethod = AccessTools.Method(innerResultType, "BufferProcess", new[] { typeof(TickEventData) });
+                        var bufferProcessMethod = AccessTools.Method(innerResultType, "BufferProcess", new[] { typeof(TickEventData) })
+                            ?? System.Linq.Enumerable.FirstOrDefault(innerResultType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance),
+                                m => m.Name.IndexOf("Buffer", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 1);
                         if (bufferProcessMethod != null)
                         {
                             var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(BufferProcess_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
@@ -96,7 +106,9 @@ namespace STARGAZER_custom_chart
                 // 4. JudgementWidget.Watch 패치 (RVA: 0x41CDD0)
                 if (!_patched.Contains(nameof(JudgementWidget_Watch_Prefix)))
                 {
-                    var watchMethod = AccessTools.Method(typeof(JudgementWidget), "Watch", new[] { typeof(TickEventData) });
+                    var watchMethod = AccessTools.Method(typeof(JudgementWidget), "Watch", new[] { typeof(TickEventData) })
+                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementWidget).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance),
+                            m => m.Name == "Watch" && m.GetParameters().Length == 1);
                     if (watchMethod != null)
                     {
                         var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(JudgementWidget_Watch_Prefix), BindingFlags.Static | BindingFlags.NonPublic);

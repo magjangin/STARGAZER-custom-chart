@@ -54,6 +54,8 @@ namespace STARGAZER_custom_chart
         {
             IsCustomChartPlayActive = false;
             CurrentPlayAlbum = null;
+            LastInjectedPattern = null;
+            WrappedPatternLoaders.Clear();
             if (travelArgs is null)
             {
                 MelonLogger.Msg("[BgmDebug] play state travelArgs=<null>");
@@ -181,11 +183,25 @@ namespace STARGAZER_custom_chart
             MelonCoroutines.Start(LoadCustomAudioClipCoroutine(fullPath));
         }
 
+        private static AudioType ResolveAudioType(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext switch
+            {
+                ".ogg" => AudioType.OGGVORBIS,
+                ".mp3" => AudioType.MPEG,
+                ".wav" => AudioType.WAV,
+                ".aif" or ".aiff" => AudioType.AIFF,
+                _ => AudioType.UNKNOWN,
+            };
+        }
+
         private static IEnumerator LoadCustomAudioClipCoroutine(string filePath)
         {
             string uri = "file:///" + filePath.Replace('\\', '/');
-            MelonLogger.Msg($"[CustomBgm] Starting load from uri: {uri}");
-            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.OGGVORBIS);
+            AudioType audioType = ResolveAudioType(filePath);
+            MelonLogger.Msg($"[CustomBgm] Starting load from uri: {uri} (audioType={audioType})");
+            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
             www.disposeDownloadHandlerOnDispose = false;
             DownloadHandlerAudioClip? downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
             try

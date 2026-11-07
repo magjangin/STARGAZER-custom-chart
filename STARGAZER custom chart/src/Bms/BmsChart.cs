@@ -67,23 +67,38 @@ namespace STARGAZER_custom_chart
             return extended && id.Length == 3 && id[0] == '0' ? id.Substring(1) : id;
         }
 
-        // 롱노트 마커는 #WAV 파일명으로 판단한다. 사용자 규칙 예시:
-        //   #WAV002 hold 시작.wav / #WAV003 hold 끝.wav
+        // 롱노트 마커는 #WAV 파일명으로 판단한다. 한국어/영어/중국어 키워드를 모두 지원:
+        //   #WAV002 hold 시작.wav / #WAV003 hold 끝.wav / #WAV004 hold 开始.wav / #WAV005 hold 结束.wav
         private static BmsNoteKind ClassifyNoteKind(string fileName)
         {
-            if (fileName.IndexOf("hold", StringComparison.OrdinalIgnoreCase) < 0)
+            if (fileName.IndexOf("hold", StringComparison.OrdinalIgnoreCase) < 0
+                && fileName.IndexOf("long", StringComparison.OrdinalIgnoreCase) < 0
+                && fileName.IndexOf("롱", StringComparison.Ordinal) < 0
+                && fileName.IndexOf("长", StringComparison.Ordinal) < 0
+                && fileName.IndexOf("長", StringComparison.Ordinal) < 0)
             {
                 return BmsNoteKind.Normal;
             }
 
             if (fileName.IndexOf("시작", StringComparison.Ordinal) >= 0
-                || fileName.IndexOf("start", StringComparison.OrdinalIgnoreCase) >= 0)
+                || fileName.IndexOf("start", StringComparison.OrdinalIgnoreCase) >= 0
+                || fileName.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0
+                || fileName.IndexOf("开始", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("起始", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("起点", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("头", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("頭", StringComparison.Ordinal) >= 0)
             {
                 return BmsNoteKind.HoldStart;
             }
 
             if (fileName.IndexOf("끝", StringComparison.Ordinal) >= 0
-                || fileName.IndexOf("end", StringComparison.OrdinalIgnoreCase) >= 0)
+                || fileName.IndexOf("end", StringComparison.OrdinalIgnoreCase) >= 0
+                || fileName.IndexOf("tail", StringComparison.OrdinalIgnoreCase) >= 0
+                || fileName.IndexOf("结束", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("终止", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("终点", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("尾", StringComparison.Ordinal) >= 0)
             {
                 return BmsNoteKind.HoldEnd;
             }
@@ -98,14 +113,14 @@ namespace STARGAZER_custom_chart
                 return null;
             }
 
-            string[] rawLines = File.ReadAllLines(filePath);
+            string[] rawLines = SafeTextReader.ReadAllLines(filePath);
 
             var wavDefinitions = new List<(string RawId, string FileName)>();
             double bpm = 120;
 
             foreach (string rawLine in rawLines)
             {
-                string line = rawLine.Trim();
+                string line = rawLine.Trim().TrimStart('\uFEFF');
                 if (line.Length == 0 || line[0] != '#')
                 {
                     continue;
@@ -151,7 +166,7 @@ namespace STARGAZER_custom_chart
 
             foreach (string rawLine in rawLines)
             {
-                string line = rawLine.Trim();
+                string line = rawLine.Trim().TrimStart('\uFEFF');
                 // "#mmmcc:data" 최소 길이: # + 3자리 마디 + 2자리 채널 + ':' = 7글자
                 if (line.Length < 7 || line[0] != '#' || line[6] != ':')
                 {

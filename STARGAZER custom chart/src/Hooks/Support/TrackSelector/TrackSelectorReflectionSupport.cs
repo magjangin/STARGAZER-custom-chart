@@ -81,7 +81,9 @@ namespace STARGAZER_custom_chart
                 }
 
                 bool displayNameChanged = TrySetValueByNameCandidates(metaObj, new[] { "displayname" }, displayName);
+                bool displayNameEnChanged = TrySetValueByNameCandidates(metaObj, new[] { "displaynameen" }, displayName);
                 bool composerChanged = TrySetValueByNameCandidates(metaObj, new[] { "composer" }, composer);
+                TrySetArtistInfos(metaObj, composer);
                 bool levelsChanged = ExperimentChartSettings.EnableTrackLevelOverride
                     && levels is not null && levels.Count > 0
                     && TrySetTrackLevels(metaObj, levels);
@@ -98,6 +100,27 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[TrackSelector.Set] startingpoint 메타데이터 수정 실패: {ex.Message}");
             }
+        }
+
+        private static void TrySetArtistInfos(object metaObj, string artist)
+        {
+            try
+            {
+                object? dict = TryGetMemberValue(metaObj, metaObj.GetType(), "artistInfos")
+                    ?? TryGetMemberValue(metaObj, metaObj.GetType(), "ArtistInfos");
+                if (dict is null) return;
+
+                MethodInfo? setItem = dict.GetType().GetMethod("set_Item", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (setItem is not null)
+                {
+                    string[] langs = { "KR", "EN", "JP", "CN", "TW" };
+                    foreach (string lang in langs)
+                    {
+                        setItem.Invoke(dict, new object[] { lang, artist });
+                    }
+                }
+            }
+            catch { }
         }
 
         // INNER_TrackMetaData.levelString(Dictionary<ELevels, string>)의 인덱서 세터를 리플렉션으로 찾아

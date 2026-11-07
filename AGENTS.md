@@ -61,6 +61,18 @@
 - 커스텀 곡의 내부 `TrackID`가 공식 Starting Point와 같으므로, 결과 점수가 그대로 세이브 파일에 기록되면 공식 랭킹 및 로컬 기록이 오염됨.
 - 따라서 커스텀 곡 플레이 종료 시 세이브 루틴(`SaveData`, `TravelResultData`)을 가로채 저장을 원천 차단함.
 
+### 람다 후킹 이중래퍼 아키텍처 (Dual-Wrapper Fallback)
+- 컴파일러가 생성하는 람다 메서드(`_Load_b__5_0`)는 Unity 엔진/컴파일러 버전 패치 시 `<Load>b__0`, `_Load_b__0_0` 등으로 심볼명이 변경될 위험이 매우 큼.
+- **1차 계층**: `PatchTargetSupport`에서 `b__` / `Load` 패턴 퍼지 매칭으로 시그니처 자동 탐색 및 Harmony 훅 적용.
+- **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` 호출 시점에 인스턴스의 `onCompleted` 델리게이트(`Action<Pattern>`)를 인터셉트 래퍼로 교체.
+- **동일 인스턴스 중복 주입 가드**: 1차 훅과 2차 래퍼가 모두 정상 동작할 때 이중 주입되지 않도록 `LastInjectedPattern` 참조 비교를 통해 멱등성(Idempotency) 보장.
+
+### 다국어 (중국어 / 영어 / 한국어 / 일본어) 지원 & 인코딩 내성
+- **SafeTextReader**: UTF-8 BOM(\uFEFF), UTF-16, ANSI(GB18030/GBK/CP949) 자동 감지 및 BOM 프리 헤더 파싱 (`#BPM`, `#WAV` 누락 방지).
+- **info.txt & config.txt 중국어 키워드 지원**: `곡 제목` 외에 `曲名`/`歌名`/`标题`, `艺术家`/`作曲`/`曲师`, `宇宙`/`恒星`/`虚空`, `是`/`开`/`关` 등 완벽 파싱.
+- **BMS 롱노트 키워드**: `시작`/`끝` 외에 `开始`/`结束`/`head`/`tail` 등 중국어/영어 키워드 확장 지원.
+- **다국어 트랙 메타데이터 동기화**: `displayName` 외에 `displayNameEN` 및 `artistInfos` 딕셔너리(`KR`, `EN`, `JP`, `CN`, `TW`)를 동시 전파하여 영문/중문 클라이언트에서도 정상 표시.
+
 ---
 
 ## 4. 핵심 후킹 타깃 시그니처 & 커스텀 파이프라인
@@ -71,7 +83,7 @@
 | **자켓 교체** | `INNER_TrackData.LoadJacketSprite(Action<Sprite>)` | Prefix | 커스텀 트랙 판정 시 `return false`로 원본 로딩 차단, 리플렉션 델리게이트 Invoke로 PNG 자켓 전달 |
 | **BGM 음원** | `INNER_TrackData.LoadBGMClip(Action<AudioClip>)` | Prefix | `UnityWebRequestMultimedia.GetAudioClip` 비동기 디코딩 및 메모리 캐싱 후 오디오 클립 주입 |
 | **프리뷰 음원** | `INNER_TrackData.LoadPreviewClip(Action<AudioClip>)` | Prefix | 프리뷰 전용 오디오 클립 주입 |
-| **BMS 차트 주입** | `INNER_PatternLoader._Load_b__5_0(Pattern)` | Postfix | 패턴 로드 직후 `Pattern.Layer.Areas`를 `BmsParser`가 변환한 BMS 채보로 런타임 스왑 (`NoteProbe.cs`) |
+| **BMS 차트 주입** | `INNER_PatternLoader._Load_b__5_0(Pattern)`<br>`INNER_PatternLoader.onCompleted` (Dual-Wrapper) | Postfix / Delegate Wrapper | 패턴 로드 직후 `Pattern.Layer.Areas`를 `BmsParser`가 변환한 BMS 채보로 런타임 스왑 (`NoteProbe.cs`). 1차 람다 훅 실패 시 2차 `onCompleted` 이중래퍼가 자동 인터셉트하며, 동일 인스턴스 중복 주입 방지 가드 탑재 |
 | **난이도 UI** | `FocusedTrackViewer`, `LevelSelector`, `CurrentTrackViewer`, `PlayInfoViewer` | Postfix | 게임 내부 문자열 변조 없이 각 화면의 텍스트 UI 컴포넌트 세터를 직접 호출하여 표시 오버라이드 |
 | **올 퍼펙트 판정** | `JudgementExtension.FromTimeDiffernce`<br>`JudgementExtension.TryJudgeHead`<br>`TravelPlayer.INNER_Result.BufferProcess`<br>`JudgementWidget.Watch` | Prefix / Transpiler | 키 입력 타이밍에 상관없이 BLUESTAR 최고 판정 유도 및 점수/콤보 100% 반영 (`REFERENCE_ALL_PERFECT.md`) |
 | **전곡 해금 (Unlock All)** | `TrackLoader.INNER_TrackData.get_IsUnlocked`<br>`TrackLoader.INNER_TrackData.get_LockType`<br>`TrackLoader.INNER_TrackData.get_UnlockCost`<br>`ITrackData.get_IsUnlocked`<br>`ITrackData.get_LockType`<br>`UserDataLoader.INNER_UnlockDataModule.IsUnlocked`<br>`UserDataLoader.INNER_CurrencyModule.GetVolts` | Prefix | 모든 트랙의 `IsUnlocked`를 `true`로, `LockType`을 `NONE`으로 고정하여 VOLT REQUIRED/DLC/어드벤처 잠금 및 자켓 자물쇠 UI를 제거하고 999,999 볼트 지급 (`TrackUnlockAllPatch.cs`) |

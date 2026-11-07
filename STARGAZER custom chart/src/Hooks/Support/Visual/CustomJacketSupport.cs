@@ -38,9 +38,11 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Warning($"[CustomJacket] 이미지 디코딩 실패: {fullPath}");
                     return null;
                 }
+                texture.hideFlags |= HideFlags.DontUnloadUnusedAsset;
 
                 var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
                 sprite.name = "CustomJacket_" + Path.GetFileNameWithoutExtension(fullPath);
+                sprite.hideFlags |= HideFlags.DontUnloadUnusedAsset;
                 CustomJacketCache[fullPath] = sprite;
                 MelonLogger.Msg($"[CustomJacket] Cached custom jacket: {fullPath} ({texture.width}x{texture.height})");
                 return sprite;

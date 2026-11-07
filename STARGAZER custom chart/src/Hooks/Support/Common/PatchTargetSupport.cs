@@ -94,10 +94,21 @@ namespace STARGAZER_custom_chart
                 return null;
             }
 
-            MethodInfo[] candidates = type
-                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                .Where(method => string.Equals(method.Name, spec.MethodName, StringComparison.Ordinal))
-                .ToArray();
+            MethodInfo[] allMethods = type
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+
+
+
+            MethodInfo[] candidates = allMethods.Where(method => string.Equals(method.Name, spec.MethodName, StringComparison.Ordinal)).ToArray();
+
+
+            // 람다/컴파일러 생성 메서드(b__, <Load> 등) 이름 변경 및 컴파일러 업데이트 내성 강화
+            if (candidates.Length == 0 && (spec.MethodName.Contains("b__") || spec.MethodName.StartsWith("<") || spec.MethodName.StartsWith("_")))
+            {
+                candidates = allMethods
+                    .Where(method => method.Name.Contains("b__") || method.Name.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0).ToArray();
+    
+            }
 
             foreach (MethodInfo method in candidates)
             {

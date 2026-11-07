@@ -20,10 +20,10 @@ namespace STARGAZER_custom_chart
             }
 
             var info = new CustomTrackInfo();
-            foreach (string rawLine in File.ReadAllLines(filePath))
+            foreach (string rawLine in SafeTextReader.ReadAllLines(filePath))
             {
-                string line = rawLine.Trim();
-                if (line.Length == 0)
+                string line = rawLine.Trim().TrimStart('\uFEFF');
+                if (line.Length == 0 || line.StartsWith("#"))
                 {
                     continue;
                 }
@@ -43,12 +43,25 @@ namespace STARGAZER_custom_chart
 
                 if (string.Equals(key, "곡 제목", StringComparison.Ordinal)
                     || string.Equals(key, "제목", StringComparison.Ordinal)
-                    || string.Equals(key, "title", StringComparison.OrdinalIgnoreCase))
+                    || string.Equals(key, "title", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "name", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "曲名", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "歌曲名称", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "歌名", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "标题", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "曲目", StringComparison.OrdinalIgnoreCase))
                 {
                     info.Title = value;
                 }
                 else if (string.Equals(key, "아티스트", StringComparison.Ordinal)
-                    || string.Equals(key, "artist", StringComparison.OrdinalIgnoreCase))
+                    || string.Equals(key, "artist", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "composer", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "작곡", StringComparison.Ordinal)
+                    || string.Equals(key, "艺术家", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "作曲", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "曲师", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "曲目作者", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "作者", StringComparison.OrdinalIgnoreCase))
                 {
                     info.Artist = value;
                 }
@@ -56,7 +69,20 @@ namespace STARGAZER_custom_chart
                     || string.Equals(key, "stellar", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(key, "void", StringComparison.OrdinalIgnoreCase))
                 {
-                    info.Levels[key] = value;
+                    info.Levels[key.ToLowerInvariant()] = value;
+                }
+                else if (string.Equals(key, "宇宙", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(key, "星空", StringComparison.OrdinalIgnoreCase))
+                {
+                    info.Levels["cosmic"] = value;
+                }
+                else if (string.Equals(key, "恒星", StringComparison.OrdinalIgnoreCase))
+                {
+                    info.Levels["stellar"] = value;
+                }
+                else if (string.Equals(key, "虚空", StringComparison.OrdinalIgnoreCase))
+                {
+                    info.Levels["void"] = value;
                 }
             }
 

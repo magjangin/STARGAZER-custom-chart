@@ -16,6 +16,12 @@ namespace STARGAZER_custom_chart
                 object[] args = __args ?? Array.Empty<object>();
                 LogBgmDebugInvocation(__originalMethod, __instance, args);
 
+                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
+                    && string.Equals(__originalMethod.Name, "Load", StringComparison.Ordinal))
+                {
+                    TryWrapPatternLoaderOnCompleted(__instance);
+                }
+
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "LoadTracksAsync", StringComparison.Ordinal))
                 {
@@ -116,7 +122,7 @@ namespace STARGAZER_custom_chart
                 }
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "_Load_b__5_0", StringComparison.Ordinal))
+                    && IsPatternLoaderLambdaMethod(__originalMethod))
                 {
                     // BMS 차트 주입도 ProbeNoteArrayMembers 안에서 일어난다. 로그 플래그만 보고 막으면
                     // 로그를 끄는 순간 커스텀 곡이 조용히 원본 차트로 나오므로, 커스텀 곡일 때는 항상 부른다.
@@ -386,6 +392,59 @@ namespace STARGAZER_custom_chart
             }
 
             return type.FullName ?? type.Name;
+        }
+
+        private static bool IsPatternLoaderLambdaMethod(MethodBase method)
+        {
+            if (method is null) return false;
+            string name = method.Name;
+            return string.Equals(name, "_Load_b__5_0", StringComparison.Ordinal)
+                || name.Contains("b__")
+                || name.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static readonly HashSet<IntPtr> WrappedPatternLoaders = new HashSet<IntPtr>();
+
+        private static void TryWrapPatternLoaderOnCompleted(object? instance)
+        {
+            if (instance is null) return;
+            try
+            {
+                IntPtr ptr = TryGetIl2CppPointer(instance);
+                if (ptr != IntPtr.Zero && !WrappedPatternLoaders.Add(ptr))
+                {
+                    return;
+                }
+
+                PropertyInfo? prop = instance.GetType().GetProperty("onCompleted", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (prop is null) return;
+
+                var origAction = prop.GetValue(instance) as Il2CppSystem.Action<Il2CppMikazuki.Pattern>;
+                if (origAction is null) return;
+
+                Action<Il2CppMikazuki.Pattern> managedDelegate = (pattern) =>
+                {
+                    try
+                    {
+                        if (pattern != null)
+                        {
+                            ProbeNoteArrayMembers(pattern, "PatternLoader.DualWrapper");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MelonLogger.Warning($"[DualWrapper] Exception in pattern probe: {ex.Message}");
+                    }
+                    origAction.Invoke(pattern!);
+                };
+
+                prop.SetValue(instance, (Il2CppSystem.Action<Il2CppMikazuki.Pattern>)managedDelegate);
+                MelonLogger.Msg("[DualWrapper] INNER_PatternLoader.onCompleted 이중래퍼(Dual-Wrapper) 설치 완료");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[DualWrapper] 이중래퍼 설치 실패: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
     }
