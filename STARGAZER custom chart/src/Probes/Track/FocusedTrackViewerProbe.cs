@@ -9,6 +9,11 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        private static readonly HashSet<string> FocusedTrackViewerHookMethodNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "SetTrack", "Refresh", "FetchJacketImage", "LoadPreviewBGM",
+        };
+
         private static bool _focusedTrackViewerPatched;
         private static string _lastFocusedTrackViewerSummary = "";
 
@@ -22,10 +27,7 @@ namespace STARGAZER_custom_chart
 
             try
             {
-                Type? type = AppDomain.CurrentDomain
-                    .GetAssemblies()
-                    .Select(assembly => assembly.GetType("Il2CppStargazer.Travel.FocusedTrackViewer", false))
-                    .FirstOrDefault(t => t is not null);
+                Type? type = ResolveGameType("Il2CppStargazer.Travel.FocusedTrackViewer");
 
                 if (type is null)
                 {
@@ -35,11 +37,20 @@ namespace STARGAZER_custom_chart
 
                 LoggerInstance.Msg($"[FocusedTrackViewerProbe] Found type: {type.FullName}. Proceeding with dynamic hooks.");
 
-                // 고주파 로그와 재귀를 피하려고 프로퍼티 getter/setter를 제외하고 이 타입의 메서드를 후킹합니다.
+                // 예전에는 getter/setter를 뺀 "모든" 선언 메서드를 걸었다. 그러면 업데이트로 Update/LateUpdate 같은
+                // 매 프레임 메서드가 생기는 순간 매 프레임 리플렉션 열거가 돌게 된다. 실측상 필요한 4개만 명시적으로 건다.
                 MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                     .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
-                    .Where(m => !m.Name.StartsWith("get_", StringComparison.Ordinal) && !m.Name.StartsWith("set_", StringComparison.Ordinal))
+                    .Where(m => FocusedTrackViewerHookMethodNames.Contains(m.Name))
                     .ToArray();
+
+                foreach (string expected in FocusedTrackViewerHookMethodNames)
+                {
+                    if (!methods.Any(m => string.Equals(m.Name, expected, StringComparison.Ordinal)))
+                    {
+                        LoggerInstance.Warning($"[FocusedTrackViewerProbe] {expected} 메서드를 찾지 못했습니다(게임 업데이트로 이름이 바뀌었을 수 있음).");
+                    }
+                }
 
                 int successCount = 0;
                 foreach (MethodInfo method in methods)

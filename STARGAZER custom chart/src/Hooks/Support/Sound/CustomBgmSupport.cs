@@ -54,7 +54,7 @@ namespace STARGAZER_custom_chart
         {
             IsCustomChartPlayActive = false;
             CurrentPlayAlbum = null;
-            LastInjectedPattern = null;
+            LastProbedPatternPtr = IntPtr.Zero;
             WrappedPatternLoaders.Clear();
             if (travelArgs is null)
             {

@@ -15,7 +15,8 @@ namespace STARGAZER_custom_chart
         private static bool LinkHoldProbeDone;
         private static bool AreaProbeDone;
         private static bool AreaCreationTestDone;
-        private static object? LastInjectedPattern;
+        // 마지막으로 처리한 Pattern의 IL2CPP 포인터. PlayerBase.Play마다 비운다(UpdateCustomChartPlayState).
+        private static IntPtr LastProbedPatternPtr;
 
         private static void ProbeNoteArrayMembers(object? instance, string source)
         {
@@ -25,6 +26,30 @@ namespace STARGAZER_custom_chart
                 {
                     MelonLogger.Msg($"[NoteProbe][AreaNotes] {source} pattern=null");
                     return;
+                }
+
+                bool isPatternLoaderSource = source.StartsWith("PatternLoader.", StringComparison.Ordinal);
+
+                // 1차(람다 Postfix)와 2차(onCompleted 래퍼)가 둘 다 살아 있으면 같은 Pattern이 두 번 들어온다.
+                // 관리 래퍼 객체는 호출마다 새로 만들어질 수 있어 ReferenceEquals로는 같은 패턴을 못 알아보므로
+                // (예전 LastInjectedPattern 방식의 허점) IL2CPP 네이티브 포인터로 비교한다.
+                // 공식곡도 같은 패턴을 두 번 순회할 이유가 없으므로 커스텀 여부와 무관하게 거른다.
+                if (isPatternLoaderSource)
+                {
+                    IntPtr patternPtr = TryGetIl2CppPointer(instance);
+                    if (patternPtr != IntPtr.Zero)
+                    {
+                        if (patternPtr == LastProbedPatternPtr)
+                        {
+                            if (IsCustomChartPlayActive)
+                            {
+                                MelonLogger.Msg($"[NoteProbe] 이미 처리한 패턴 인스턴스({source})이므로 중복 BMS 주입을 건너뜁니다.");
+                            }
+                            return;
+                        }
+
+                        LastProbedPatternPtr = patternPtr;
+                    }
                 }
 
                 Type patternType = instance.GetType();
@@ -50,22 +75,10 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                bool isPatternLoaderSource = string.Equals(source, "PatternLoader._Load_b__5_0", StringComparison.Ordinal)
-                    || string.Equals(source, "PatternLoader.DualWrapper", StringComparison.Ordinal)
-                    || source.StartsWith("PatternLoader.", StringComparison.Ordinal);
-                // _Load_b__5_0은 공식곡이든 커스텀곡이든 패턴이 로드될 때마다 호출되므로,
+                // 패턴 로더 람다는 공식곡이든 커스텀곡이든 패턴이 로드될 때마다 호출되므로,
                 // IsCustomChartPlayActive(IsCustomChartTrack/객체 동일성 기준으로 PlayerBase.Play 훅에서
                 // 세팅됨, CustomBgmSupport.cs와 동일)로 커스텀 트랙일 때만 개입하도록 반드시 제한한다.
                 bool isCustomTrackPattern = isPatternLoaderSource && IsCustomChartPlayActive;
-                if (isCustomTrackPattern && instance is not null)
-                {
-                    if (object.ReferenceEquals(instance, LastInjectedPattern))
-                    {
-                        MelonLogger.Msg($"[NoteProbe] 이미 BMS 주입 완료된 패턴 인스턴스({source})이므로 중복 주입을 건너뜁니다.");
-                        return;
-                    }
-                    LastInjectedPattern = instance;
-                }
                 // BMS 주입은 재시작/재시도마다 새로 로드되는 Pattern에 매번 다시 돌아야 하므로
                 // NoteWipeTestDone(프로세스 생명주기 동안 1회성 가드)에 묶지 않는다.
                 bool shouldRunWipe = (ExperimentChartSettings.EnableKeepEarliestOnlyChart && !NoteWipeTestDone && isCustomTrackPattern)

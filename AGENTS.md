@@ -63,9 +63,15 @@
 
 ### 람다 후킹 이중래퍼 아키텍처 (Dual-Wrapper Fallback)
 - 컴파일러가 생성하는 람다 메서드(`_Load_b__5_0`)는 Unity 엔진/컴파일러 버전 패치 시 `<Load>b__0`, `_Load_b__0_0` 등으로 심볼명이 변경될 위험이 매우 큼.
-- **1차 계층**: `PatchTargetSupport`에서 `b__` / `Load` 패턴 퍼지 매칭으로 시그니처 자동 탐색 및 Harmony 훅 적용.
-- **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` 호출 시점에 인스턴스의 `onCompleted` 델리게이트(`Action<Pattern>`)를 인터셉트 래퍼로 교체.
-- **동일 인스턴스 중복 주입 가드**: 1차 훅과 2차 래퍼가 모두 정상 동작할 때 이중 주입되지 않도록 `LastInjectedPattern` 참조 비교를 통해 멱등성(Idempotency) 보장.
+- **1차 계층 (`PatchTargetSupport.ResolveTargetMethod`, 3단계 해석)**:
+  1. 이름 정확히 일치 + 파라미터 타입명 점수(정확 일치 2점 / 포함 1점) 최고 후보.
+  2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음).
+  3. 이름은 같고 파라미터 개수만 맞는 후보가 **유일**할 때만 경고와 함께 채택.
+  - 대체 해석이 일어나면 `[HookPatch][resolve]` 경고가 로그에 남는다 → 업데이트 후 로그에서 이 태그부터 확인할 것.
+- **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시.
+- **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다 등)도 같은 핸들러에 연결된다.
+- **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 생성자 인자로 들어옴)를 래퍼로 교체. `로더 포인터 → 래퍼 델리게이트 포인터`를 기록해, 현재 onCompleted가 우리 래퍼면 재설치하지 않고 게임이 교체했으면 다시 감싼다. `PlayerBase.Play`마다 초기화.
+- **중복 주입 가드**: 람다 본문이 `onCompleted(=래퍼)`를 먼저 부르고 그 뒤 람다 Postfix가 불리므로 같은 Pattern이 두 번 들어온다. `ProbeNoteArrayMembers`가 **Pattern의 IL2CPP 네이티브 포인터**(`LastProbedPatternPtr`)로 거른다(공식곡 포함 — 같은 패턴 이중 순회 방지).
 
 ### 다국어 (중국어 / 영어 / 한국어 / 일본어) 지원 & 인코딩 내성
 - **SafeTextReader**: UTF-8 BOM(\uFEFF), UTF-16, ANSI(GB18030/GBK/CP949) 자동 감지 및 BOM 프리 헤더 파싱 (`#BPM`, `#WAV` 누락 방지).
@@ -83,7 +89,9 @@
 | **자켓 교체** | `INNER_TrackData.LoadJacketSprite(Action<Sprite>)` | Prefix | 커스텀 트랙 판정 시 `return false`로 원본 로딩 차단, 리플렉션 델리게이트 Invoke로 PNG 자켓 전달 |
 | **BGM 음원** | `INNER_TrackData.LoadBGMClip(Action<AudioClip>)` | Prefix | `UnityWebRequestMultimedia.GetAudioClip` 비동기 디코딩 및 메모리 캐싱 후 오디오 클립 주입 |
 | **프리뷰 음원** | `INNER_TrackData.LoadPreviewClip(Action<AudioClip>)` | Prefix | 프리뷰 전용 오디오 클립 주입 |
-| **BMS 차트 주입** | `INNER_PatternLoader._Load_b__5_0(Pattern)`<br>`INNER_PatternLoader.onCompleted` (Dual-Wrapper) | Postfix / Delegate Wrapper | 패턴 로드 직후 `Pattern.Layer.Areas`를 `BmsParser`가 변환한 BMS 채보로 런타임 스왑 (`NoteProbe.cs`). 1차 람다 훅 실패 시 2차 `onCompleted` 이중래퍼가 자동 인터셉트하며, 동일 인스턴스 중복 주입 방지 가드 탑재 |
+| **BMS 차트 주입** | `INNER_PatternLoader._Load_b__5_0(Pattern)`<br>`INNER_PatternLoader.onCompleted` (Dual-Wrapper) | Postfix / Delegate Wrapper | 패턴 로드 직후 `Pattern.Layer.Areas`를 BMS 채보로 런타임 스왑 (`HookNoteProbes.cs` → `HookNoteProbes.BmsInject.cs`). 1차 람다 훅 실패 시 2차 `onCompleted` 이중래퍼가 받으며, Pattern 네이티브 포인터 기준 중복 주입 가드 탑재 |
+| **공용 디스패처** | `PatchTargetSupport.Get*InvocationPatchSpecs()` 전체 | Prefix / Postfix | `HookInvocationSupport.cs`의 `HookSite`(MethodBase별 1회 계산: `HookKind` + 로그 자격 + 스로틀)로 switch 디스패치. 핸들러 없는 로그 전용 훅은 두지 않는다 |
+| **난이도 표시 (선택 화면)** | `FocusedTrackViewer.SetTrack/Refresh/FetchJacketImage/LoadPreviewBGM` | Postfix (수동 Patch) | `FocusedTrackViewerProbe.cs`. 화이트리스트 4개만 건다(전 메서드 후킹 금지 — Dead End 9) |
 | **난이도 UI** | `FocusedTrackViewer`, `LevelSelector`, `CurrentTrackViewer`, `PlayInfoViewer` | Postfix | 게임 내부 문자열 변조 없이 각 화면의 텍스트 UI 컴포넌트 세터를 직접 호출하여 표시 오버라이드 |
 | **올 퍼펙트 판정** | `JudgementExtension.FromTimeDiffernce`<br>`JudgementExtension.TryJudgeHead`<br>`TravelPlayer.INNER_Result.BufferProcess`<br>`JudgementWidget.Watch` | Prefix / Transpiler | 키 입력 타이밍에 상관없이 BLUESTAR 최고 판정 유도 및 점수/콤보 100% 반영 (`REFERENCE_ALL_PERFECT.md`) |
 | **전곡 해금 (Unlock All)** | `TrackLoader.INNER_TrackData.get_IsUnlocked`<br>`TrackLoader.INNER_TrackData.get_LockType`<br>`TrackLoader.INNER_TrackData.get_UnlockCost`<br>`ITrackData.get_IsUnlocked`<br>`ITrackData.get_LockType`<br>`UserDataLoader.INNER_UnlockDataModule.IsUnlocked`<br>`UserDataLoader.INNER_CurrencyModule.GetVolts` | Prefix | 모든 트랙의 `IsUnlocked`를 `true`로, `LockType`을 `NONE`으로 고정하여 VOLT REQUIRED/DLC/어드벤처 잠금 및 자켓 자물쇠 UI를 제거하고 999,999 볼트 지급 (`TrackUnlockAllPatch.cs`) |
@@ -109,6 +117,20 @@
 5. **`SelectionItem<T>.selectedValue` 리플렉션 읽기 (실패)**
    - 원인: 제네릭 내부 포인터 정수가 반환되어 enum 파싱 불가능.
    - 규칙: `LevelItem`의 GameObject 이름(`Cosmic`, `Stellar`, `Void`)을 키로 매핑할 것.
+6. **람다 퍼지 매칭을 `b__` 또는 `Load` 포함으로 넓히기 (위험, 2026-11-14 제거)**
+   - 원인: 이름이 바뀌면 `INNER_PatternLoader.Load(TravelArgs)`(파라미터 1개)까지 후보에 들어오고, 시그니처 불일치 시 "개수만 맞는 첫 후보" 폴백으로 Load가 람다 자리에 이중 후킹될 수 있었음. 같은 이름 `_Load_b__5_0`이 `INNER_TableLoader.__c`에도 실재함.
+   - 규칙: 람다 대체 해석은 소유 메서드 이름 + 파라미터 타입명 정확 일치 + 유일성 조건으로만. 모호하면 걸지 말고 2차 경로에 맡길 것.
+7. **IL2CPP 제네릭 델리게이트 `Action<T>.Invoke` 패치 (병목, 2026-11-14 제거)**
+   - 원인: 참조 타입 인스턴스화의 네이티브 구현이 공유되어, `Action<List<ITrackData>>.Invoke` 하나를 패치하면 게임 전체의 `Action<참조형>` 호출(오디오/스프라이트/패턴 콜백 등)에 Harmony 트램펄린이 붙음. 실제로 LoadPreviewClip 콜백에서 오발동이 관측됐고, 하는 일은 "트랙 N개 로드" 로그 1줄뿐이었음.
+   - 규칙: 공유 제네릭 메서드(델리게이트 Invoke, `List<T>` 메서드 등)는 패치하지 말 것. 필요한 값은 그 값을 받는 구체 메서드(예: `TrackSelector.Set`)에서 얻을 것.
+8. **IL2CPP 관리 래퍼 객체를 `ReferenceEquals`로 비교 (실패)**
+   - 원인: Harmony 인자/델리게이트 인자로 넘어오는 래퍼는 호출마다 새 객체일 수 있어 같은 네이티브 객체여도 참조가 다름 → 1차 훅과 2차 래퍼의 중복 주입 가드가 무력화될 수 있었음.
+   - 규칙: 동일성은 항상 `Il2CppObjectBase.Pointer`(`TryGetIl2CppPointer`)로 비교할 것.
+9. **타입의 "모든 선언 메서드" 일괄 후킹 (위험)**
+   - 원인: `FocusedTrackViewer`처럼 getter/setter만 빼고 전부 걸면, 업데이트로 `Update`/`LateUpdate`가 생기는 순간 매 프레임 리플렉션 열거가 돈다.
+   - 규칙: 필요한 메서드 이름을 화이트리스트로 명시할 것.
+10. **로그 전용 고빈도 훅 (병목)**
+    - `SoundPlayer.PlaySFX`(4개 오버로드, 노트 타격음마다 호출)·`TrackSelectLogic.*`·`TrackSelector.OpenStandby/ChangeTrackCursor`는 핸들러 없이 로그만 남기던 훅이라 제거함. Il2Cpp Harmony 훅은 아무것도 안 해도 호출당 트램펄린 + `object[]` 박싱 비용이 있음.
 
 ---
 
@@ -118,8 +140,8 @@
 - **타깃 프레임워크**: `.NET 6.0` (`net6.0`)
 - **빌드 명령**:
   ```powershell
-  # Visual Studio MSBuild 사용 시
-  & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" "STARGAZER custom chart\STARGAZER custom chart.csproj" /p:Configuration=Debug
+  # Visual Studio MSBuild 사용 시 (이 PC에는 VS "18" Community가 설치돼 있음 — 2022 경로는 없음)
+  & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" "STARGAZER custom chart\STARGAZER custom chart.csproj" /p:Configuration=Debug
 
   # 또는 루트 빌드 스크립트 실행
   .\build.bat
@@ -129,3 +151,6 @@
   - 배포 경로: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\Mods\STARGAZER custom chart.dll`
 - **로그 확인**:
   - `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Latest.log`
+  - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]`.
+- **검증 이력**:
+  - 2026-11-14: 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치. **커스텀 곡 플레이(BMS 주입·중복 가드)는 아직 실기 미확인.**

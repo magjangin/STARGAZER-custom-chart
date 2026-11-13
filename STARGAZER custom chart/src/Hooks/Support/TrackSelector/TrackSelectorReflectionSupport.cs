@@ -15,18 +15,9 @@ namespace STARGAZER_custom_chart
         // 하지만 트랙 주입·복제·메타데이터 계열 지원 코드는 문자열 타입명 + 리플렉션으로 짜여 있고 지금도 그렇다.
         // 인터롭 어셈블리는 게임 버전마다 재생성되므로, 이쪽 타입 이름이 바뀌면 빌드가 깨지는 대신
         // 런타임에 "target not found" / "타입을 찾지 못해" 경고로 드러난다.
-        private static Type? FindType(string typeName)
-        {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                Type? t = assembly.GetType(typeName, false);
-                if (t is not null)
-                {
-                    return t;
-                }
-            }
-            return null;
-        }
+        // 트랙 선택 화면에 들어갈 때마다 불리므로 PatchTargetSupport의 캐시된 해석기를 같이 쓴다
+        // (전 어셈블리 순회는 첫 호출 1회뿐, 네임스페이스 변경 시 짧은 이름 폴백 포함).
+        private static Type? FindType(string typeName) => ResolveGameType(typeName);
 
         // Il2CppObjectBase.Cast<T>()/TryCast<T>()의 리플렉션판. 대상 타입을 문자열 이름으로만 얻기 때문에
         // 제네릭 Cast<T>()를 컴파일 타임에 쓸 수 없다. 그래서 원본 래퍼의 네이티브 포인터를 꺼내
