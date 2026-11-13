@@ -32,12 +32,8 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Play.PlayerBase.SetupPlay",
             "Il2CppStargazer.Play.TravelPlayer.SetupPlay",
             "Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler.BGMPlayChecker",
-            // PlaySFX는 HandlePlaySFX (IsInPlayScene 가드 포함)에서만 출력
-            "Il2CppStarlike.Sound.SoundPlayer.PlaySFX",
         };
-        private static readonly object InvocationLogThrottleLock = new object();
-        private static readonly Dictionary<string, InvocationLogThrottleEntry> InvocationLogThrottleMap = new Dictionary<string, InvocationLogThrottleEntry>(StringComparer.Ordinal);
-        private static readonly HashSet<string> TrackLoaderCallbackPatchedMethods = new HashSet<string>(StringComparer.Ordinal);
+        // 키는 PatchSpec 논리 이름(TypeName.MethodName)이다. 대체 해석된 대상도 같은 키로 판정된다.
         private static readonly HashSet<string> FocusedHarmonyInvocationMethods = new HashSet<string>(StringComparer.Ordinal)
         {
             "Il2CppStargazer.Play.PlayerBase.Play",
@@ -45,7 +41,7 @@ namespace STARGAZER_custom_chart
             "Il2CppStargazer.Play.StargazerPlayer.Load",
             "Il2CppStargazer.TrackLoader+INNER_TrackData.LoadPattern",
             "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader.Load",
-            "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader._Load_b__5_0",
+            PatternLoaderTypeName + "." + PatternLoaderLambdaName,
             "Il2CppStargazer.TrackLoader+INNER_TrackData.LoadBGMClip",
             "Il2CppStargazer.TrackLoader+INNER_TrackData.LoadPreviewClip",
             "Il2CppStarlike.Sound.SoundPlayer.PlayBGM",
@@ -58,20 +54,7 @@ namespace STARGAZER_custom_chart
         // savecustomkey/config.txt의 autoplay 값으로 제어한다. 파일이 없으면 autoplay=false로 새로 만든다.
         private static bool EnableForceAutoPlayAtPlayerBasePlay => CustomConfig.AutoPlay;
         private static bool PlayerBaseJacketLogged;
-        private static bool TrackLoaderListLogged;
         private static bool IsInPlayScene;
         private static bool IsCustomChartPlayActive;
-
-        private sealed class InvocationLogThrottleEntry
-        {
-            public InvocationLogThrottleEntry(long windowStartMs, int count)
-            {
-                WindowStartMs = windowStartMs;
-                Count = count;
-            }
-
-            public long WindowStartMs { get; set; }
-            public int Count { get; set; }
-        }
     }
 }

@@ -9,66 +9,131 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 공용 Prefix/Postfix 디스패치
+        //
+        // 예전에는 호출마다 DeclaringType.FullName/Name 문자열 비교를 십수 번 하고, 로그 스로틀용
+        // "타입.메서드" 문자열을 매번 새로 만들었다. 이제 MethodBase마다 HookSite를 한 번만 계산해 두고
+        // (역할 enum + 로그 자격 + 스로틀 상태), 이후 호출은 사전 조회 1회 + switch로 끝난다.
+        // 역할은 PatchSpec 논리 이름으로 정하므로(RegisterResolvedTarget), 업데이트로 대체 해석된
+        // 대상(이름이 바뀐 람다, 네임스페이스가 바뀐 타입)도 같은 핸들러로 연결된다.
+        // ─────────────────────────────────────────────────────────────────────────────
+
+        private enum HookKind
+        {
+            None,
+            PlayerBasePlay,
+            PatternLoaderLoad,
+            PatternLoaderLambda,
+            TrackDataLoadPattern,
+            TrackDataLoadBgmClip,
+            SoundPlayBgm,
+            SoundStopBgm,
+            CurrentTrackViewerListen,
+            PlayInfoViewerShowPlayInfo,
+            TrackSelectorSet,
+            TrackListViewerMoveCursor,
+            LevelSelectorFetchTrackRecord,
+            LevelSelectorFetchJacektImage,
+            LevelSelectorSetTrack,
+        }
+
+        private static readonly Dictionary<string, HookKind> HookKindsByLogicalName = new Dictionary<string, HookKind>(StringComparer.Ordinal)
+        {
+            ["Il2CppStargazer.Play.PlayerBase.Play"] = HookKind.PlayerBasePlay,
+            [PatternLoaderTypeName + ".Load"] = HookKind.PatternLoaderLoad,
+            [PatternLoaderTypeName + "." + PatternLoaderLambdaName] = HookKind.PatternLoaderLambda,
+            ["Il2CppStargazer.TrackLoader+INNER_TrackData.LoadPattern"] = HookKind.TrackDataLoadPattern,
+            ["Il2CppStargazer.TrackLoader+INNER_TrackData.LoadBGMClip"] = HookKind.TrackDataLoadBgmClip,
+            ["Il2CppStarlike.Sound.SoundPlayer.PlayBGM"] = HookKind.SoundPlayBgm,
+            ["Il2CppStarlike.Sound.SoundPlayer.StopBGM"] = HookKind.SoundStopBgm,
+            ["Il2CppStargazer.Play.Widgets.CurrentTrackViewer.Listen"] = HookKind.CurrentTrackViewerListen,
+            ["Il2CppStargazer.Travel.Result.PlayInfoViewer.ShowPlayInfo"] = HookKind.PlayInfoViewerShowPlayInfo,
+            ["Il2CppStargazer.Travel.TrackSelector.TrackSelector.Set"] = HookKind.TrackSelectorSet,
+            ["Il2CppStargazer.Travel.TrackSelector.TrackListViewer.MoveCursor"] = HookKind.TrackListViewerMoveCursor,
+            ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchTrackRecord"] = HookKind.LevelSelectorFetchTrackRecord,
+            ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchJacektImage"] = HookKind.LevelSelectorFetchJacektImage,
+            ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.SetTrack"] = HookKind.LevelSelectorSetTrack,
+        };
+
+        private sealed class HookSite
+        {
+            public HookSite(HookKind kind, string logicalName, bool suppressed, bool focused)
+            {
+                Kind = kind;
+                LogicalName = logicalName;
+                Suppressed = suppressed;
+                Focused = focused;
+            }
+
+            public HookKind Kind { get; }
+            public string LogicalName { get; }
+            public bool Suppressed { get; }
+            public bool Focused { get; }
+            public long ThrottleWindowStartMs;
+            public int ThrottleCount;
+        }
+
+        private static readonly Dictionary<MethodBase, HookSite> HookSites = new Dictionary<MethodBase, HookSite>();
+        private static readonly object HookSitesLock = new object();
+
+        private static HookSite GetHookSite(MethodBase method)
+        {
+            lock (HookSitesLock)
+            {
+                if (HookSites.TryGetValue(method, out HookSite? site))
+                {
+                    return site;
+                }
+            }
+
+            string logicalName = TryGetResolvedTargetLogicalName(method) ?? $"{method.DeclaringType?.FullName}.{method.Name}";
+            HookKind kind = HookKindsByLogicalName.TryGetValue(logicalName, out HookKind mapped) ? mapped : HookKind.None;
+            var created = new HookSite(kind, logicalName, SuppressedInvocationMethods.Contains(logicalName), FocusedHarmonyInvocationMethods.Contains(logicalName));
+
+            lock (HookSitesLock)
+            {
+                if (HookSites.TryGetValue(method, out HookSite? existing))
+                {
+                    return existing;
+                }
+
+                HookSites[method] = created;
+                return created;
+            }
+        }
+
         private static void HookPrefix(MethodBase __originalMethod, object? __instance, object[]? __args)
         {
             try
             {
+                HookSite site = GetHookSite(__originalMethod);
                 object[] args = __args ?? Array.Empty<object>();
-                if (string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal) || string.Equals(__originalMethod.Name, "LoadBGMClip", StringComparison.Ordinal) || string.Equals(__originalMethod.Name, "StopBGM", StringComparison.Ordinal)) LogBgmDebugInvocation(__originalMethod, __instance, args);
 
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "Load", StringComparison.Ordinal))
+                switch (site.Kind)
                 {
-                    TryWrapPatternLoaderOnCompleted(__instance);
+                    case HookKind.SoundPlayBgm:
+                    case HookKind.SoundStopBgm:
+                    case HookKind.TrackDataLoadBgmClip:
+                        LogBgmDebugInvocation(__originalMethod, __instance, args);
+                        break;
+
+                    case HookKind.PatternLoaderLoad:
+                        TryWrapPatternLoaderOnCompleted(__instance);
+                        break;
+
+                    // 난이도 문자열이 패턴 에셋 로딩에 영향을 주는지 추적하기 위한 진단 로그.
+                    // LoadPattern 직후 로딩이 멈추는 현상이 난이도 값과만 상관관계를 보였다.
+                    case HookKind.TrackDataLoadPattern:
+                        LogPatternLoadDiagnostics(__instance, args);
+                        break;
+
+                    case HookKind.PlayerBasePlay:
+                        HandlePlayerBasePlayPrefix(__instance, args);
+                        break;
                 }
 
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "LoadTracksAsync", StringComparison.Ordinal))
-                {
-                    TryPatchTrackLoaderOnLoadedCallback(args);
-                }
-
-                // 난이도 문자열이 패턴 에셋 로딩에 영향을 주는지 추적하기 위한 진단 로그.
-                // LoadPattern 직후 로딩이 멈추는 현상이 난이도 값과만 상관관계를 보였다.
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackData", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "LoadPattern", StringComparison.Ordinal))
-                {
-                    LogPatternLoadDiagnostics(__instance, args);
-                }
-
-                // Il2CppStargazer.TrackLoader+INNER_TrackMetaData.GetParser() 호출을 로그로 남깁니다.
-                if (EnableVerboseInvocationLogging
-                    && string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.TrackLoader+INNER_TrackMetaData", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "GetParser", StringComparison.Ordinal))
-                {
-                    MelonLogger.Msg($"[HookInvoke][GetParser] {BuildInvocationSignature(__originalMethod, __instance, args)}");
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.PlayerBase", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "Play", StringComparison.Ordinal))
-                {
-                    IsInPlayScene = true;
-                    UpdateCustomChartPlayState(args.Length > 0 ? args[0] : null);
-                    ResetNoteMotionState();
-                    MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
-
-                    if (EnableForceAutoPlayAtPlayerBasePlay)
-                    {
-                        TryEnablePlayerBaseAutoPlay(__instance);
-                    }
-
-                    if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
-                    {
-                        LogPlayerBaseJacketSnapshot(__instance);
-                    }
-
-                    if (EnablePlaySceneTrackLogging && args.Length > 0 && args[0] != null)
-                    {
-                        LogPlaySceneTrackInfo(args[0]);
-                    }
-                }
-
-                if (ShouldSkipInvocationLog(__originalMethod, args))
+                if (ShouldSkipInvocationLog(site))
                 {
                     return;
                 }
@@ -81,111 +146,98 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static void HandlePlayerBasePlayPrefix(object? playerBase, object[] args)
+        {
+            IsInPlayScene = true;
+            UpdateCustomChartPlayState(args.Length > 0 ? args[0] : null);
+            ResetNoteMotionState();
+            MelonLogger.Msg("[PlayScene] 플레이씬 진입 — IsInPlayScene=true");
+
+            if (EnableForceAutoPlayAtPlayerBasePlay)
+            {
+                TryEnablePlayerBaseAutoPlay(playerBase);
+            }
+
+            if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
+            {
+                LogPlayerBaseJacketSnapshot(playerBase);
+            }
+
+            if (EnablePlaySceneTrackLogging && args.Length > 0 && args[0] != null)
+            {
+                LogPlaySceneTrackInfo(args[0]);
+            }
+        }
+
         private static void HookPostfix(MethodBase __originalMethod, object? __instance, object[]? __args)
         {
             try
             {
+                HookSite site = GetHookSite(__originalMethod);
                 object[] args = __args ?? Array.Empty<object>();
-                if (!ShouldSkipInvocationLog(__originalMethod, args))
+                if (!ShouldSkipInvocationLog(site))
                 {
                     MelonLogger.Msg($"[HookInvoke][POST] {BuildInvocationSignature(__originalMethod, __instance, args)}");
                 }
 
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.Widgets.CurrentTrackViewer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "Listen", StringComparison.Ordinal))
+                switch (site.Kind)
                 {
-                    ApplyCustomLevelDisplayToPlayScene(__instance);
+                    case HookKind.CurrentTrackViewerListen:
+                        ApplyCustomLevelDisplayToPlayScene(__instance);
+                        if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
+                        {
+                            ProbeCurrentTrackViewerImageMembers(__instance, args);
+                        }
+                        break;
 
-                    if (EnableRuntimeProbeLogging || EnablePlaySceneJacketLogging)
-                    {
-                        ProbeCurrentTrackViewerImageMembers(__instance, args);
-                    }
-                }
+                    case HookKind.PlayInfoViewerShowPlayInfo:
+                        IsInPlayScene = false;
+                        MelonLogger.Msg("[PlayScene] 결과 화면 진입 — IsInPlayScene=false");
+                        HandleResultPlayInfoLevelDisplay(__instance, args);
+                        if (EnableResultSceneJacketLogging)
+                        {
+                            ProbeResultPlayInfoJacketMembers(__instance, args);
+                        }
+                        if (EnableRuntimeProbeLogging)
+                        {
+                            ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "Result.PlayInfoViewer.ShowPlayInfo");
+                        }
+                        break;
 
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.Result.PlayInfoViewer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "ShowPlayInfo", StringComparison.Ordinal))
-                {
-                    IsInPlayScene = false;
-                    MelonLogger.Msg("[PlayScene] 결과 화면 진입 — IsInPlayScene=false");
+                    case HookKind.PatternLoaderLambda:
+                        // BMS 차트 주입도 ProbeNoteArrayMembers 안에서 일어난다. 로그 플래그만 보고 막으면
+                        // 로그를 끄는 순간 커스텀 곡이 조용히 원본 차트로 나오므로, 커스텀 곡일 때는 항상 부른다.
+                        if (EnableRuntimeProbeLogging || IsCustomChartPlayActive)
+                        {
+                            ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, PatternLoaderLambdaProbeSource);
+                        }
+                        break;
 
-                    HandleResultPlayInfoLevelDisplay(__instance, args);
+                    case HookKind.TrackSelectorSet:
+                        if (args.Length > 0 && args[0] is not null)
+                        {
+                            HandleTrackSelectorSetTracks(args[0]);
+                        }
+                        break;
 
-                    if (EnableResultSceneJacketLogging)
-                    {
-                        ProbeResultPlayInfoJacketMembers(__instance, args);
-                    }
-
-                    if (EnableRuntimeProbeLogging)
-                    {
-                        ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "Result.PlayInfoViewer.ShowPlayInfo");
-                    }
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
-                    && IsPatternLoaderLambdaMethod(__originalMethod))
-                {
-                    // BMS 차트 주입도 ProbeNoteArrayMembers 안에서 일어난다. 로그 플래그만 보고 막으면
-                    // 로그를 끄는 순간 커스텀 곡이 조용히 원본 차트로 나오므로, 커스텀 곡일 때는 항상 부른다.
-                    if (EnableRuntimeProbeLogging || IsCustomChartPlayActive)
-                    {
-                        ProbeNoteArrayMembers(args.Length > 0 ? args[0] : null, "PatternLoader._Load_b__5_0");
-                    }
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.TrackSelector.TrackSelector", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "Set", StringComparison.Ordinal)
-                    && args.Length > 0
-                    && args[0] is not null)
-                {
-                    HandleTrackSelectorSetTracks(args[0]);
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.TrackSelector.TrackListViewer", StringComparison.Ordinal))
-                {
-                    if (string.Equals(__originalMethod.Name, "MoveCursor", StringComparison.Ordinal))
-                    {
+                    case HookKind.TrackListViewerMoveCursor:
                         HandleTrackListViewerMoveCursor(__instance, args);
-                    }
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Travel.LevelSelector.LevelSelector", StringComparison.Ordinal))
-                {
-                    if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal))
-                    {
-                        HandleLevelSelectorFetchTrackRecord(__instance, args);
-                    }
-
-                    if (string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
-                    {
-                        HandleLevelSelectorFetchJacektImage(__instance, args);
-                    }
-
-                    if (string.Equals(__originalMethod.Name, "SetTrack", StringComparison.Ordinal))
-                    {
-                        HandleLevelSelectorSetTrack(__instance, args);
-                    }
+                        break;
 
                     // Refresh는 패치하면 NRE가 나므로, 게임이 표시를 다시 채운 뒤 불리는 이 두 훅에서 재적용한다.
-                    if (string.Equals(__originalMethod.Name, "FetchTrackRecord", StringComparison.Ordinal)
-                        || string.Equals(__originalMethod.Name, "FetchJacektImage", StringComparison.Ordinal))
-                    {
+                    case HookKind.LevelSelectorFetchTrackRecord:
+                        HandleLevelSelectorFetchTrackRecord(__instance, args);
                         HandleLevelSelectorRefresh(__instance);
-                    }
-                }
+                        break;
 
+                    case HookKind.LevelSelectorFetchJacektImage:
+                        HandleLevelSelectorFetchJacektImage(__instance, args);
+                        HandleLevelSelectorRefresh(__instance);
+                        break;
 
-                // PlaySFX 오버로드 자동 덤프: PlayBGM이 처음 호출되는 시점에 SoundPlayer 타입에서 PlaySFX 시그니처를 전부 출력
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal)
-                    && LogOnce("SoundPlayer.PlaySFX.overload.dump"))
-                {
-                    DumpPlaySFXOverloads(__originalMethod.DeclaringType!);
-                }
-
-                if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStarlike.Sound.SoundPlayer", StringComparison.Ordinal)
-                    && string.Equals(__originalMethod.Name, "PlaySFX", StringComparison.Ordinal))
-                {
-                    HandlePlaySFX(__originalMethod, args);
+                    case HookKind.LevelSelectorSetTrack:
+                        HandleLevelSelectorSetTrack(__instance, args);
+                        break;
                 }
             }
             catch (Exception ex)
@@ -325,42 +377,30 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static bool ShouldSkipInvocationLog(MethodBase method, object[] args)
+        private static bool ShouldSkipInvocationLog(HookSite site)
         {
-            if (!EnableVerboseInvocationLogging)
+            if (!EnableVerboseInvocationLogging || site.Suppressed)
             {
                 return true;
             }
 
-            string methodFullName = $"{method.DeclaringType?.FullName}.{method.Name}";
-            if (SuppressedInvocationMethods.Contains(methodFullName))
-            {
-                return true;
-            }
-
-            if (EnableFocusedHarmonyInvocationLogging && !FocusedHarmonyInvocationMethods.Contains(methodFullName))
+            if (EnableFocusedHarmonyInvocationLogging && !site.Focused)
             {
                 return true;
             }
 
             long now = Environment.TickCount64;
-            lock (InvocationLogThrottleLock)
+            lock (site)
             {
-                if (!InvocationLogThrottleMap.TryGetValue(methodFullName, out InvocationLogThrottleEntry? throttleEntry))
+                if (site.ThrottleCount == 0 || now - site.ThrottleWindowStartMs > InvocationLogWindowMs)
                 {
-                    InvocationLogThrottleMap[methodFullName] = new InvocationLogThrottleEntry(now, 1);
+                    site.ThrottleWindowStartMs = now;
+                    site.ThrottleCount = 1;
                     return false;
                 }
 
-                if (now - throttleEntry.WindowStartMs > InvocationLogWindowMs)
-                {
-                    throttleEntry.WindowStartMs = now;
-                    throttleEntry.Count = 1;
-                    return false;
-                }
-
-                throttleEntry.Count++;
-                return throttleEntry.Count > InvocationLogMaxPerWindow;
+                site.ThrottleCount++;
+                return site.ThrottleCount > InvocationLogMaxPerWindow;
             }
         }
 
@@ -394,62 +434,95 @@ namespace STARGAZER_custom_chart
             return type.FullName ?? type.Name;
         }
 
-        private static bool IsPatternLoaderLambdaMethod(MethodBase method)
-        {
-            if (method is null) return false;
-            string name = method.Name;
-            if (string.Equals(name, "Load", StringComparison.Ordinal))
-            {
-                return false;
-            }
-            return string.Equals(name, "_Load_b__5_0", StringComparison.Ordinal)
-                || name.Contains("b__", StringComparison.Ordinal)
-                || name.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
+        // ─────────────────────────────────────────────────────────────────────────────
+        // 2차 경로: INNER_PatternLoader.onCompleted 이중래퍼(Dual-Wrapper)
+        //
+        // 1차 경로(람다 _Load_b__5_0 Postfix)는 람다 이름에 의존한다. 이름이 바뀌어 1차 해석이 실패해도
+        // 공개 프로퍼티 onCompleted(Action<Pattern>)는 남아 있을 가능성이 높으므로, Load 시점에 그것을
+        // 감싸 패턴을 받는다. 둘 다 살아 있으면 람다 안에서 onCompleted(=래퍼)가 먼저 불리고 그 뒤에
+        // 람다 Postfix가 불리므로, ProbeNoteArrayMembers가 패턴 포인터로 중복을 거른다.
+        // ─────────────────────────────────────────────────────────────────────────────
 
-        private static readonly HashSet<IntPtr> WrappedPatternLoaders = new HashSet<IntPtr>();
+        private const string PatternLoaderLambdaProbeSource = "PatternLoader.Lambda";
+        private const string PatternLoaderDualWrapperProbeSource = "PatternLoader.DualWrapper";
+
+        // PatternLoader 인스턴스 포인터 -> 우리가 onCompleted에 넣은 래퍼 델리게이트 포인터.
+        // 같은 로더에 다시 Load가 불려도 현재 onCompleted가 우리 래퍼 그대로면 다시 감싸지 않고,
+        // 게임이 onCompleted를 새 델리게이트로 바꿔 놨으면(포인터 불일치) 그 새 델리게이트를 다시 감싼다.
+        // 예전에는 로더 포인터만 HashSet에 넣어 "한 번 감쌌으면 끝"이라, 해제된 주소가 재사용되거나
+        // onCompleted가 교체되면 2차 경로가 조용히 빠졌다. PlayerBase.Play마다 비운다(UpdateCustomChartPlayState).
+        private static readonly Dictionary<IntPtr, IntPtr> WrappedPatternLoaders = new Dictionary<IntPtr, IntPtr>();
+        private static PropertyInfo? _patternLoaderOnCompletedProperty;
+        private static Type? _patternLoaderOnCompletedOwner;
 
         private static void TryWrapPatternLoaderOnCompleted(object? instance)
         {
             if (instance is null) return;
             try
             {
-                IntPtr ptr = TryGetIl2CppPointer(instance);
-                if (ptr != IntPtr.Zero && !WrappedPatternLoaders.Add(ptr))
+                Type loaderType = instance.GetType();
+                if (_patternLoaderOnCompletedOwner != loaderType)
+                {
+                    _patternLoaderOnCompletedProperty = loaderType.GetProperty("onCompleted", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    _patternLoaderOnCompletedOwner = loaderType;
+                }
+
+                PropertyInfo? prop = _patternLoaderOnCompletedProperty;
+                if (prop is null)
+                {
+                    if (LogOnce("dualwrapper.no-oncompleted"))
+                    {
+                        MelonLogger.Warning($"[DualWrapper] {loaderType.FullName}.onCompleted 를 찾지 못해 2차 경로를 설치하지 못했습니다.");
+                    }
+                    return;
+                }
+
+                if (prop.GetValue(instance) is not Il2CppSystem.Action<Il2CppMikazuki.Pattern> origAction)
                 {
                     return;
                 }
 
-                PropertyInfo? prop = instance.GetType().GetProperty("onCompleted", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (prop is null) return;
+                IntPtr loaderPtr = TryGetIl2CppPointer(instance);
+                if (loaderPtr != IntPtr.Zero
+                    && WrappedPatternLoaders.TryGetValue(loaderPtr, out IntPtr wrapperPtr)
+                    && wrapperPtr == origAction.Pointer)
+                {
+                    return;
+                }
 
-                var origAction = prop.GetValue(instance) as Il2CppSystem.Action<Il2CppMikazuki.Pattern>;
-                if (origAction is null) return;
-
-                Action<Il2CppMikazuki.Pattern> managedDelegate = (pattern) =>
+                Action<Il2CppMikazuki.Pattern> managedDelegate = pattern =>
                 {
                     try
                     {
                         if (pattern != null)
                         {
-                            ProbeNoteArrayMembers(pattern, "PatternLoader.DualWrapper");
+                            ProbeNoteArrayMembers(pattern, PatternLoaderDualWrapperProbeSource);
                         }
                     }
                     catch (Exception ex)
                     {
                         MelonLogger.Warning($"[DualWrapper] Exception in pattern probe: {ex.Message}");
                     }
+
                     origAction.Invoke(pattern!);
                 };
 
-                prop.SetValue(instance, (Il2CppSystem.Action<Il2CppMikazuki.Pattern>)managedDelegate);
-                MelonLogger.Msg("[DualWrapper] INNER_PatternLoader.onCompleted 이중래퍼(Dual-Wrapper) 설치 완료");
+                Il2CppSystem.Action<Il2CppMikazuki.Pattern> wrapper = managedDelegate;
+                prop.SetValue(instance, wrapper);
+                if (loaderPtr != IntPtr.Zero)
+                {
+                    WrappedPatternLoaders[loaderPtr] = wrapper.Pointer;
+                }
+
+                if (LogOnce("dualwrapper.installed"))
+                {
+                    MelonLogger.Msg("[DualWrapper] INNER_PatternLoader.onCompleted 이중래퍼(Dual-Wrapper) 설치 완료 (이후 설치는 로그 생략)");
+                }
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[DualWrapper] 이중래퍼 설치 실패: {ex.GetType().Name}: {ex.Message}");
             }
         }
-
     }
 }

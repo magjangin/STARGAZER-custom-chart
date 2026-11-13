@@ -13,7 +13,7 @@
 - `src/Hooks/Support/TrackSelector/TrackSelectorCloningSupport.cs` — Il2Cpp 객체 복제 및 `Pointer` 비교
 - `src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs` — `IntPtr` 생성자 시도 및 컬렉션 주입
 - `src/Hooks/Support/Sound/CustomBgmSupport.cs` — `AudioClip`의 포인터 기술 및 Unity 네이티브 핸들 접근
-- `src/Hooks/Support/Sound/SoundHookSupport.cs` — `PlaySFX` 오버로드 목록 덤프와 호출 로깅(패치 자체는 `src/Hooks/Patches/Sound/SoundInvocationPatches.cs`, 매니지드 레벨)
+- `src/Hooks/Support/Common/HookInvocationSupport.cs` — `onCompleted` 이중래퍼에서 로더/델리게이트 `Pointer` 비교 (`PlaySFX` 진단용 `SoundHookSupport.cs`는 2026-11-14 삭제)
 - `src/Hooks/Support/Play/NoteMotionSupport.cs` — `Il2CppObjectBase.Pointer`를 노트별 상태 키로 사용
 
 간단한 기술적 정정
