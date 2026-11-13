@@ -135,9 +135,8 @@ namespace STARGAZER_custom_chart
 
         private static string DescribePointer(object value)
         {
-            object? pointer = TryGetMemberValue(value, value.GetType(), "Pointer")
-                ?? TryGetMemberValue(value, value.GetType(), "m_CachedPtr");
-            return pointer is IntPtr ptr ? $"0x{ptr.ToInt64():X}" : pointer?.ToString() ?? "<unknown>";
+            IntPtr ptr = TryGetIl2CppPointer(value);
+            return ptr != IntPtr.Zero ? $"0x{ptr.ToInt64():X}" : "<unknown>";
         }
 
         private static void InvokeActionOfAudioClip(object? callback, AudioClip? clip)
@@ -198,12 +197,13 @@ namespace STARGAZER_custom_chart
 
         private static IEnumerator LoadCustomAudioClipCoroutine(string filePath)
         {
-            string uri = "file:///" + filePath.Replace('\\', '/');
+            string uri = new Uri(filePath).AbsoluteUri;
             AudioType audioType = ResolveAudioType(filePath);
             MelonLogger.Msg($"[CustomBgm] Starting load from uri: {uri} (audioType={audioType})");
             UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
             www.disposeDownloadHandlerOnDispose = false;
             DownloadHandlerAudioClip? downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
+            bool cachedHandler = false;
             try
             {
                 if (downloadHandler != null)
@@ -229,6 +229,7 @@ namespace STARGAZER_custom_chart
                         if (downloadHandler is not null)
                         {
                             CustomBgmDownloadHandlerCache[filePath] = downloadHandler;
+                            cachedHandler = true;
                         }
                         MelonLogger.Msg($"[CustomBgm] Cached custom BGM: {filePath} clip={DescribeAudioClip(clip)}");
                         CompletePendingCustomBgmCallbacks(filePath, clip);
@@ -243,6 +244,10 @@ namespace STARGAZER_custom_chart
             finally
             {
                 CustomBgmLoadsInProgress.Remove(filePath);
+                if (!cachedHandler)
+                {
+                    downloadHandler?.Dispose();
+                }
                 www.Dispose();
             }
         }

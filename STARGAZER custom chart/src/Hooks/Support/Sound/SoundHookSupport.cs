@@ -41,6 +41,8 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static int _playSfxOverloadLoggedMask;
+
         /// <summary>
         /// PlaySFX 4개 오버로드 공통 Postfix 핸들러.
         /// 파라미터 수와 첫 번째 파라미터 타입으로 어느 오버로드인지 구분하여 로깅합니다.
@@ -54,8 +56,8 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                // 플레이씬이 아니면 무시
-                if (!IsInPlayScene)
+                // 플레이씬이 아니거나 이미 4개 오버로드가 모두 기록됐으면 리플렉션 없이 즉시 복귀
+                if (!IsInPlayScene || (_playSfxOverloadLoggedMask & 0xF) == 0xF)
                 {
                     return;
                 }
@@ -64,6 +66,20 @@ namespace STARGAZER_custom_chart
                 int paramCount = parameters.Length;
                 bool firstIsSingle = paramCount > 0
                     && string.Equals(parameters[0].ParameterType.Name, "Single", StringComparison.Ordinal);
+
+                int overloadBit = paramCount switch
+                {
+                    2 => 1 << 0,
+                    3 when !firstIsSingle => 1 << 1,
+                    3 when firstIsSingle => 1 << 2,
+                    4 => 1 << 3,
+                    _ => 1 << 4,
+                };
+
+                if ((_playSfxOverloadLoggedMask & overloadBit) != 0)
+                {
+                    return;
+                }
 
                 // 어느 오버로드인지 판별
                 string overloadLabel;
@@ -111,6 +127,7 @@ namespace STARGAZER_custom_chart
 
                 // 어느 오버로드가 실제로 쓰이는지 알아보려는 진단이라 한 번만 찍으면 충분하다.
                 // 매번 찍으면 곡 하나에 2천 줄이 쌓인다(2026-08-09 실측: 4074줄 중 1995줄).
+                _playSfxOverloadLoggedMask |= overloadBit;
                 if (LogOnce($"SoundPlayer.PlaySFX.overload.{overloadLabel}"))
                 {
                     MelonLogger.Msg(

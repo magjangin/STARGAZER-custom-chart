@@ -112,6 +112,40 @@ namespace STARGAZER_custom_chart
                     : string.Join(", ", chart.SoundKinds.Select(kvp => $"{kvp.Key}={kvp.Value}"));
                 MelonLogger.Msg($"[BmsInject] 사운드 ID 분류: {soundKinds}");
 
+                // 루프 진입 전 리플렉션 멤버를 한 번만 해석해 노트 수천 개 생성 시 병목을 제거한다.
+                const BindingFlags MemberFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                ConstructorInfo? beatInfoCtor = beatInfoType.GetConstructor(MemberFlags, null, Type.EmptyTypes, null);
+                FieldInfo? beatSplitField = beatInfoType.GetField("BeatSplit", MemberFlags);
+                FieldInfo? beatIndexField = beatInfoType.GetField("BeatIndex", MemberFlags);
+                ConstructorInfo? noteCtor3 = FindNoteCtor3(noteType);
+
+                object? templateProp = TryGetMemberValue(templateNote, noteType, "property")
+                    ?? TryGetMemberValue(templateNote, noteType, "Property")
+                    ?? TryGetMemberValue(templateNote, noteType, "noteProperty")
+                    ?? TryGetMemberValue(templateNote, noteType, "NoteProperty");
+                Type? propType = templateProp?.GetType();
+                ConstructorInfo? propCtor = propType?.GetConstructor(MemberFlags, null, Type.EmptyTypes, null);
+                object? templateExprHolder = templateProp is null || propType is null
+                    ? null
+                    : TryGetMemberValue(templateProp, propType, "expressionHolder")
+                        ?? TryGetMemberValue(templateProp, propType, "expressionholder")
+                        ?? TryGetMemberValue(templateProp, propType, "ExpressionHolder");
+                PropertyInfo? propExprProp = propType?.GetProperty("expressionHolder", MemberFlags)
+                    ?? propType?.GetProperty("ExpressionHolder", MemberFlags);
+                FieldInfo? propExprField = propExprProp is null ? propType?.GetField("expressionHolder", MemberFlags) : null;
+                PropertyInfo? propLinkedProp = propType?.GetProperty("linked", MemberFlags);
+                FieldInfo? propLinkedField = propLinkedProp is null ? propType?.GetField("linked", MemberFlags) : null;
+                Type? linkedEnumType = propLinkedProp?.PropertyType ?? propLinkedField?.FieldType;
+                object? linkedNone = linkedEnumType is not null && linkedEnumType.IsEnum ? Enum.Parse(linkedEnumType, "None") : null;
+                object? linkedStart = linkedEnumType is not null && linkedEnumType.IsEnum ? Enum.Parse(linkedEnumType, "StartPoint") : null;
+                object? linkedEnd = linkedEnumType is not null && linkedEnumType.IsEnum ? Enum.Parse(linkedEnumType, "EndPoint") : null;
+                PropertyInfo? notePropSetter = noteType.GetProperty("property", MemberFlags) ?? noteType.GetProperty("Property", MemberFlags);
+                FieldInfo? notePropField = notePropSetter is null ? (noteType.GetField("property", MemberFlags) ?? noteType.GetField("_property", MemberFlags)) : null;
+
+                MethodInfo? areasAddMethod = areasValue.GetType().GetMethods(MemberFlags)
+                    .FirstOrDefault(m => string.Equals(m.Name, "Add", StringComparison.Ordinal) && m.GetParameters().Length == 1);
+                MethodInfo? notesAddMethod = null;
+
                 foreach (BmsMeasure measure in chart.Measures)
                 {
                     object? newArea = TryInstantiateAreaViaLayerConstructor(areaType, templateArea);
@@ -125,7 +159,10 @@ namespace STARGAZER_custom_chart
                     TrySetValueByNameCandidates(newArea, new[] { "length" }, templateLength);
                     TrySetValueByNameCandidates(newArea, new[] { "targetlayer" }, layer);
 
-                    if (!TryAddToNotesCollection(areasValue, newArea))
+                    bool areaAdded = areasAddMethod is not null
+                        ? InvokeAdd(areasAddMethod, areasValue, newArea)
+                        : TryAddToNotesCollection(areasValue, newArea);
+                    if (!areaAdded)
                     {
                         MelonLogger.Warning($"[BmsInject] 마디 {measure.Index} Area를 Layer.Areas에 추가하지 못했습니다.");
                         continue;
@@ -139,6 +176,9 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
+                    notesAddMethod ??= notesValue.GetType().GetMethods(MemberFlags)
+                        .FirstOrDefault(m => string.Equals(m.Name, "Add", StringComparison.Ordinal) && m.GetParameters().Length == 1);
+
                     foreach (BmsNoteEvent noteEvent in measure.Notes)
                     {
                         int laneIndex = Array.IndexOf(BmsChannelLaneOrder, noteEvent.Channel);
@@ -149,13 +189,28 @@ namespace STARGAZER_custom_chart
                             continue;
                         }
 
-                        object? beatInfo = InstantiateIl2CppObject(beatInfoType);
-                        if (beatInfo is null || !TryWriteBeatInfoPosition(beatInfo, noteEvent.BeatNumerator, noteEvent.BeatDenominator))
+                        object? beatInfo = beatInfoCtor is not null ? beatInfoCtor.Invoke(null) : InstantiateIl2CppObject(beatInfoType);
+                        if (beatInfo is null)
                         {
                             continue;
                         }
 
-                        if (!TryCreateNoteAtPosition(noteType, newArea, laneUids[laneIndex], beatInfo, out object? newNote) || newNote is null)
+                        if (beatSplitField is not null && beatIndexField is not null)
+                        {
+                            beatSplitField.SetValue(beatInfo, noteEvent.BeatDenominator);
+                            beatIndexField.SetValue(beatInfo, noteEvent.BeatNumerator);
+                        }
+                        else if (!TryWriteBeatInfoPosition(beatInfo, noteEvent.BeatNumerator, noteEvent.BeatDenominator))
+                        {
+                            continue;
+                        }
+
+                        object? newNote;
+                        if (noteCtor3 is not null)
+                        {
+                            newNote = noteCtor3.Invoke(new[] { newArea, laneUids[laneIndex], beatInfo });
+                        }
+                        else if (!TryCreateNoteAtPosition(noteType, newArea, laneUids[laneIndex], beatInfo, out newNote) || newNote is null)
                         {
                             continue;
                         }
@@ -163,10 +218,36 @@ namespace STARGAZER_custom_chart
                         // 롱노트는 시작/끝 노트에 각각 StartPoint/EndPoint를 걸어 한 쌍으로 만든다.
                         // 홀드가 마디를 넘어가면 시작과 끝이 서로 다른 Area에 들어가는데,
                         // 게임 원본 차트도 인접 Area에 짝이 나뉘어 있어 같은 방식으로 둔다.
-                        string linkedState = ResolveLinkedState(noteEvent.Kind);
-                        TryApplyNotePropertyLinkedState(templateNote, newNote, linkedState);
+                        object? linkedEnumVal = noteEvent.Kind switch
+                        {
+                            BmsNoteKind.HoldStart => linkedStart,
+                            BmsNoteKind.HoldEnd => linkedEnd,
+                            _ => linkedNone,
+                        };
+                        if (propCtor is not null && linkedEnumVal is not null && (notePropSetter is not null && notePropSetter.CanWrite || notePropField is not null))
+                        {
+                            object propObj = propCtor.Invoke(null);
+                            if (templateExprHolder is not null)
+                            {
+                                if (propExprProp is not null && propExprProp.CanWrite) propExprProp.SetValue(propObj, templateExprHolder);
+                                else if (propExprField is not null) propExprField.SetValue(propObj, templateExprHolder);
+                            }
+                            if (propLinkedProp is not null && propLinkedProp.CanWrite) propLinkedProp.SetValue(propObj, linkedEnumVal);
+                            else if (propLinkedField is not null) propLinkedField.SetValue(propObj, linkedEnumVal);
 
-                        if (TryAddToNotesCollection(notesValue, newNote))
+                            if (notePropSetter is not null && notePropSetter.CanWrite) notePropSetter.SetValue(newNote, propObj);
+                            else notePropField!.SetValue(newNote, propObj);
+                        }
+                        else
+                        {
+                            string linkedState = ResolveLinkedState(noteEvent.Kind);
+                            TryApplyNotePropertyLinkedState(templateNote, newNote, linkedState);
+                        }
+
+                        bool noteAdded = notesAddMethod is not null
+                            ? InvokeAdd(notesAddMethod, notesValue, newNote)
+                            : TryAddToNotesCollection(notesValue, newNote);
+                        if (noteAdded)
                         {
                             notesCreated++;
                             if (noteEvent.Kind == BmsNoteKind.HoldStart) holdStarts++;
@@ -301,11 +382,27 @@ namespace STARGAZER_custom_chart
             return true;
         }
 
-        private static int Gcd(int a, int b)
+        private static ConstructorInfo? FindNoteCtor3(Type noteType)
         {
-            if (a == 0) return Math.Max(b, 1);
-            while (b != 0) { (a, b) = (b, a % b); }
-            return Math.Max(a, 1);
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            foreach (ConstructorInfo ctor in noteType.GetConstructors(Flags))
+            {
+                ParameterInfo[] parameters = ctor.GetParameters();
+                if (parameters.Length == 3
+                    && parameters[0].ParameterType.Name.Contains("Area")
+                    && parameters[1].ParameterType == typeof(string)
+                    && parameters[2].ParameterType.Name.Contains("BeatInfo"))
+                {
+                    return ctor;
+                }
+            }
+            return null;
+        }
+
+        private static bool InvokeAdd(MethodInfo addMethod, object collection, object item)
+        {
+            addMethod.Invoke(collection, new[] { item });
+            return true;
         }
     }
 }

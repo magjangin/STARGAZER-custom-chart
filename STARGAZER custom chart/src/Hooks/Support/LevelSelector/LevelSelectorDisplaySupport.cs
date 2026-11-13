@@ -179,22 +179,36 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static MethodInfo? _cachedLevelUnitSetMethod;
+        private static Type? _cachedLevelUnitType;
+        private static MethodInfo? _cachedFetchLevelTextMethod;
+        private static Type? _cachedLevelItemType;
+        private static MethodInfo? _cachedDoTextSetterMethod;
+        private static PropertyInfo? _cachedTextProviderTextProp;
+        private static Type? _cachedTextProviderType;
+
         private static bool TryInvokeLevelUnitSet(object levelUnit, string levelValue)
         {
             try
             {
-                MethodInfo? set = levelUnit.GetType().GetMethod(
-                    "Set",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    new[] { typeof(string) },
-                    null);
-                if (set is null)
+                Type type = levelUnit.GetType();
+                if (_cachedLevelUnitType != type)
+                {
+                    _cachedLevelUnitType = type;
+                    _cachedLevelUnitSetMethod = type.GetMethod(
+                        "Set",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null,
+                        new[] { typeof(string) },
+                        null);
+                }
+
+                if (_cachedLevelUnitSetMethod is null)
                 {
                     return false;
                 }
 
-                set.Invoke(levelUnit, new object[] { levelValue });
+                _cachedLevelUnitSetMethod.Invoke(levelUnit, new object[] { levelValue });
                 return true;
             }
             catch (Exception ex)
@@ -242,15 +256,20 @@ namespace STARGAZER_custom_chart
         private static bool TrySetTextProviderText(object textProvider, string value)
         {
             Type type = textProvider.GetType();
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            if (_cachedTextProviderType != type)
+            {
+                _cachedTextProviderType = type;
+                _cachedDoTextSetterMethod = type.GetMethod("DoTextSetter", flags, null, new[] { typeof(string) }, null);
+                _cachedTextProviderTextProp = type.GetProperty("Text", flags);
+            }
 
             // textChain까지 전파하는 게임 자체 세터를 우선 사용한다.
             try
             {
-                MethodInfo? setter = type.GetMethod("DoTextSetter", flags, null, new[] { typeof(string) }, null);
-                if (setter is not null)
+                if (_cachedDoTextSetterMethod is not null)
                 {
-                    setter.Invoke(textProvider, new object[] { value });
+                    _cachedDoTextSetterMethod.Invoke(textProvider, new object[] { value });
                     return true;
                 }
             }
@@ -261,10 +280,9 @@ namespace STARGAZER_custom_chart
 
             try
             {
-                PropertyInfo? textProp = type.GetProperty("Text", flags);
-                if (textProp is not null && textProp.CanWrite)
+                if (_cachedTextProviderTextProp is not null && _cachedTextProviderTextProp.CanWrite)
                 {
-                    textProp.SetValue(textProvider, value);
+                    _cachedTextProviderTextProp.SetValue(textProvider, value);
                     return true;
                 }
             }
@@ -329,18 +347,24 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                MethodInfo? fetch = levelItem.GetType().GetMethod(
-                    "FetchLevelText",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                    null,
-                    new[] { typeof(string) },
-                    null);
-                if (fetch is null)
+                Type type = levelItem.GetType();
+                if (_cachedLevelItemType != type)
+                {
+                    _cachedLevelItemType = type;
+                    _cachedFetchLevelTextMethod = type.GetMethod(
+                        "FetchLevelText",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                        null,
+                        new[] { typeof(string) },
+                        null);
+                }
+
+                if (_cachedFetchLevelTextMethod is null)
                 {
                     return false;
                 }
 
-                fetch.Invoke(levelItem, new object[] { levelValue });
+                _cachedFetchLevelTextMethod.Invoke(levelItem, new object[] { levelValue });
                 return true;
             }
             catch (Exception ex)

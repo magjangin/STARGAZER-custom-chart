@@ -28,6 +28,7 @@ namespace STARGAZER_custom_chart
         // 키는 노트의 부모(레인 노트 컨테이너) Transform의 InstanceID.
         private static readonly Dictionary<int, NoteMotionLane> NoteMotionLanes = new Dictionary<int, NoteMotionLane>();
         private static readonly System.Random NoteMotionRandom = new System.Random();
+        private static readonly List<IntPtr> StaleNoteMotionKeys = new List<IntPtr>();
 
         private static int NoteMotionLastPruneFrame;
         private static int NoteMotionCachedFrame = -1;
@@ -42,12 +43,14 @@ namespace STARGAZER_custom_chart
         {
             NoteMotionStates.Clear();
             NoteMotionLanes.Clear();
+            StaleNoteMotionKeys.Clear();
+            NoteMotionCachedFrame = -1;
             NoteMotionVelocityLogged = false;
         }
 
         private static void RestoreNoteBasePosition(object? instance)
         {
-            if (!NoteMotionEnabled)
+            if (!NoteMotionEnabled || NoteMotionStates.Count == 0)
             {
                 return;
             }
@@ -66,10 +69,15 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                RectTransform? transform = TryGetNoteRectTransform(note);
+                RectTransform? transform = state.RectTransform;
                 if (transform == null)
                 {
-                    return;
+                    transform = TryGetNoteRectTransform(note);
+                    state.RectTransform = transform;
+                    if (transform == null)
+                    {
+                        return;
+                    }
                 }
 
                 transform.anchoredPosition = state.BasePosition;
@@ -94,15 +102,8 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                RectTransform? transform = TryGetNoteRectTransform(note);
-                if (transform == null)
-                {
-                    return;
-                }
-
                 int frame = Time.frameCount;
                 IntPtr pointer = note.Pointer;
-                Vector2 basePosition = transform.anchoredPosition;
 
                 // 한동안 갱신되지 않았던 항목은 해제된 주소를 재사용한 새 노트일 수 있어 새로 만든다.
                 // (일시정지 후 복귀에도 걸리는데, 그때는 위상과 배율이 새로 뽑혀 한 번 튄다.)
@@ -113,15 +114,29 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
+                RectTransform? transform = !isNewNote ? known!.RectTransform : null;
+                if (transform == null)
+                {
+                    transform = TryGetNoteRectTransform(note);
+                    if (transform == null)
+                    {
+                        return;
+                    }
+                }
+
+                Vector2 basePosition = transform.anchoredPosition;
+
                 NoteMotionState state;
                 if (isNewNote)
                 {
                     state = CreateNoteMotionState(transform);
+                    state.RectTransform = transform;
                     NoteMotionStates[pointer] = state;
                 }
                 else
                 {
                     state = known!;
+                    state.RectTransform = transform;
                     UpdateNoteVelocity(state, basePosition, deltatime);
                 }
 
@@ -358,19 +373,20 @@ namespace STARGAZER_custom_chart
 
             NoteMotionLastPruneFrame = frame;
 
-            var stale = new List<IntPtr>();
+            StaleNoteMotionKeys.Clear();
             foreach (KeyValuePair<IntPtr, NoteMotionState> pair in NoteMotionStates)
             {
                 if (frame - pair.Value.LastFrame > 120)
                 {
-                    stale.Add(pair.Key);
+                    StaleNoteMotionKeys.Add(pair.Key);
                 }
             }
 
-            foreach (IntPtr key in stale)
+            for (int i = 0; i < StaleNoteMotionKeys.Count; i++)
             {
-                NoteMotionStates.Remove(key);
+                NoteMotionStates.Remove(StaleNoteMotionKeys[i]);
             }
+            StaleNoteMotionKeys.Clear();
         }
 
         // 진행 방향을 제대로 쟀는지 로그로 확인할 수 있게 곡마다 한 번만 찍는다.
@@ -398,6 +414,7 @@ namespace STARGAZER_custom_chart
 
         private sealed class NoteMotionState
         {
+            public RectTransform? RectTransform;
             public Vector2 BasePosition;
             public bool HasBase;
             public int LastFrame = -1;

@@ -97,20 +97,30 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static Type? _cachedFocusedViewerType;
+        private static PropertyInfo[]? _cachedFocusedViewerLevelProps;
+        private static FieldInfo[]? _cachedFocusedViewerLevelFields;
+
         private static void EnumerateFocusedTrackViewerLevelItems(object instance, string methodName)
         {
             try
             {
                 Type type = instance.GetType();
-                BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-
-                string[] candidates = { "level", "item", "list", "array" };
-
-                foreach (PropertyInfo property in type.GetProperties(flags))
+                if (_cachedFocusedViewerType != type)
                 {
-                    if (!property.CanRead || property.GetIndexParameters().Length > 0) continue;
-                    if (!NameMatchesAny(property.Name, candidates)) continue;
+                    const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                    string[] candidates = { "level", "item", "list", "array" };
+                    _cachedFocusedViewerLevelProps = type.GetProperties(flags)
+                        .Where(p => p.CanRead && p.GetIndexParameters().Length == 0 && NameMatchesAny(p.Name, candidates))
+                        .ToArray();
+                    _cachedFocusedViewerLevelFields = type.GetFields(flags)
+                        .Where(f => NameMatchesAny(f.Name, candidates))
+                        .ToArray();
+                    _cachedFocusedViewerType = type;
+                }
 
+                foreach (PropertyInfo property in _cachedFocusedViewerLevelProps!)
+                {
                     object? val = null;
                     try { val = property.GetValue(instance); } catch { continue; }
                     if (val is null) continue;
@@ -118,10 +128,8 @@ namespace STARGAZER_custom_chart
                     EnumerateFocusedTrackViewerCollection(instance, property.Name, val, methodName);
                 }
 
-                foreach (FieldInfo field in type.GetFields(flags))
+                foreach (FieldInfo field in _cachedFocusedViewerLevelFields!)
                 {
-                    if (!NameMatchesAny(field.Name, candidates)) continue;
-
                     object? val = null;
                     try { val = field.GetValue(instance); } catch { continue; }
                     if (val is null) continue;

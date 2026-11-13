@@ -341,6 +341,7 @@ namespace STARGAZER_custom_chart
             return stream.ReadByte() == '\n';
         }
 
+        private static readonly char[] ConfigSeparators = { '=', ':' };
         private static Dictionary<string, string> ParseFile(string path)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -353,7 +354,7 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                int sepIndex = line.IndexOfAny(new[] { '=', ':' });
+                int sepIndex = line.IndexOfAny(ConfigSeparators);
                 if (sepIndex <= 0 || sepIndex >= line.Length - 1)
                 {
                     continue;

@@ -178,8 +178,9 @@ namespace STARGAZER_custom_chart
                 if (LoggedNoteArrayHits.Add(hit))
                     MelonLogger.Msg($"[NoteProbe][AreaNotes] {hit}");
             }
-            catch
+            catch (Exception ex)
             {
+                MelonLogger.Warning($"[NoteProbe][AreaNotes] {source} failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

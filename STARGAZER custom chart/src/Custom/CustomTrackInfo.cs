@@ -8,6 +8,8 @@ namespace STARGAZER_custom_chart
     // 형식: 한 줄에 "키 : 값" 또는 "키 = 값". 곡 제목/아티스트/난이도(cosmic,stellar,void)를 인식한다.
     internal sealed class CustomTrackInfo
     {
+        private static readonly char[] InfoSeparators = { ':', '=' };
+
         public string? Title { get; private set; }
         public string? Artist { get; private set; }
         public Dictionary<string, string> Levels { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -28,7 +30,7 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                int sepIndex = line.IndexOfAny(new[] { ':', '=' });
+                int sepIndex = line.IndexOfAny(InfoSeparators);
                 if (sepIndex <= 0 || sepIndex >= line.Length - 1)
                 {
                     continue;

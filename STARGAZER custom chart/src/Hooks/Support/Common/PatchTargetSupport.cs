@@ -17,8 +17,8 @@ namespace STARGAZER_custom_chart
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer", "Load", 2, "TravelArgs", "Action"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "Load", 1, "TravelArgs"),
                 new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", "_Load_b__5_0", 1, "Pattern"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "BGMPlayChecker", 1, "Single"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer+INNER_TravelPlayHandler", "Play", 1, "Single"),
+                // BGMPlayChecker / Play는 매 프레임 호출되므로 성능상 후킹하지 않는다.
+
                 new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
             };
         }

@@ -20,11 +20,12 @@ namespace STARGAZER_custom_chart
     /// </summary>
     public static class TrackUnlockAllPatch
     {
+        private const int TotalPatchCount = 7;
         private static readonly HashSet<string> _patched = new HashSet<string>(StringComparer.Ordinal);
 
         public static void Initialize(HarmonyLib.Harmony harmony)
         {
-            if (!CustomConfig.UnlockAll)
+            if (!CustomConfig.UnlockAll || _patched.Count >= TotalPatchCount)
             {
                 return;
             }

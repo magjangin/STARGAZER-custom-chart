@@ -98,11 +98,9 @@ namespace STARGAZER_custom_chart
 
         private static bool HaveSameIl2CppIdentity(object left, object right)
         {
-            object? leftPointer = TryGetMemberValue(left, left.GetType(), "Pointer")
-                                  ?? TryGetMemberValue(left, left.GetType(), "m_CachedPtr");
-            object? rightPointer = TryGetMemberValue(right, right.GetType(), "Pointer")
-                                   ?? TryGetMemberValue(right, right.GetType(), "m_CachedPtr");
-            if (leftPointer is IntPtr leftPtr && rightPointer is IntPtr rightPtr)
+            IntPtr leftPtr = TryGetIl2CppPointer(left);
+            IntPtr rightPtr = TryGetIl2CppPointer(right);
+            if (leftPtr != IntPtr.Zero && rightPtr != IntPtr.Zero)
             {
                 return leftPtr == rightPtr;
             }

@@ -19,9 +19,14 @@ namespace STARGAZER_custom_chart
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
-            if (CustomJacketCache.TryGetValue(fullPath, out Sprite? cached) && cached != null)
+            if (CustomJacketCache.TryGetValue(fullPath, out Sprite? cached))
             {
-                return cached;
+                if (cached != null)
+                {
+                    return cached;
+                }
+
+                CustomJacketCache.Remove(fullPath);
             }
 
             if (!File.Exists(fullPath))
@@ -36,6 +41,7 @@ namespace STARGAZER_custom_chart
                 if (!ImageConversion.LoadImage(texture, bytes))
                 {
                     MelonLogger.Warning($"[CustomJacket] 이미지 디코딩 실패: {fullPath}");
+                    UnityEngine.Object.Destroy(texture);
                     return null;
                 }
                 texture.hideFlags |= HideFlags.DontUnloadUnusedAsset;

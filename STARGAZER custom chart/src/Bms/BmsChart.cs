@@ -52,6 +52,7 @@ namespace STARGAZER_custom_chart
 
         // 노트로 취급하지 않는 채널: 01=BGM, 02=마디 길이, 03/08=BPM변경, 09=STOP.
         private static readonly HashSet<string> IgnoredChannels = new HashSet<string> { "01", "02", "03", "08", "09" };
+        private static readonly char[] WavSeparators = { ' ', '\t' };
 
         public double Bpm { get; private set; } = 120;
         public int SuppressedNoiseCount { get; private set; }
@@ -114,7 +115,7 @@ namespace STARGAZER_custom_chart
             }
 
             string[] rawLines = SafeTextReader.ReadAllLines(filePath);
-
+            var trimmedLines = new List<string>(rawLines.Length);
             var wavDefinitions = new List<(string RawId, string FileName)>();
             double bpm = 120;
 
@@ -126,9 +127,11 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
+                trimmedLines.Add(line);
+
                 if (line.StartsWith("#WAV", StringComparison.OrdinalIgnoreCase) && line.Length > 4)
                 {
-                    int spaceIndex = line.IndexOf(' ');
+                    int spaceIndex = line.IndexOfAny(WavSeparators, 4);
                     string idPart = spaceIndex > 4 ? line.Substring(4, spaceIndex - 4) : line.Substring(4);
                     string fileName = spaceIndex > 4 ? line.Substring(spaceIndex + 1).Trim() : string.Empty;
                     wavDefinitions.Add((idPart.Trim(), fileName));
@@ -164,11 +167,10 @@ namespace STARGAZER_custom_chart
             chart.SoundKinds = kindBySoundId;
             var measuresByIndex = new Dictionary<int, BmsMeasure>();
 
-            foreach (string rawLine in rawLines)
+            foreach (string line in trimmedLines)
             {
-                string line = rawLine.Trim().TrimStart('\uFEFF');
                 // "#mmmcc:data" 최소 길이: # + 3자리 마디 + 2자리 채널 + ':' = 7글자
-                if (line.Length < 7 || line[0] != '#' || line[6] != ':')
+                if (line.Length < 7 || line[6] != ':')
                 {
                     continue;
                 }
@@ -177,7 +179,7 @@ namespace STARGAZER_custom_chart
                 string channelText = line.Substring(4, 2);
                 string data = line.Substring(7);
 
-                if (!int.TryParse(measureText, out int measureIndex) || !int.TryParse(channelText, out int channel))
+                if (!int.TryParse(measureText, out int measureIndex) || measureIndex < 0 || !int.TryParse(channelText, out int channel))
                 {
                     continue;
                 }

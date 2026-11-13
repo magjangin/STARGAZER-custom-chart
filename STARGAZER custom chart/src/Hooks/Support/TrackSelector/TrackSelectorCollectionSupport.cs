@@ -36,6 +36,11 @@ namespace STARGAZER_custom_chart
 
         private static IntPtr TryGetIl2CppPointer(object instance)
         {
+            if (instance is Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase il2cppObj)
+            {
+                return il2cppObj.Pointer;
+            }
+
             object? pointer = TryGetMemberValue(instance, instance.GetType(), "Pointer")
                 ?? TryGetMemberValue(instance, instance.GetType(), "m_CachedPtr");
             return pointer is IntPtr ptr ? ptr : IntPtr.Zero;

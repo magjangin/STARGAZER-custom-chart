@@ -14,7 +14,7 @@ namespace STARGAZER_custom_chart
             try
             {
                 object[] args = __args ?? Array.Empty<object>();
-                LogBgmDebugInvocation(__originalMethod, __instance, args);
+                if (string.Equals(__originalMethod.Name, "PlayBGM", StringComparison.Ordinal) || string.Equals(__originalMethod.Name, "LoadBGMClip", StringComparison.Ordinal) || string.Equals(__originalMethod.Name, "StopBGM", StringComparison.Ordinal)) LogBgmDebugInvocation(__originalMethod, __instance, args);
 
                 if (string.Equals(__originalMethod.DeclaringType?.FullName, "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader", StringComparison.Ordinal)
                     && string.Equals(__originalMethod.Name, "Load", StringComparison.Ordinal))
@@ -398,8 +398,12 @@ namespace STARGAZER_custom_chart
         {
             if (method is null) return false;
             string name = method.Name;
+            if (string.Equals(name, "Load", StringComparison.Ordinal))
+            {
+                return false;
+            }
             return string.Equals(name, "_Load_b__5_0", StringComparison.Ordinal)
-                || name.Contains("b__")
+                || name.Contains("b__", StringComparison.Ordinal)
                 || name.IndexOf("Load", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
