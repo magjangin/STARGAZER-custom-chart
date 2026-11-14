@@ -227,17 +227,22 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[CustomBgm] Completed pending callbacks: {path} count={callbacks.Count} clipReady={clip != null}");
         }
 
+        // 캐시 조회 전용. 미스일 때 로드를 시작하는 일은 QueueCustomBgmCallback이 맡는다.
         private static bool TryGetCachedCustomBgm(string path, out AudioClip? clip)
         {
             string fullPath = Path.GetFullPath(path);
-            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached) && cached != null)
+            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached))
             {
-                clip = cached;
-                return true;
+                if (cached != null)
+                {
+                    clip = cached;
+                    return true;
+                }
+
+                // Unity 쪽에서 파괴된 클립. 다음 로드에서 다시 채운다.
+                CustomBgmClipCache.Remove(fullPath);
             }
 
-            CustomBgmClipCache.Remove(fullPath);
-            StartCustomAudioClipLoad(fullPath);
             clip = null;
             return false;
         }
@@ -273,22 +278,25 @@ namespace STARGAZER_custom_chart
                         ? album.PreviewPath
                         : album.MusicPath;
 
-                    if (path is not null && File.Exists(path))
+                    // 곡 선택 커서를 옮길 때마다 프리뷰가 요청되므로, 캐시 적중이면 디스크(File.Exists)를 보지 않는다.
+                    if (path is not null && TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
                     {
-                        if (TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
+                        if (LogOnce($"CustomBgm.Serve.{__originalMethod.Name}.{path}"))
                         {
-                            MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{album.DisplayName}': {path}");
-                            TryInvokeSingleArgCallback(__args[0], clip, "CustomBgm");
-                            return false;
+                            MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{album.DisplayName}': {path} (이후 같은 요청은 로그 생략)");
                         }
 
+                        TryInvokeSingleArgCallback(__args[0], clip, "CustomBgm");
+                        return false;
+                    }
+
+                    if (path is not null && File.Exists(path))
+                    {
                         QueueCustomBgmCallback(path, __args[0]);
                         return false;
                     }
-                    else
-                    {
-                        MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
-                    }
+
+                    MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
                 }
                 catch (Exception ex)
                 {

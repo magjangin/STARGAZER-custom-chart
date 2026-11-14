@@ -13,7 +13,8 @@ namespace STARGAZER_custom_chart
         // 공용 Prefix/Postfix 디스패치
         //
         // MethodBase마다 HookSite를 한 번만 계산해 두고(역할 enum + 로그 자격 + 스로틀 상태),
-        // 이후 호출은 사전 조회 1회 + switch로 끝난다.
+        // 이후 호출은 사전 조회 1회 + switch로 끝난다. 각 대상은 PatchSpec.Phase에 따라 Prefix 또는
+        // Postfix 한쪽에만 걸리므로(InvocationPatches.cs), 아래 두 switch는 서로 겹치지 않는다.
         // 역할은 PatchSpec 논리 이름으로 정하므로(RegisterResolvedTarget), 업데이트로 대체 해석된
         // 대상(이름이 바뀐 람다, 네임스페이스가 바뀐 타입, 오타 수정 이름)도 같은 핸들러로 연결된다.
         // ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +30,6 @@ namespace STARGAZER_custom_chart
             TrackSelectorSet,
             LevelSelectorFetchTrackRecord,
             LevelSelectorFetchJacektImage,
-            LevelSelectorSetTrack,
         }
 
         private static readonly Dictionary<string, HookKind> HookKindsByLogicalName = new Dictionary<string, HookKind>(StringComparer.Ordinal)
@@ -42,7 +42,6 @@ namespace STARGAZER_custom_chart
             ["Il2CppStargazer.Travel.TrackSelector.TrackSelector.Set"] = HookKind.TrackSelectorSet,
             ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchTrackRecord"] = HookKind.LevelSelectorFetchTrackRecord,
             ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchJacektImage"] = HookKind.LevelSelectorFetchJacektImage,
-            ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.SetTrack"] = HookKind.LevelSelectorSetTrack,
         };
 
         private sealed class HookSite
@@ -115,7 +114,7 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[HookInvoke][PRE] logging failed: {ex.GetType().Name}: {ex.Message}");
+                MelonLogger.Warning($"[HookInvoke][PRE] handler failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -172,15 +171,11 @@ namespace STARGAZER_custom_chart
                     case HookKind.LevelSelectorFetchJacektImage:
                         HandleLevelSelectorRefresh(__instance);
                         break;
-
-                    case HookKind.LevelSelectorSetTrack:
-                        HandleLevelSelectorSetTrack(__instance, args);
-                        break;
                 }
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[HookInvoke][POST] logging failed: {ex.GetType().Name}: {ex.Message}");
+                MelonLogger.Warning($"[HookInvoke][POST] handler failed: {ex.GetType().Name}: {ex.Message}");
             }
         }
 

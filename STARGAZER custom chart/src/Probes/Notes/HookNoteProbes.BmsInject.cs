@@ -15,6 +15,19 @@ namespace STARGAZER_custom_chart
         // 실제 LaneUID 문자열은 곡마다 다를 수 있어 하드코딩하지 않고, 런타임에 Layer.Lanes에서 순서대로 뽑는다.
         private static readonly int[] BmsChannelLaneOrder = { 16, 12, 13, 11 };
 
+        // TrySetValueByNameCandidates 후보 목록. 마디/노트마다 배열을 새로 만들지 않도록 정적으로 둔다.
+        private static readonly string[] AreaBpmNames = { "areabpm" };
+        private static readonly string[] BeatIndexNames = { "beatindex" };
+        private static readonly string[] BeatInfoNames = { "beatinfo" };
+        private static readonly string[] BeatSplitNames = { "beatsplit" };
+        private static readonly string[] ExpressionHolderNames = { "expressionholder" };
+        private static readonly string[] LengthNames = { "length" };
+        private static readonly string[] LinkedNames = { "linked" };
+        private static readonly string[] OwnerNames = { "owner" };
+        private static readonly string[] NotePropertyNames = { "property", "noteproperty" };
+        private static readonly string[] TargetLaneUidNames = { "targetlaneuid" };
+        private static readonly string[] TargetLayerNames = { "targetlayer" };
+
         private sealed class AreaInjectorMetadata
         {
             public ConstructorInfo? LayerCtor { get; init; }
@@ -188,9 +201,9 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    TrySetValueByNameCandidates(newArea, new[] { "areabpm" }, chart.Bpm);
-                    TrySetValueByNameCandidates(newArea, new[] { "length" }, templateLength);
-                    TrySetValueByNameCandidates(newArea, new[] { "targetlayer" }, layer);
+                    TrySetValueByNameCandidates(newArea, AreaBpmNames, chart.Bpm);
+                    TrySetValueByNameCandidates(newArea, LengthNames, templateLength);
+                    TrySetValueByNameCandidates(newArea, TargetLayerNames, layer);
 
                     if (!InvokeAdd(areasAddMethod, areasValue, newArea))
                     {
@@ -465,6 +478,12 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        // 노트 수천 개를 넣는 루프에서 호출마다 object[]를 만들지 않도록 인자 버퍼를 재사용한다.
+        // 주입은 메인 스레드에서만 일어나고 Invoke는 동기 호출이라 공유해도 안전하다. 끝나면 참조를 비워
+        // IL2CPP 래퍼가 버퍼에 붙잡혀 남지 않게 한다.
+        private static readonly object?[] SingleArgBuffer = new object?[1];
+        private static readonly object?[] NoteCtorArgBuffer = new object?[3];
+
         private static bool InvokeAdd(MethodInfo? addMethod, object collection, object item)
         {
             if (addMethod is null)
@@ -474,12 +493,17 @@ namespace STARGAZER_custom_chart
 
             try
             {
-                addMethod.Invoke(collection, new[] { item });
+                SingleArgBuffer[0] = item;
+                addMethod.Invoke(collection, SingleArgBuffer);
                 return true;
             }
             catch
             {
                 return false;
+            }
+            finally
+            {
+                SingleArgBuffer[0] = null;
             }
         }
 
@@ -497,8 +521,8 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            bool splitSet = TrySetValueByNameCandidates(beatInfo, new[] { "beatsplit" }, beatDenominator);
-            bool indexSet = TrySetValueByNameCandidates(beatInfo, new[] { "beatindex" }, beatNumerator);
+            bool splitSet = TrySetValueByNameCandidates(beatInfo, BeatSplitNames, beatDenominator);
+            bool indexSet = TrySetValueByNameCandidates(beatInfo, BeatIndexNames, beatNumerator);
             return splitSet && indexSet;
         }
 
@@ -516,7 +540,10 @@ namespace STARGAZER_custom_chart
             {
                 try
                 {
-                    newNote = noteMeta.Ctor3.Invoke(new[] { area, laneUid, beatInfo });
+                    NoteCtorArgBuffer[0] = area;
+                    NoteCtorArgBuffer[1] = laneUid;
+                    NoteCtorArgBuffer[2] = beatInfo;
+                    newNote = noteMeta.Ctor3.Invoke(NoteCtorArgBuffer);
                     if (newNote is not null)
                     {
                         return true;
@@ -529,6 +556,10 @@ namespace STARGAZER_custom_chart
                         MelonLogger.Warning($"[BmsInject] Note(Area, string, BeatInfo) 생성자 호출 실패, 폴백 생성으로 전환합니다: {ex.Message}");
                     }
                 }
+                finally
+                {
+                    Array.Clear(NoteCtorArgBuffer, 0, NoteCtorArgBuffer.Length);
+                }
             }
 
             newNote = InstantiateIl2CppObject(noteType);
@@ -537,9 +568,9 @@ namespace STARGAZER_custom_chart
                 return false;
             }
 
-            TrySetValueByNameCandidates(newNote, new[] { "targetlaneuid" }, laneUid);
-            TrySetValueByNameCandidates(newNote, new[] { "owner" }, area);
-            TrySetValueByNameCandidates(newNote, new[] { "beatinfo" }, beatInfo);
+            TrySetValueByNameCandidates(newNote, TargetLaneUidNames, laneUid);
+            TrySetValueByNameCandidates(newNote, OwnerNames, area);
+            TrySetValueByNameCandidates(newNote, BeatInfoNames, beatInfo);
             return true;
         }
 
@@ -592,10 +623,10 @@ namespace STARGAZER_custom_chart
                     {
                         if (templateExprHolder is not null)
                         {
-                            TrySetValueByNameCandidates(targetProp, new[] { "expressionholder" }, templateExprHolder);
+                            TrySetValueByNameCandidates(targetProp, ExpressionHolderNames, templateExprHolder);
                         }
 
-                        TrySetValueByNameCandidates(newNote, new[] { "property", "noteproperty" }, targetProp);
+                        TrySetValueByNameCandidates(newNote, NotePropertyNames, targetProp);
                     }
                 }
                 catch
@@ -606,7 +637,7 @@ namespace STARGAZER_custom_chart
 
             if (targetProp is not null && linkedEnumVal is not null)
             {
-                TrySetValueByNameCandidates(targetProp, new[] { "linked" }, linkedEnumVal);
+                TrySetValueByNameCandidates(targetProp, LinkedNames, linkedEnumVal);
             }
             else if (targetProp is null)
             {
@@ -619,7 +650,7 @@ namespace STARGAZER_custom_chart
                     {
                         if (templateExprHolder is not null)
                         {
-                            TrySetValueByNameCandidates(cloned, new[] { "expressionholder" }, templateExprHolder);
+                            TrySetValueByNameCandidates(cloned, ExpressionHolderNames, templateExprHolder);
                         }
 
                         object? linkedValue = TryGetMemberValue(cloned, "linked", "Linked");
@@ -627,14 +658,14 @@ namespace STARGAZER_custom_chart
                         {
                             try
                             {
-                                TrySetValueByNameCandidates(cloned, new[] { "linked" }, Enum.Parse(enumVal.GetType(), linkedState));
+                                TrySetValueByNameCandidates(cloned, LinkedNames, Enum.Parse(enumVal.GetType(), linkedState));
                             }
                             catch
                             {
                             }
                         }
 
-                        TrySetValueByNameCandidates(newNote, new[] { "property", "noteproperty" }, cloned);
+                        TrySetValueByNameCandidates(newNote, NotePropertyNames, cloned);
                     }
                 }
             }

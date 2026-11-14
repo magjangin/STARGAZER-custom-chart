@@ -25,9 +25,27 @@ namespace STARGAZER_custom_chart
         // 여러 번 불리므로, 4개가 모두 걸릴 때까지는 빠진 것만 다시 시도하고 이미 건 것은 다시 걸지 않는다.
         private static readonly HashSet<string> _patched = new HashSet<string>(StringComparer.Ordinal);
 
+        // 같은 경고를 씬 로드마다 반복하지 않도록 키별로 한 번만 남긴다.
+        private static readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
+        private static bool _disabledLogged;
+
         public static void Initialize(HarmonyLib.Harmony harmony)
         {
             if (_patched.Count >= TotalPatchCount) return;
+
+            // FromTimeDiffernce/TryJudgeHead/Watch/BufferProcess는 노트 판정마다 불리는 핫패스다.
+            // 설정은 게임 재시작 시에만 바뀌므로(config.txt 안내 문구), 꺼져 있으면 아예 걸지 않아 트램펄린 비용을 0으로 만든다.
+            if (!CustomConfig.AllPerfect)
+            {
+                if (!_disabledLogged)
+                {
+                    _disabledLogged = true;
+                    MelonLogger.Msg("[JudgePatch] AllPerfect=false 라 판정 훅을 걸지 않습니다.");
+                }
+                return;
+            }
+
+            int patchedBefore = _patched.Count;
 
             try
             {
@@ -51,7 +69,7 @@ namespace STARGAZER_custom_chart
                     }
                     else
                     {
-                        MelonLogger.Warning("[JudgePatch] FromTimeDiffernce 메서드를 찾지 못했습니다.");
+                        WarnOnce("FromTimeDiffernce", "[JudgePatch] FromTimeDiffernce 메서드를 찾지 못했습니다.");
                     }
                 }
 
@@ -75,7 +93,7 @@ namespace STARGAZER_custom_chart
                     }
                     else
                     {
-                        MelonLogger.Warning("[JudgePatch] TryJudgeHead 메서드를 찾지 못했습니다.");
+                        WarnOnce("TryJudgeHead", "[JudgePatch] TryJudgeHead 메서드를 찾지 못했습니다.");
                     }
                 }
 
@@ -105,12 +123,12 @@ namespace STARGAZER_custom_chart
                         }
                         else
                         {
-                            MelonLogger.Warning("[JudgePatch] BufferProcess 메서드를 찾지 못했습니다.");
+                            WarnOnce("BufferProcess", "[JudgePatch] BufferProcess 메서드를 찾지 못했습니다.");
                         }
                     }
                     else
                     {
-                        MelonLogger.Warning("[JudgePatch] TravelPlayer+INNER_Result 타입을 찾지 못했습니다.");
+                        WarnOnce("INNER_Result", "[JudgePatch] TravelPlayer+INNER_Result 타입을 찾지 못했습니다.");
                     }
                 }
 
@@ -134,7 +152,7 @@ namespace STARGAZER_custom_chart
                     }
                     else
                     {
-                        MelonLogger.Warning("[JudgePatch] JudgementWidget.Watch 메서드를 찾지 못했습니다.");
+                        WarnOnce("Watch", "[JudgePatch] JudgementWidget.Watch 메서드를 찾지 못했습니다.");
                     }
                 }
 
@@ -145,7 +163,7 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($" AllPerfect 활성 상태: {CustomConfig.AllPerfect}");
                     MelonLogger.Msg($"=================================================");
                 }
-                else
+                else if (_patched.Count != patchedBefore || WarnOnceKey("partial"))
                 {
                     MelonLogger.Warning($"[JudgePatch] 올 퍼펙트 패치가 {_patched.Count}/{TotalPatchCount}개만 적용됐습니다. 다음 초기화 시점(후기 초기화/씬 로드)에 빠진 패치만 다시 시도합니다.");
                 }
@@ -153,6 +171,16 @@ namespace STARGAZER_custom_chart
             catch (Exception ex)
             {
                 MelonLogger.Error($"[JudgePatch] 초기화 중 예외 발생: {ex}");
+            }
+        }
+
+        private static bool WarnOnceKey(string key) => _warned.Add(key);
+
+        private static void WarnOnce(string key, string message)
+        {
+            if (WarnOnceKey(key))
+            {
+                MelonLogger.Warning(message);
             }
         }
 

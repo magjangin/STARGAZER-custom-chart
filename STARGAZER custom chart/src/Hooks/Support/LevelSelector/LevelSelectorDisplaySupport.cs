@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -11,7 +10,7 @@ namespace STARGAZER_custom_chart
     {
         // 난이도 표시는 메타데이터(levelString)가 아니라 UI에만 덮어쓴다.
         // levelString을 바꾸면 패턴 에셋 로딩이 멈추기 때문이다
-        // (ExperimentChartSettings.EnableTrackLevelOverride 주석의 실측 근거 참고).
+        // (AGENTS.md Dead End 2: 2026-08-08 실측, 값을 바꾸면 인게임 진입 시 무한 로딩).
         // 게임 자체의 세터인 LevelItem.FetchLevelText(string)를 호출해 원본 서식을 그대로 유지한다.
 
         // ELevels 선언 순서. 이름으로 난이도를 못 알아낼 때의 폴백.
@@ -23,15 +22,6 @@ namespace STARGAZER_custom_chart
         // 플레이 중인 앨범과 난이도("Cosmic"/"Stellar"/"Void"). PlayerBase.Play 훅에서 TravelArgs로 채운다.
         private static CustomAlbum? CurrentPlayAlbum;
         private static string? CustomChartPlayLevelKey;
-        private static void HandleLevelSelectorSetTrack(object? instance, object[] args)
-        {
-            object? track = args.Length > 0 ? args[0] : null;
-            LevelSelectorAlbum = TryGetAlbumForTrack(track);
-            if (LevelSelectorAlbum is not null)
-            {
-                ApplyCustomLevelDisplay(instance);
-            }
-        }
 
         private static void HandleLevelSelectorRefresh(object? instance)
         {

@@ -14,21 +14,7 @@ namespace STARGAZER_custom_chart
 
         public static string RootPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
 
-        public static IReadOnlyList<CustomAlbum> GetAlbums()
-        {
-            if (_albums is not null)
-            {
-                return _albums;
-            }
-
-            _albums = Scan();
-            return _albums;
-        }
-
-        public static void Reset()
-        {
-            _albums = null;
-        }
+        public static IReadOnlyList<CustomAlbum> GetAlbums() => _albums ??= Scan();
 
         private static List<CustomAlbum> Scan()
         {
