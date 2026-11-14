@@ -56,149 +56,35 @@ namespace STARGAZER_custom_chart
                 "0 = 노트마다 속도가 다름(완전 카오스)"),
         };
 
-        private static bool _loaded;
-        private static bool _autoPlay;
-        private static bool _allPerfect = true;
-        private static bool _unlockAll = true;
-        private static bool _noteSway;
-        private static float _noteSwayAmplitude = 20f;
-        private static float _noteSwaySpeed = 0.8f;
-        private static bool _noteSwayDamping = true;
-        private static float _noteSwayDampingTime = 0.4f;
-        private static bool _noteSpeedChaos;
-        private static float _noteSpeedChaosMin = 0.6f;
-        private static float _noteSpeedChaosMax = 1.8f;
-        private static bool _noteSpeedChaosPerLane = true;
+        // 파일을 한 번만 읽어 만든 값 묶음. 설정은 게임 재시작 시에만 바뀌므로(HeaderText 안내) 다시 읽지 않는다.
+        // 노트 연출/판정 훅이 프레임·노트마다 읽으므로 접근은 null 검사 1회로 끝나야 한다.
+        private static Settings? _current;
+
+        private static Settings Current => _current ??= Load();
 
         // 기본값 false는 config.txt를 새로 만들 때 쓰는 값(Entries의 "autoplay")과 같다.
         // 파일을 못 읽거나 값을 해석하지 못해도 오토플레이가 멋대로 켜지지 않게 맞춰 둔다.
-        public static bool AutoPlay
-        {
-            get
-            {
-                EnsureLoaded();
-                return _autoPlay;
-            }
-        }
-
-        public static bool AllPerfect
-        {
-            get
-            {
-                EnsureLoaded();
-                return _allPerfect;
-            }
-            set => _allPerfect = value;
-        }
-
-        public static bool UnlockAll
-        {
-            get
-            {
-                EnsureLoaded();
-                return _unlockAll;
-            }
-            set => _unlockAll = value;
-        }
-
-        public static bool NoteSway
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSway;
-            }
-        }
-
-        public static float NoteSwayAmplitude
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSwayAmplitude;
-            }
-        }
-
-        public static float NoteSwaySpeed
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSwaySpeed;
-            }
-        }
-
-        public static bool NoteSwayDamping
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSwayDamping;
-            }
-        }
-
-        public static float NoteSwayDampingTime
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSwayDampingTime;
-            }
-        }
-
-        public static bool NoteSpeedChaos
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSpeedChaos;
-            }
-        }
-
-        public static float NoteSpeedChaosMin
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSpeedChaosMin;
-            }
-        }
-
-        public static float NoteSpeedChaosMax
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSpeedChaosMax;
-            }
-        }
-
-        public static bool NoteSpeedChaosPerLane
-        {
-            get
-            {
-                EnsureLoaded();
-                return _noteSpeedChaosPerLane;
-            }
-        }
+        public static bool AutoPlay => Current.AutoPlay;
+        public static bool AllPerfect => Current.AllPerfect;
+        public static bool UnlockAll => Current.UnlockAll;
+        public static bool NoteSway => Current.NoteSway;
+        public static float NoteSwayAmplitude => Current.NoteSwayAmplitude;
+        public static float NoteSwaySpeed => Current.NoteSwaySpeed;
+        public static bool NoteSwayDamping => Current.NoteSwayDamping;
+        public static float NoteSwayDampingTime => Current.NoteSwayDampingTime;
+        public static bool NoteSpeedChaos => Current.NoteSpeedChaos;
+        public static float NoteSpeedChaosMin => Current.NoteSpeedChaosMin;
+        public static float NoteSpeedChaosMax => Current.NoteSpeedChaosMax;
+        public static bool NoteSpeedChaosPerLane => Current.NoteSpeedChaosPerLane;
 
         public static string FolderPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName);
 
         public static string FilePath => Path.Combine(FolderPath, FileName);
 
-        public static void Reset()
+        private static Settings Load()
         {
-            _loaded = false;
-        }
-
-        private static void EnsureLoaded()
-        {
-            if (_loaded)
-            {
-                return;
-            }
-
-            _loaded = true;
+            // 중간에 예외가 나도 그때까지 읽은 값과 나머지 기본값으로 계속 돈다(예전 동작과 같음).
+            var settings = new Settings();
 
             try
             {
@@ -217,50 +103,50 @@ namespace STARGAZER_custom_chart
                 Dictionary<string, string> values = ParseFile(FilePath);
                 AppendMissingEntries(values);
 
-                _autoPlay = ReadBool(values, "autoplay", _autoPlay);
-                _allPerfect = ReadBool(values, "AllPerfect", _allPerfect);
-                _unlockAll = ReadBool(values, "UnlockAll", _unlockAll);
+                settings.AutoPlay = ReadBool(values, "autoplay", settings.AutoPlay);
+                settings.AllPerfect = ReadBool(values, "AllPerfect", settings.AllPerfect);
+                settings.UnlockAll = ReadBool(values, "UnlockAll", settings.UnlockAll);
 
-                _noteSway = ReadBool(values, "NoteSway", _noteSway);
-                _noteSwayAmplitude = Math.Max(0f, ReadFloat(values, "NoteSwayAmplitude", _noteSwayAmplitude));
-                _noteSwaySpeed = Math.Max(0f, ReadFloat(values, "NoteSwaySpeed", _noteSwaySpeed));
-                _noteSwayDamping = ReadBool(values, "NoteSwayDamping", _noteSwayDamping);
-                _noteSwayDampingTime = Math.Max(0f, ReadFloat(values, "NoteSwayDampingTime", _noteSwayDampingTime));
+                settings.NoteSway = ReadBool(values, "NoteSway", settings.NoteSway);
+                settings.NoteSwayAmplitude = Math.Max(0f, ReadFloat(values, "NoteSwayAmplitude", settings.NoteSwayAmplitude));
+                settings.NoteSwaySpeed = Math.Max(0f, ReadFloat(values, "NoteSwaySpeed", settings.NoteSwaySpeed));
+                settings.NoteSwayDamping = ReadBool(values, "NoteSwayDamping", settings.NoteSwayDamping);
+                settings.NoteSwayDampingTime = Math.Max(0f, ReadFloat(values, "NoteSwayDampingTime", settings.NoteSwayDampingTime));
 
-                _noteSpeedChaos = ReadBool(values, "NoteSpeedChaos", _noteSpeedChaos);
-                _noteSpeedChaosMin = ReadFloat(values, "NoteSpeedChaosMin", _noteSpeedChaosMin);
-                _noteSpeedChaosMax = ReadFloat(values, "NoteSpeedChaosMax", _noteSpeedChaosMax);
-                _noteSpeedChaosPerLane = ReadBool(values, "NoteSpeedChaosPerLane", _noteSpeedChaosPerLane);
-                NormalizeSpeedChaosRange();
+                settings.NoteSpeedChaos = ReadBool(values, "NoteSpeedChaos", settings.NoteSpeedChaos);
+                settings.NoteSpeedChaosMin = ReadFloat(values, "NoteSpeedChaosMin", settings.NoteSpeedChaosMin);
+                settings.NoteSpeedChaosMax = ReadFloat(values, "NoteSpeedChaosMax", settings.NoteSpeedChaosMax);
+                settings.NoteSpeedChaosPerLane = ReadBool(values, "NoteSpeedChaosPerLane", settings.NoteSpeedChaosPerLane);
+                NormalizeSpeedChaosRange(settings);
 
-                MelonLogger.Msg($"[Config] autoplay={_autoPlay}");
-                MelonLogger.Msg($"[Config] AllPerfect={_allPerfect}");
-                MelonLogger.Msg($"[Config] UnlockAll={_unlockAll}");
-                MelonLogger.Msg($"[Config] NoteSway={_noteSway} amplitude={_noteSwayAmplitude} speed={_noteSwaySpeed} damping={_noteSwayDamping}/{_noteSwayDampingTime}s");
-                MelonLogger.Msg($"[Config] NoteSpeedChaos={_noteSpeedChaos} range={_noteSpeedChaosMin}~{_noteSpeedChaosMax} perLane={_noteSpeedChaosPerLane}");
+                MelonLogger.Msg($"[Config] autoplay={settings.AutoPlay} AllPerfect={settings.AllPerfect} UnlockAll={settings.UnlockAll}");
+                MelonLogger.Msg($"[Config] NoteSway={settings.NoteSway} amplitude={settings.NoteSwayAmplitude} speed={settings.NoteSwaySpeed} damping={settings.NoteSwayDamping}/{settings.NoteSwayDampingTime}s");
+                MelonLogger.Msg($"[Config] NoteSpeedChaos={settings.NoteSpeedChaos} range={settings.NoteSpeedChaosMin}~{settings.NoteSpeedChaosMax} perLane={settings.NoteSpeedChaosPerLane}");
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[Config] 설정을 읽지 못해 기본값을 사용합니다: {ex.GetType().Name}: {ex.Message}");
             }
+
+            return settings;
         }
 
         // 배율이 0 이하면 노트가 멈추거나 뒤집혀 날아간다. 뒤집힌 범위도 여기서 바로잡는다.
-        private static void NormalizeSpeedChaosRange()
+        private static void NormalizeSpeedChaosRange(Settings settings)
         {
             const float MinAllowed = 0.05f;
 
-            if (_noteSpeedChaosMin < MinAllowed || _noteSpeedChaosMax < MinAllowed)
+            if (settings.NoteSpeedChaosMin < MinAllowed || settings.NoteSpeedChaosMax < MinAllowed)
             {
                 MelonLogger.Warning($"[Config] NoteSpeedChaos 배율은 {MinAllowed} 이상이어야 합니다. 값을 올려서 씁니다.");
-                _noteSpeedChaosMin = Math.Max(MinAllowed, _noteSpeedChaosMin);
-                _noteSpeedChaosMax = Math.Max(MinAllowed, _noteSpeedChaosMax);
+                settings.NoteSpeedChaosMin = Math.Max(MinAllowed, settings.NoteSpeedChaosMin);
+                settings.NoteSpeedChaosMax = Math.Max(MinAllowed, settings.NoteSpeedChaosMax);
             }
 
-            if (_noteSpeedChaosMin > _noteSpeedChaosMax)
+            if (settings.NoteSpeedChaosMin > settings.NoteSpeedChaosMax)
             {
                 MelonLogger.Warning("[Config] NoteSpeedChaosMin이 Max보다 큽니다. 두 값을 바꿔서 씁니다.");
-                (_noteSpeedChaosMin, _noteSpeedChaosMax) = (_noteSpeedChaosMax, _noteSpeedChaosMin);
+                (settings.NoteSpeedChaosMin, settings.NoteSpeedChaosMax) = (settings.NoteSpeedChaosMax, settings.NoteSpeedChaosMin);
             }
         }
 
@@ -432,6 +318,23 @@ namespace STARGAZER_custom_chart
 
             MelonLogger.Warning($"[Config] {key} 값을 숫자로 읽지 못해 기본값({fallback})을 씁니다: {text}");
             return fallback;
+        }
+
+        // 기본값은 Entries의 기본값과 같게 유지한다(파일을 못 읽어도 새로 만든 파일과 같은 동작).
+        private sealed class Settings
+        {
+            public bool AutoPlay;
+            public bool AllPerfect = true;
+            public bool UnlockAll = true;
+            public bool NoteSway;
+            public float NoteSwayAmplitude = 20f;
+            public float NoteSwaySpeed = 0.8f;
+            public bool NoteSwayDamping = true;
+            public float NoteSwayDampingTime = 0.4f;
+            public bool NoteSpeedChaos;
+            public float NoteSpeedChaosMin = 0.6f;
+            public float NoteSpeedChaosMax = 1.8f;
+            public bool NoteSpeedChaosPerLane = true;
         }
 
         private sealed class ConfigEntry

@@ -406,37 +406,22 @@ namespace STARGAZER_custom_chart
             return tick < 0 ? typeName : typeName.Substring(0, tick);
         }
 
-        private static bool NameMatchesAny(string sourceName, IReadOnlyList<string> candidates)
+        // candidates는 밑줄 없는 소문자(예: "displayname")로 넘긴다.
+        // exact면 정규화한 이름이 후보와 완전히 같아야 하고, 아니면 포함만 해도 된다.
+        private static bool NameMatchesAny(string sourceName, IReadOnlyList<string> candidates, bool exact = false)
         {
             string normalized = sourceName.Replace("_", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
             for (int i = 0; i < candidates.Count; i++)
             {
-                if (normalized.Contains(candidates[i], StringComparison.Ordinal))
+                if (exact
+                    ? string.Equals(normalized, candidates[i], StringComparison.Ordinal)
+                    : normalized.Contains(candidates[i], StringComparison.Ordinal))
                 {
                     return true;
                 }
             }
 
             return false;
-        }
-
-        private static bool TryConvertToDouble(object? value, out double result)
-        {
-            result = 0d;
-            if (value is null)
-            {
-                return false;
-            }
-
-            try
-            {
-                result = Convert.ToDouble(value);
-                return !double.IsNaN(result) && !double.IsInfinity(result);
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private static bool TrySetValueByNameCandidates(object owner, IReadOnlyList<string> names, object? value)
@@ -459,31 +444,40 @@ namespace STARGAZER_custom_chart
             return !setter.IsEmpty && setter.TrySetValue(owner, value);
         }
 
+        // 1차: 정규화 이름이 후보와 "완전히 같은" 프로퍼티/필드. 2차: 이름에 후보를 "포함"하는 것(예전 동작).
+        // 포함 일치만 쓰면 "displayname"이 선언 순서에 따라 displayNameEN에 먼저 걸릴 수 있고,
+        // "targetlayer"가 <TargetLayer>k__BackingField에 걸릴 수 있다. 정확 일치를 먼저 보면 그런 오접속이 없다.
         private static MemberSetter ResolveMemberSetter(Type type, IReadOnlyList<string> names)
         {
-            foreach (PropertyInfo property in type.GetProperties(InstanceMemberFlags))
+            PropertyInfo[] properties = type.GetProperties(InstanceMemberFlags);
+            FieldInfo[] fields = type.GetFields(InstanceMemberFlags);
+
+            foreach (bool exact in new[] { true, false })
             {
-                if (!property.CanWrite || property.GetIndexParameters().Length > 0)
+                foreach (PropertyInfo property in properties)
                 {
-                    continue;
+                    if (!property.CanWrite || property.GetIndexParameters().Length > 0)
+                    {
+                        continue;
+                    }
+
+                    if (NameMatchesAny(property.Name, names, exact))
+                    {
+                        return new MemberSetter(property, null, null);
+                    }
                 }
 
-                if (NameMatchesAny(property.Name, names))
+                foreach (FieldInfo field in fields)
                 {
-                    return new MemberSetter(property, null, null);
-                }
-            }
+                    if (field.IsInitOnly)
+                    {
+                        continue;
+                    }
 
-            foreach (FieldInfo field in type.GetFields(InstanceMemberFlags))
-            {
-                if (field.IsInitOnly)
-                {
-                    continue;
-                }
-
-                if (NameMatchesAny(field.Name, names))
-                {
-                    return new MemberSetter(null, field, null);
+                    if (NameMatchesAny(field.Name, names, exact))
+                    {
+                        return new MemberSetter(null, field, null);
+                    }
                 }
             }
 

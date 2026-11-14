@@ -12,7 +12,7 @@ namespace STARGAZER_custom_chart
         // ─────────────────────────────────────────────────────────────────────────────
         // 패치 대상 목록
         //
-        // 여기 있는 항목은 모두 HookPrefix/HookPostfix(HookInvocationSupport.cs)로 들어가고, 디스패치는
+        // InvocationPatchSpecs 항목은 Phase에 따라 HookPrefix 또는 HookPostfix(HookInvocationSupport.cs) 한쪽으로만 들어가고, 디스패치는
         // 런타임 FullName이 아니라 PatchSpec의 "논리 이름"(TypeName.MethodName)으로 한다.
         // 그래서 게임 업데이트로 타입 네임스페이스나 람다 이름이 바뀌어 대체 대상으로 해석돼도
         // 핸들러는 그대로 연결된다(RegisterResolvedTarget 참고).
@@ -24,47 +24,45 @@ namespace STARGAZER_custom_chart
         private const string PatternLoaderTypeName = "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader";
         private const string PatternLoaderLambdaName = "_Load_b__5_0";
 
-        private static IReadOnlyList<PatchSpec> GetPlayInvocationPatchSpecs()
+        private enum HookPhase
         {
-            return new[]
-            {
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs"),
-                new PatchSpec(PatternLoaderTypeName, "Load", 1, "TravelArgs"),
-                // 컴파일러 생성 람다. 이름이 바뀌어도 ResolveLambdaMethod가 같은 소유 메서드(Load)의
-                // 람다 중 시그니처가 정확히 (Pattern)인 것을 찾아 준다. 그래도 못 찾으면
-                // INNER_PatternLoader.Load 훅이 onCompleted 델리게이트를 감싸는 2차 경로(Dual-Wrapper)가 받는다.
-                new PatchSpec(PatternLoaderTypeName, PatternLoaderLambdaName, 1, "Pattern"),
-                // BGMPlayChecker / Play는 매 프레임 호출되므로 성능상 후킹하지 않는다.
-
-                new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1),
-            };
+            Prefix,
+            Postfix,
         }
 
-        private static IReadOnlyList<PatchSpec> GetTrackSelectorInvocationPatchSpecs()
+        // 각 항목은 핸들러가 실제로 필요한 쪽(Prefix 또는 Postfix) 하나에만 걸린다(InvocationPatches.cs).
+        private static readonly PatchSpec[] InvocationPatchSpecs =
         {
-            return new[]
-            {
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
-            };
-        }
+            // ── Prefix ──
+            // 곡 시작: 커스텀 플레이 상태 확정 + 오토플레이 강제(원본 Play 전에 해야 함).
+            new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs").InPhase(HookPhase.Prefix),
+            // 2차 경로(Dual-Wrapper): 원본 Load가 onCompleted를 쓰기 전에 래퍼로 감싼다.
+            new PatchSpec(PatternLoaderTypeName, "Load", 1, "TravelArgs").InPhase(HookPhase.Prefix),
 
-        private static IReadOnlyList<PatchSpec> GetTravelInvocationPatchSpecs()
+            // ── Postfix ──
+            // 컴파일러 생성 람다. 이름이 바뀌어도 ResolveLambdaMethod가 같은 소유 메서드(Load)의
+            // 람다 중 시그니처가 정확히 (Pattern)인 것을 찾아 준다. 그래도 못 찾으면
+            // INNER_PatternLoader.Load 훅이 onCompleted 델리게이트를 감싸는 2차 경로(Dual-Wrapper)가 받는다.
+            // BGMPlayChecker / Play는 매 프레임 호출되므로 성능상 후킹하지 않는다.
+            new PatchSpec(PatternLoaderTypeName, PatternLoaderLambdaName, 1, "Pattern").InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1).InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List").InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData").InPhase(HookPhase.Postfix),
+            // Refresh는 패치하지 않는다: 호출 빈도가 매우 높고, 패치하면 LevelSelector::Refresh에서
+            // NullReferenceException이 계속 발생했다(2026-08-08). 재적용은 이 두 훅에서 처리한다.
+            // LevelSelector.SetTrack은 실측상 호출되지 않아(2026-08-08) 훅에서 뺐다 — 커스텀 트랙 판별은
+            // FocusedTrackViewer 쪽(ApplyCustomLevelDisplayToFocusedViewer)이 맡는다.
+            new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord").InPhase(HookPhase.Postfix),
+            // 게임 원본 메서드의 오타(FetchJacektImage)가 향후 업데이트에서 FetchJacketImage로 수정돼도
+            // 같은 논리 이름(HookKind.LevelSelectorFetchJacektImage)으로 연결되도록 대체 이름을 둔다.
+            new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
+                .WithAlternates("FetchJacketImage")
+                .InPhase(HookPhase.Postfix),
+        };
+
+        private static IEnumerable<PatchSpec> GetInvocationPatchSpecs(HookPhase phase)
         {
-            return new[]
-            {
-                new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
-                // 게임 원본 메서드의 오타(FetchJacektImage)가 향후 업데이트에서 FetchJacketImage로 수정돼도
-                // 같은 논리 이름(HookKind.LevelSelectorFetchJacektImage)으로 연결되도록 대체 이름을 둔다.
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
-                    .WithAlternates("FetchJacketImage"),
-                // 난이도 표시 덮어쓰기용으로 등록했지만, 실측상 SetTrack은 호출되지 않는다(2026-08-08).
-                // 커스텀 트랙 판별은 FocusedTrackViewer 쪽(ApplyCustomLevelDisplayToFocusedViewer)이 맡는다.
-                // Refresh는 패치하지 않는다: 호출 빈도가 매우 높고, 패치하면 LevelSelector::Refresh에서
-                // NullReferenceException이 계속 발생했다(2026-08-08). 재적용은 FetchTrackRecord/
-                // FetchJacektImage 훅에서 처리한다.
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "SetTrack", 1, "ITrackData"),
-            };
+            return InvocationPatchSpecs.Where(spec => spec.Phase == phase);
         }
 
         // ─────────────────────────────────────────────────────────────────────────────
@@ -527,9 +525,12 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (resolved.Contains(target))
+                // 같은 클래스 안의 중복뿐 아니라, 다른 패치 클래스가 이미 다른 역할(논리 이름)로 등록한 대상도 거른다.
+                // (예: 람다 대체 해석이 Load로 잘못 떨어지면 Prefix 클래스의 Load와 Postfix 클래스의 람다가 같은 메서드가 된다.)
+                string? existingRole = TryGetResolvedTargetLogicalName(target);
+                if (resolved.Contains(target) || (existingRole is not null && !string.Equals(existingRole, spec.LogicalName, StringComparison.Ordinal)))
                 {
-                    MelonLogger.Warning($"[HookPatch][attr] {spec.LogicalName} 가 이미 등록된 대상 {DescribeMethod(target)} 로 해석돼 중복 등록을 건너뜁니다.");
+                    MelonLogger.Warning($"[HookPatch][attr] {spec.LogicalName} 가 이미 등록된 대상 {DescribeMethod(target)}(역할: {existingRole ?? spec.LogicalName}) 로 해석돼 중복 등록을 건너뜁니다.");
                     continue;
                 }
 
@@ -558,6 +559,15 @@ namespace STARGAZER_custom_chart
             public string[] ParameterTypeNameContains { get; }
             public string[] AlternateMethodNames { get; private set; } = Array.Empty<string>();
             public string LogicalName { get; }
+
+            // 공용 디스패처 훅(InvocationPatches)에서만 쓴다. 전용 패치 클래스의 항목은 기본값 그대로 둔다.
+            public HookPhase Phase { get; private set; } = HookPhase.Postfix;
+
+            public PatchSpec InPhase(HookPhase phase)
+            {
+                Phase = phase;
+                return this;
+            }
 
             public PatchSpec WithAlternates(params string[] alternateMethodNames)
             {

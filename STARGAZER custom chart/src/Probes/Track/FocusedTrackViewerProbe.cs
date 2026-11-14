@@ -50,7 +50,8 @@ namespace STARGAZER_custom_chart
 
                 foreach (string expected in FocusedTrackViewerHookMethodNames)
                 {
-                    if (!methods.Any(m => string.Equals(m.Name, expected, StringComparison.Ordinal)))
+                    if (!methods.Any(m => string.Equals(m.Name, expected, StringComparison.Ordinal))
+                        && LogOnce($"FocusedTrackViewerProbe.Missing.{expected}"))
                     {
                         LoggerInstance.Warning($"[FocusedTrackViewerProbe] {expected} 메서드를 찾지 못했습니다(게임 업데이트로 이름이 바뀌었을 수 있음).");
                     }
@@ -70,17 +71,24 @@ namespace STARGAZER_custom_chart
                         RuntimeHarmonyInstance.Patch(method, postfix: postfixHarmony);
                         successCount++;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"FocusedTrackViewerProbe.PatchFail.{method.Name}"))
+                        {
+                            LoggerInstance.Warning($"[FocusedTrackViewerProbe] {method.Name} 패치 실패: {ex.GetType().Name}: {ex.Message}");
+                        }
                     }
                 }
 
                 if (successCount > 0)
                 {
                     _focusedTrackViewerPatched = true;
+                    LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer (postfix only).");
                 }
-
-                LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer (postfix only).");
+                else if (LogOnce("FocusedTrackViewerProbe.NoneApplied"))
+                {
+                    LoggerInstance.Warning($"[FocusedTrackViewerProbe] 패치된 메서드가 없습니다(후보 {methods.Length}개). 다음 씬 로드에서 다시 시도합니다.");
+                }
             }
             catch (Exception ex)
             {

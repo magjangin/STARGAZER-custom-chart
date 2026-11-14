@@ -23,6 +23,9 @@ namespace STARGAZER_custom_chart
         private const int TotalPatchCount = 7;
         private static readonly HashSet<string> _patched = new HashSet<string>(StringComparer.Ordinal);
 
+        // 못 찾은 대상 경고는 씬 로드마다 반복하지 않도록 키별로 한 번만 남긴다.
+        private static readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
+
         public static void Initialize(HarmonyLib.Harmony harmony)
         {
             if (!CustomConfig.UnlockAll || _patched.Count >= TotalPatchCount)
@@ -30,6 +33,7 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
+            int patchedBefore = _patched.Count;
             try
             {
                 // 1. INNER_TrackData.get_IsUnlocked
@@ -53,7 +57,10 @@ namespace STARGAZER_custom_chart
                 // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
                 PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), preferredParamCount: 0);
 
-                MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 완료 ({_patched.Count}개 훅 등록)");
+                if (_patched.Count != patchedBefore)
+                {
+                    MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 ({_patched.Count}/{TotalPatchCount}개 훅 등록)");
+                }
             }
             catch (Exception ex)
             {
@@ -101,7 +108,7 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
                 }
             }
-            else
+            else if (_warned.Add(key))
             {
                 MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
             }
@@ -154,7 +161,7 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
                 }
             }
-            else
+            else if (_warned.Add(key))
             {
                 MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
             }

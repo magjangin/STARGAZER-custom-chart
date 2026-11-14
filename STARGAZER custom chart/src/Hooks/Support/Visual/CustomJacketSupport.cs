@@ -97,7 +97,11 @@ namespace STARGAZER_custom_chart
                         return true;
                     }
 
-                    MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{album.DisplayName}': {path}");
+                    if (LogOnce($"CustomJacket.Serve.{path}"))
+                    {
+                        MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{album.DisplayName}': {path} (이후 같은 요청은 로그 생략)");
+                    }
+
                     TryInvokeSingleArgCallback(__args[0], sprite, "CustomJacket");
                     return false;
                 }

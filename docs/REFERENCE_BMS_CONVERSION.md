@@ -3,8 +3,8 @@
 구현: [`src/Bms/BmsChart.cs`](../STARGAZER%20custom%20chart/src/Bms/BmsChart.cs) (파서),
 [`src/Probes/Notes/HookNoteProbes.BmsInject.cs`](../STARGAZER%20custom%20chart/src/Probes/Notes/HookNoteProbes.BmsInject.cs) (게임 주입).
 
-파서는 게임 객체를 건드리지 않습니다. 다만 중복 노트 억제 설정(`ExperimentChartSettings`)과
-그 디버그 로그(`MelonLogger`)에 의존하므로 완전히 독립된 코드는 아닙니다.
+파서(`BmsChart`)는 게임 객체·Harmony·Unity·`MelonLogger`에 의존하지 않는 순수 텍스트 파서입니다.
+인코딩 자동 감지(`SafeTextReader`)만 같이 씁니다.
 
 ## 전체 흐름
 
@@ -80,7 +80,7 @@ beatSplit   = (슬롯 개수)               / GCD
 ## 중복 노트 억제 (현재 꺼짐)
 
 같은 마디·같은 채널·같은 위치에 노트가 두 개 이상이면 하나만 남기는 기능이 파서에 있습니다.
-지금은 **코드 상수로 꺼져 있습니다**(`ExperimentChartSettings.EnableNoiseSuppression => false`).
+지금은 **꺼져 있습니다**: 주입부가 `BmsChart.TryGetOrParse(path)`를 기본값(`enableNoiseSuppression: false`)으로 부릅니다.
 `config.txt`로는 켤 수 없습니다. 켜져 있고 실제로 지운 노트가 있으면 완료 로그에 `suppressedNoise=N`이 붙습니다.
 
 ## 확장 사운드 ID (3자리)

@@ -80,6 +80,11 @@
 - **BMS/앨범 파싱 최적화**: `BmsChart.TryGetOrParse`가 파일 경로·`LastWriteTimeUtc` 기준으로 파싱 결과를 캐시하며 `ReadOnlySpan<char>` + 정수 채널 필터 + `00` 무음 청크 조기 스킵으로 할당 최소화. `CustomAlbum.TryLoad`는 `Directory.GetFiles` 결과를 파일명/확장자 사전으로 1회 인덱싱.
 - **조기 탈출(Fast-Path Exit)**: `CustomBgmLoaderPatch`/`CustomJacketLoaderPatch`는 `TryGetAlbumForTrack`로 공식 트랙을 즉시 반환하고, `TrackSelectorHookSupport.HandleTrackSelectorSetTracks`는 앨범 유무 및 첫 항목 중복 주입을 전수 열거 전에 검사하며, `ProbeNoteArrayMembers`와 `TryWrapPatternLoaderOnCompleted`는 비커스텀 플레이 시 즉시 복귀함.
 - **FocusedTrackViewer Postfix 전용 훅**: 빈 Prefix를 제거하고 `successCount > 0`일 때만 `_focusedTrackViewerPatched`를 설정하며, `ModEntry`의 `OnLateInitializeMelon`/`OnSceneWasLoaded`에서 지연 재시도를 지원.
+- **훅 단계 분리 (2026-11-15)**: 공용 디스패처 대상은 `PatchSpec.Phase`(`HookPhase.Prefix`/`Postfix`)로 나뉘어 `Hooks/Patches/InvocationPatches.cs`의 `InvocationPrefixPatches`(PlayerBase.Play, PatternLoader.Load) / `InvocationPostfixPatches`(람다, CurrentTrackViewer.Listen, TrackSelector.Set, PlayInfoViewer.ShowPlayInfo, LevelSelector.FetchTrackRecord/FetchJacektImage)에만 걸린다. 예전 Play/TrackSelector/Travel 3개 클래스는 모든 대상에 Prefix+Postfix를 동시에 붙여 호출마다 빈 쪽 트램펄린·`object[]` 박싱이 한 번 더 돌았다. `PrepareTargets`는 다른 패치 클래스가 **다른 논리 이름**으로 이미 등록한 메서드도 거른다(람다 오해석으로 Load가 Prefix/Postfix 양쪽에 걸리는 것 방지).
+- **설정 기반 무(無)패치 (2026-11-15)**: `AllPerfect=false`면 `JudgeAllPerfectPatch`가 판정 핫패스 4개를 아예 걸지 않는다(`UnlockAll`/`NoteMotion`과 같은 방식). 설정은 재시작 시에만 바뀌므로 런타임 토글은 없다. `CustomConfig`는 1회 로드한 `Settings` 스냅샷을 null 검사 1회로 돌려준다.
+- **서빙 경로 경량화 (2026-11-15)**: `CustomBgmLoaderPatch`는 캐시 적중 시 `File.Exists`를 보지 않고, BGM/자켓 "Serving" 로그는 경로별 1회만 남긴다(곡 선택 커서 이동마다 로그 파일 쓰기 제거). `JudgePatch`/`UnlockAllPatch`/`FocusedTrackViewerProbe`의 "못 찾음" 경고도 씬 로드마다 반복하지 않고 키별 1회.
+- **BMS 주입 루프 할당 제거 (2026-11-15)**: `TrySetValueByNameCandidates` 후보 배열을 정적 필드로, `List.Add`/`Note(Area,string,BeatInfo)` 호출 인자 배열을 재사용 버퍼로 바꿨다(메인 스레드 전용, 호출 후 참조 해제).
+- **이름 기반 세터 정확 일치 우선 (2026-11-15)**: `ResolveMemberSetter`는 밑줄 제거·소문자 정규화 이름이 후보와 **완전히 같은** 프로퍼티/필드를 먼저 고르고, 없을 때만 예전의 "포함" 일치로 내려간다. 포함 일치만 쓰면 `displayname`이 선언 순서에 따라 `displayNameEN`에, `targetlayer`가 `<TargetLayer>k__BackingField`에 걸릴 수 있었다.
 - **죽은 프로브·로그 전용 코드 정리**: 미사용·로그 전용 16개 파일(`ExperimentChartSettings`, `AssetBundleLoader`, `SoundInvocation`, `TrackLoaderInvocation`, `TrackListViewerProbe`, `AreaCreate`/`Catalog`/`LinkHold`/`Wipe`/`LongNote`/`Reflection`, `JacketObjectProbe`, `LevelSelectorHookSupport`/`ProbingSupport`, `TrackSelectorMetadataSupport`) 및 빈 폴더 4개 제거.
 
 ### 다국어 (중국어 / 영어 / 한국어 / 일본어) 지원 & 인코딩 내성
@@ -99,10 +104,10 @@
 | **BGM 음원** | `INNER_TrackData.LoadBGMClip(Action<AudioClip>)` | Prefix | `UnityWebRequestMultimedia.GetAudioClip` 비동기 디코딩 및 메모리 캐싱 후 오디오 클립 주입 |
 | **프리뷰 음원** | `INNER_TrackData.LoadPreviewClip(Action<AudioClip>)` | Prefix | 프리뷰 전용 오디오 클립 주입 |
 | **BMS 차트 주입** | `INNER_PatternLoader._Load_b__5_0(Pattern)`<br>`INNER_PatternLoader.onCompleted` (Dual-Wrapper) | Postfix / Delegate Wrapper | 패턴 로드 직후 `Pattern.Layer.Areas`를 BMS 채보로 런타임 스왑 (`HookNoteProbes.cs` → `HookNoteProbes.BmsInject.cs`). 1차 람다 훅 실패 시 2차 `onCompleted` 이중래퍼가 받으며, Pattern 네이티브 포인터 기준 중복 주입 가드 탑재 |
-| **공용 디스패처** | `PatchTargetSupport.Get*InvocationPatchSpecs()` 전체 | Prefix / Postfix | `HookInvocationSupport.cs`의 `HookSite`(MethodBase별 1회 계산: `HookKind` + 로그 자격 + 스로틀)로 switch 디스패치. 핸들러 없는 로그 전용 훅은 두지 않는다 |
+| **공용 디스패처** | `PatchTargetSupport.InvocationPatchSpecs` 전체 | Prefix **또는** Postfix (`PatchSpec.Phase`) | `InvocationPatches.cs`가 단계별로 한쪽에만 걸고, `HookInvocationSupport.cs`의 `HookSite`(MethodBase별 1회 계산: `HookKind` + 로그 자격 + 스로틀)로 switch 디스패치. 핸들러 없는 로그 전용 훅은 두지 않는다 |
 | **난이도 표시 (선택 화면)** | `FocusedTrackViewer.SetTrack/Refresh/FetchJacketImage/LoadPreviewBGM` | Postfix (수동 Patch) | `FocusedTrackViewerProbe.cs`. 화이트리스트 4개만 건다(전 메서드 후킹 금지 — Dead End 9) |
 | **난이도 UI** | `FocusedTrackViewer`, `LevelSelector`, `CurrentTrackViewer`, `PlayInfoViewer` | Postfix | 게임 내부 문자열 변조 없이 각 화면의 텍스트 UI 컴포넌트 세터를 직접 호출하여 표시 오버라이드 |
-| **올 퍼펙트 판정** | `JudgementExtension.FromTimeDiffernce`<br>`JudgementExtension.TryJudgeHead`<br>`TravelPlayer.INNER_Result.BufferProcess`<br>`JudgementWidget.Watch` | Prefix / Transpiler | 키 입력 타이밍에 상관없이 BLUESTAR 최고 판정 유도 및 점수/콤보 100% 반영 (`REFERENCE_ALL_PERFECT.md`) |
+| **올 퍼펙트 판정** | `JudgementExtension.FromTimeDiffernce`<br>`JudgementExtension.TryJudgeHead`<br>`TravelPlayer.INNER_Result.BufferProcess`<br>`JudgementWidget.Watch` | Prefix / Postfix (수동 Patch) | 키 입력 타이밍에 상관없이 BLUESTAR 최고 판정 유도 및 점수/콤보 100% 반영 (`REFERENCE_ALL_PERFECT.md`). `AllPerfect=false`면 아예 패치하지 않음 |
 | **전곡 해금 (Unlock All)** | `TrackLoader.INNER_TrackData.get_IsUnlocked`<br>`TrackLoader.INNER_TrackData.get_LockType`<br>`TrackLoader.INNER_TrackData.get_UnlockCost`<br>`ITrackData.get_IsUnlocked`<br>`ITrackData.get_LockType`<br>`UserDataLoader.INNER_UnlockDataModule.IsUnlocked`<br>`UserDataLoader.INNER_CurrencyModule.GetVolts` | Prefix | 모든 트랙의 `IsUnlocked`를 `true`로, `LockType`을 `NONE`으로 고정하여 VOLT REQUIRED/DLC/어드벤처 잠금 및 자켓 자물쇠 UI를 제거하고 999,999 볼트 지급 (`TrackUnlockAllPatch.cs`) |
 
 ---
@@ -120,7 +125,7 @@
 3. **`LevelSelector.Refresh` 후킹 (실패)**
    - 원인: 프레임 단위 또는 매우 잦은 주기로 호출되며, 패치 시 `LevelSelector::Refresh`에서 초당 수십 회 `NullReferenceException` 폭타 발생.
    - 규칙: 재적용이 필요한 경우 `FetchTrackRecord` 또는 `FetchJacektImage` Postfix를 활용할 것.
-4. **`LevelSelector.SetTrack` 후킹 (실패)**
+4. **`LevelSelector.SetTrack` 후킹 (실패, 2026-11-15 훅·핸들러 제거)**
    - 원인: 시그니처 상 존재하지만 인게임 런타임에서 실제로 트리거되지 않음.
    - 규칙: `FocusedTrackViewer.currentTrack` 상태를 조회하여 현재 선택 트랙 판정을 재사용할 것.
 5. **`SelectionItem<T>.selectedValue` 리플렉션 읽기 (실패)**
@@ -140,6 +145,9 @@
    - 규칙: 필요한 메서드 이름을 화이트리스트로 명시할 것.
 10. **로그 전용 고빈도 훅 (병목)**
     - `SoundPlayer.PlaySFX`(4개 오버로드, 노트 타격음마다 호출)·`TrackSelectLogic.*`·`TrackSelector.OpenStandby/ChangeTrackCursor`는 핸들러 없이 로그만 남기던 훅이라 제거함. Il2Cpp Harmony 훅은 아무것도 안 해도 호출당 트램펄린 + `object[]` 박싱 비용이 있음.
+11. **공용 훅에 Prefix+Postfix 동시 부착 (낭비, 2026-11-15 제거)**
+    - 원인: 한쪽 핸들러만 있는 대상에도 빈 반대쪽이 붙어 호출마다 디스패치·박싱이 2회 돌았음.
+    - 규칙: 새 공용 훅은 `InvocationPatchSpecs`에 `.InPhase(HookPhase.Prefix|Postfix)`로 필요한 쪽만 등록하고, 해당 `HookKind` 분기를 `HookPrefix` 또는 `HookPostfix` 한쪽에만 둘 것.
 
 ---
 
@@ -163,4 +171,5 @@
   - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]`.
 - **검증 이력**:
   - 2026-11-14 (리팩토링 전 실기): 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치.
+  - 2026-11-15 (훅 단계 분리·설정 기반 무패치·서빙 경로 경량화·죽은 코드 정리): MSBuild `Debug /t:Rebuild` 성공(오류 0, C# 경고 0, IDE0005 미사용 using 0, 기존 `MSB3270` 1건) 및 `Mods\` 배포. **실기 기동 확인**: 공용 훅 8개(Prefix 2 + Postfix 6) 전부 1단계 정확 일치, `[resolve]`·예외 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, 3개 앨범 `TrackSelector.Set` 주입 성공(정확 일치 세터로 `actual=` 제목 일치). **커스텀 곡 실제 플레이(BMS 주입·Save Guard·결과 화면 난이도)는 이번에도 미확인** — 다음 실기 때 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 로그부터 볼 것.
   - 2026-11-14 (전체 감사/성능/내성 리팩토링): 16개 죽은 파일 제거·공용 캐싱·타입 기반 폴백·하드닝 리팩토링 후 MSBuild `Debug /t:Rebuild` 성공(오류 0개, C# 경고 0개, 기존 `.csproj` MSIL/AMD64 `MSB3270` 1건) 및 `Mods\STARGAZER custom chart.dll` 배포 확인. **리팩토링 후 인게임 실기 플레이(커스텀 곡 BMS 주입·Save Guard·난이도 UI)는 아직 미확인.**
