@@ -128,7 +128,7 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                object? currentTrack = TryGetMemberValue(viewer, viewer.GetType(), "currentTrack");
+                object? currentTrack = TryGetMemberByType(viewer, "ITrackData", "currentTrack", "CurrentFocused", "selectedTrack", "focusedTrack");
                 CustomAlbum? album = TryGetAlbumForTrack(currentTrack);
 
                 // 난이도 선택 화면(LevelSelector)은 지금 포커스된 곡으로만 열리므로, 여기서 확정된 판정을
@@ -235,7 +235,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? levelText = TryGetMemberValue(viewer, viewer.GetType(), "levelText");
+                object? levelText = TryGetMemberByType(viewer, "TextProvider", "levelText", "LevelText");
                 if (levelText is null)
                 {
                     return;
@@ -306,26 +306,26 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? playData = TryGetMemberValue(resultData, resultData.GetType(), "PlayData");
+                object? playData = TryGetMemberByType(resultData, "TravelArgs", "PlayData", "playData");
                 if (playData is null)
                 {
                     return;
                 }
 
-                object? playTrack = TryGetMemberValue(playData, playData.GetType(), "PlayTrack");
+                object? playTrack = TryGetMemberByType(playData, "ITrackData", "PlayTrack", "playTrack");
                 CustomTrackInfo? info = TryGetAlbumForTrack(playTrack)?.Info;
                 if (info is null || info.Levels.Count == 0)
                 {
                     return;
                 }
 
-                string? levelKey = TryGetMemberValue(playData, playData.GetType(), "PlayLevel")?.ToString();
+                string? levelKey = TryGetMemberByType(playData, "ELevels", "PlayLevel", "playLevel")?.ToString();
                 if (levelKey is null || !info.Levels.TryGetValue(levelKey, out string? levelValue))
                 {
                     return;
                 }
 
-                object? levelItem = TryGetMemberValue(instance, instance.GetType(), "levelText");
+                object? levelItem = TryGetMemberByType(instance, "LevelItem", "levelText", "LevelText");
                 if (levelItem is null)
                 {
                     MelonLogger.Warning("[CustomLevel][Result] PlayInfoViewer.levelText를 찾지 못했습니다.");

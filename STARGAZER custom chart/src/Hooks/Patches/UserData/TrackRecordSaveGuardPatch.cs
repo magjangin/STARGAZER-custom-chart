@@ -24,8 +24,8 @@ namespace STARGAZER_custom_chart
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
-            // false를 반환하면 원본 저장 로직을 건너뛴다. 판정이 애매하면(예외 등) 항상 true로
-            // 원본 동작(=저장)을 그대로 둔다 — 공식 트랙 저장까지 막아버리는 쪽이 더 위험하다.
+            // false를 반환하면 원본 저장 로직을 건너뛴다. 공식 트랙으로 확실히 판정되면 항상 저장하고,
+            // 트랙 객체 추출에 실패했지만 현재 커스텀 곡 플레이 중이면 기록 보호를 위해 방어적으로 차단한다.
             private static bool Prefix(object[]? __args)
             {
                 try
@@ -33,11 +33,28 @@ namespace STARGAZER_custom_chart
                     object? result = __args is { Length: > 0 } ? __args[0] : null;
                     if (result is null)
                     {
+                        if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
+                        {
+                            MelonLogger.Warning($"[SaveGuard] 결과 인자가 비어 있지만 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
+                            return false;
+                        }
+
                         return true;
                     }
 
-                    object? playData = TryGetMemberValue(result, result.GetType(), "PlayData");
-                    object? playTrack = playData is null ? null : TryGetMemberValue(playData, playData.GetType(), "PlayTrack");
+                    object? playData = TryGetMemberByType(result, "TravelArgs", "PlayData", "playData");
+                    object? playTrack = playData is null ? null : TryGetMemberByType(playData, "ITrackData", "PlayTrack", "playTrack");
+                    if (playTrack is null)
+                    {
+                        if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
+                        {
+                            MelonLogger.Warning($"[SaveGuard] PlayTrack 추출에 실패했으나 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
+                            return false;
+                        }
+
+                        return true;
+                    }
+
                     CustomAlbum? album = TryGetAlbumForTrack(playTrack);
                     if (album is null)
                     {

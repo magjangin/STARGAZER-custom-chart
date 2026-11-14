@@ -60,27 +60,6 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void InvokeActionOfSprite(object? callback, Sprite? sprite)
-        {
-            if (callback is null) return;
-            try
-            {
-                MethodInfo? invoke = callback.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.Public);
-                if (invoke is not null)
-                {
-                    invoke.Invoke(callback, new object?[] { sprite });
-                }
-                else
-                {
-                    MelonLogger.Warning("[CustomJacket] 콜백 객체에서 Invoke 메서드를 찾지 못했습니다.");
-                }
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[CustomJacket] Failed to invoke callback: {ex.Message}");
-            }
-        }
-
         [HarmonyPatch]
         private static class CustomJacketLoaderPatch
         {
@@ -102,11 +81,6 @@ namespace STARGAZER_custom_chart
                         return true;
                     }
 
-                    Type t = __instance.GetType();
-                    string displayName = TryGetMemberValue(__instance, t, "TrackDisplayName")?.ToString()
-                        ?? TryGetMemberValue(__instance, t, "TrackDisplayNameEN")?.ToString()
-                        ?? string.Empty;
-
                     // 공식 트랙에 커스텀 커버가 들어가지 않도록, 우리가 주입한 객체인지로만 판별한다.
                     // (TrackID는 복제 원본인 공식 "Starting Point"와 동일해서 구분 기준이 될 수 없다.)
                     // 어느 앨범 폴더의 이미지를 쓸지도 이 조회 결과로 정해진다.
@@ -123,8 +97,8 @@ namespace STARGAZER_custom_chart
                         return true;
                     }
 
-                    MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{displayName}': {path}");
-                    InvokeActionOfSprite(__args[0], sprite);
+                    MelonLogger.Msg($"[CustomJacket] Serving custom jacket for '{album.DisplayName}': {path}");
+                    TryInvokeSingleArgCallback(__args[0], sprite, "CustomJacket");
                     return false;
                 }
                 catch (Exception ex)

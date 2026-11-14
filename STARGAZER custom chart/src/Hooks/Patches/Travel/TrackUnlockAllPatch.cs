@@ -48,10 +48,10 @@ namespace STARGAZER_custom_chart
                 PatchGetter<ELockType>(harmony, typeof(ITrackData), "LockType", nameof(Get_LockType_Prefix));
 
                 // 6. UserDataLoader.INNER_UnlockDataModule.IsUnlocked
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_UnlockDataModule), "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix));
+                PatchMethod(harmony, typeof(UserDataLoader.INNER_UnlockDataModule), "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix), preferredParamCount: 1);
 
                 // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix));
+                PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), preferredParamCount: 0);
 
                 MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 완료 ({_patched.Count}개 훅 등록)");
             }
@@ -66,10 +66,29 @@ namespace STARGAZER_custom_chart
             string key = $"{targetType.FullName}.get_{propName}";
             if (_patched.Contains(key)) return;
 
-            MethodInfo? getter = AccessTools.PropertyGetter(targetType, propName);
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            MethodInfo? getter = null;
+            try
+            {
+                getter = AccessTools.PropertyGetter(targetType, propName);
+            }
+            catch (AmbiguousMatchException)
+            {
+                getter = null;
+            }
+
             if (getter == null)
             {
-                getter = targetType.GetMethod($"get_{propName}", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                string getterName = $"get_{propName}";
+                foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+                {
+                    if (string.Equals(candidate.Name, getterName, StringComparison.Ordinal)
+                        && candidate.GetParameters().Length == 0)
+                    {
+                        getter = candidate;
+                        break;
+                    }
+                }
             }
 
             if (getter != null)
@@ -88,12 +107,43 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void PatchMethod(HarmonyLib.Harmony harmony, Type targetType, string methodName, string prefixMethodName)
+        private static void PatchMethod(HarmonyLib.Harmony harmony, Type targetType, string methodName, string prefixMethodName, int? preferredParamCount = null)
         {
             string key = $"{targetType.FullName}.{methodName}";
             if (_patched.Contains(key)) return;
 
-            MethodInfo? method = AccessTools.Method(targetType, methodName);
+            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+            var exactMatches = new List<MethodInfo>();
+            foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+            {
+                if (string.Equals(candidate.Name, methodName, StringComparison.Ordinal) && !candidate.IsGenericMethod)
+                {
+                    exactMatches.Add(candidate);
+                }
+            }
+
+            MethodInfo? method = null;
+            if (exactMatches.Count == 1)
+            {
+                method = exactMatches[0];
+            }
+            else if (exactMatches.Count > 1)
+            {
+                if (preferredParamCount.HasValue)
+                {
+                    foreach (MethodInfo candidate in exactMatches)
+                    {
+                        if (candidate.GetParameters().Length == preferredParamCount.Value)
+                        {
+                            method = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                method ??= exactMatches[0];
+            }
+
             if (method != null)
             {
                 MethodInfo? prefix = typeof(TrackUnlockAllPatch).GetMethod(prefixMethodName, BindingFlags.Static | BindingFlags.NonPublic);

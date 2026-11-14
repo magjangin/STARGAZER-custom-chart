@@ -18,8 +18,7 @@ namespace STARGAZER_custom_chart
         // 핸들러는 그대로 연결된다(RegisterResolvedTarget 참고).
         //
         // 핸들러가 없는 로그 전용 훅은 두지 않는다. Il2Cpp Harmony 훅은 호출마다 트램펄린 + 인자 박싱이
-        // 붙으므로, 아무 일도 하지 않는 훅도 그 자체가 비용이다(2026-11-14 정리: TrackSelectLogic.*,
-        // TrackSelector.OpenStandby/ChangeTrackCursor, SoundPlayer.PlaySFX×4, TrackLoader.LoadTracksAsync 제거).
+        // 붙으므로, 아무 일도 하지 않는 훅도 그 자체가 비용이다.
         // ─────────────────────────────────────────────────────────────────────────────
 
         private const string PatternLoaderTypeName = "Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader";
@@ -30,8 +29,6 @@ namespace STARGAZER_custom_chart
             return new[]
             {
                 new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs"),
-                new PatchSpec("Il2CppStargazer.Play.PlayerBase", "PlayStart", 1, "IPlayHandler"),
-                new PatchSpec("Il2CppStargazer.Play.StargazerPlayer", "Load", 2, "TravelArgs", "Action"),
                 new PatchSpec(PatternLoaderTypeName, "Load", 1, "TravelArgs"),
                 // 컴파일러 생성 람다. 이름이 바뀌어도 ResolveLambdaMethod가 같은 소유 메서드(Load)의
                 // 람다 중 시그니처가 정확히 (Pattern)인 것을 찾아 준다. 그래도 못 찾으면
@@ -43,33 +40,11 @@ namespace STARGAZER_custom_chart
             };
         }
 
-        private static IReadOnlyList<PatchSpec> GetTrackLoaderInvocationPatchSpecs()
-        {
-            return new[]
-            {
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPattern", 2, "ELevels", "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
-            };
-        }
-
-        private static IReadOnlyList<PatchSpec> GetSoundInvocationPatchSpecs()
-        {
-            return new[]
-            {
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "PlayBGM", 2, "AudioClip", "ESoundType"),
-                new PatchSpec("Il2CppStarlike.Sound.SoundPlayer", "StopBGM", 0),
-                // PlaySFX(4개 오버로드)는 걸지 않는다. 노트 타격음마다 불리는 고빈도 지점인데
-                // 하던 일은 "어느 오버로드가 쓰이는지" 1회 진단 로그뿐이었다(진단은 2026-08-09에 끝남).
-            };
-        }
-
         private static IReadOnlyList<PatchSpec> GetTrackSelectorInvocationPatchSpecs()
         {
             return new[]
             {
                 new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List"),
-                new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackListViewer", "MoveCursor", 1, "Int32"),
             };
         }
 
@@ -79,7 +54,10 @@ namespace STARGAZER_custom_chart
             {
                 new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData"),
                 new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord"),
-                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite"),
+                // 게임 원본 메서드의 오타(FetchJacektImage)가 향후 업데이트에서 FetchJacketImage로 수정돼도
+                // 같은 논리 이름(HookKind.LevelSelectorFetchJacektImage)으로 연결되도록 대체 이름을 둔다.
+                new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
+                    .WithAlternates("FetchJacketImage"),
                 // 난이도 표시 덮어쓰기용으로 등록했지만, 실측상 SetTrack은 호출되지 않는다(2026-08-08).
                 // 커스텀 트랙 판별은 FocusedTrackViewer 쪽(ApplyCustomLevelDisplayToFocusedViewer)이 맡는다.
                 // Refresh는 패치하지 않는다: 호출 빈도가 매우 높고, 패치하면 LevelSelector::Refresh에서
@@ -285,6 +263,16 @@ namespace STARGAZER_custom_chart
                 return exact;
             }
 
+            foreach (string alternateName in spec.AlternateMethodNames)
+            {
+                MethodInfo? alternate = PickBestBySignature(allMethods.Where(m => string.Equals(m.Name, alternateName, StringComparison.Ordinal)), spec, exactTypeNames: false);
+                if (alternate is not null)
+                {
+                    MelonLogger.Warning($"[HookPatch][resolve] {spec.TypeName}.{spec.MethodName} 대신 대체 이름 {DescribeMethod(alternate)} 로 연결합니다.");
+                    return alternate;
+                }
+            }
+
             if (TryParseLambdaName(spec.MethodName, out string lambdaOwner))
             {
                 return ResolveLambdaMethod(type, spec, lambdaOwner);
@@ -297,6 +285,18 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[HookPatch][resolve] {spec.TypeName}.{spec.MethodName} 파라미터 타입이 기대와 달라 개수만 맞는 유일 후보로 대체합니다: {DescribeMethod(sameNameSameArity[0])}");
                 return sameNameSameArity[0];
+            }
+
+            foreach (string alternateName in spec.AlternateMethodNames)
+            {
+                MethodInfo[] altSameArity = allMethods
+                    .Where(m => string.Equals(m.Name, alternateName, StringComparison.Ordinal) && m.GetParameters().Length == spec.ParameterCount)
+                    .ToArray();
+                if (altSameArity.Length == 1)
+                {
+                    MelonLogger.Warning($"[HookPatch][resolve] {spec.TypeName}.{spec.MethodName} 대체 이름({alternateName}) 개수 일치 유일 후보로 연결합니다: {DescribeMethod(altSameArity[0])}");
+                    return altSameArity[0];
+                }
             }
 
             return null;
@@ -464,12 +464,6 @@ namespace STARGAZER_custom_chart
             return score;
         }
 
-        private static string StripGenericArity(string typeName)
-        {
-            int tick = typeName.IndexOf('`');
-            return tick < 0 ? typeName : typeName.Substring(0, tick);
-        }
-
         private static string DescribeMethod(MethodInfo method)
         {
             string parameters;
@@ -562,7 +556,14 @@ namespace STARGAZER_custom_chart
             public string MethodName { get; }
             public int ParameterCount { get; }
             public string[] ParameterTypeNameContains { get; }
+            public string[] AlternateMethodNames { get; private set; } = Array.Empty<string>();
             public string LogicalName { get; }
+
+            public PatchSpec WithAlternates(params string[] alternateMethodNames)
+            {
+                AlternateMethodNames = alternateMethodNames ?? Array.Empty<string>();
+                return this;
+            }
         }
     }
 }

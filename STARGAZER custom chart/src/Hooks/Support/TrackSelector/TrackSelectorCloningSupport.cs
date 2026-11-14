@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -66,17 +67,41 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private sealed class CopyMemberSet
+        {
+            public CopyMemberSet(FieldInfo[] allFields, FieldInfo[] nonMetaFields, PropertyInfo[] allProps, PropertyInfo[] nonMetaProps)
+            {
+                AllFields = allFields;
+                NonMetaFields = nonMetaFields;
+                AllProps = allProps;
+                NonMetaProps = nonMetaProps;
+            }
+
+            public FieldInfo[] AllFields { get; }
+            public FieldInfo[] NonMetaFields { get; }
+            public PropertyInfo[] AllProps { get; }
+            public PropertyInfo[] NonMetaProps { get; }
+        }
+
+        private static readonly string[] MetaMemberNameCandidates = { "metadata" };
+
+        private static readonly ConcurrentDictionary<(Type TrackType, Type MetaType), ConstructorInfo?> TrackMetaCtorCache =
+            new ConcurrentDictionary<(Type, Type), ConstructorInfo?>();
+
+        private static readonly ConcurrentDictionary<Type, CopyMemberSet> CopyMemberCache =
+            new ConcurrentDictionary<Type, CopyMemberSet>();
+
         private static object? CreateTrackDataFromMetaData(Type trackType, Type metaType, object newMeta)
         {
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            ConstructorInfo? constructor = trackType
-                .GetConstructors(flags)
-                .FirstOrDefault(candidate =>
-                {
-                    ParameterInfo[] parameters = candidate.GetParameters();
-                    return parameters.Length == 1
-                        && parameters[0].ParameterType.IsAssignableFrom(metaType);
-                });
+            ConstructorInfo? constructor = TrackMetaCtorCache.GetOrAdd((trackType, metaType), key =>
+                key.TrackType
+                    .GetConstructors(InstanceMemberFlags)
+                    .FirstOrDefault(candidate =>
+                    {
+                        ParameterInfo[] parameters = candidate.GetParameters();
+                        return parameters.Length == 1
+                            && parameters[0].ParameterType.IsAssignableFrom(key.MetaType);
+                    }));
             if (constructor is null)
             {
                 MelonLogger.Warning($"[TrackSelector.Set] INNER_TrackData(metaData) 생성자를 찾지 못했습니다: {trackType.FullName}");
@@ -143,30 +168,68 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static bool IsIl2CppInternalMemberName(string name)
+        {
+            return string.Equals(name, "Pointer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "m_CachedPtr", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "pooledPtr", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "isWrapped", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "ObjectClass", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static CopyMemberSet GetCopyMemberSet(Type type)
+        {
+            return CopyMemberCache.GetOrAdd(type, t =>
+            {
+                var allFields = new List<FieldInfo>();
+                var nonMetaFields = new List<FieldInfo>();
+                foreach (FieldInfo field in t.GetFields(InstanceMemberFlags))
+                {
+                    if (field.IsInitOnly || IsIl2CppInternalMemberName(field.Name))
+                    {
+                        continue;
+                    }
+
+                    allFields.Add(field);
+                    if (!NameMatchesAny(field.Name, MetaMemberNameCandidates))
+                    {
+                        nonMetaFields.Add(field);
+                    }
+                }
+
+                var allProps = new List<PropertyInfo>();
+                var nonMetaProps = new List<PropertyInfo>();
+                foreach (PropertyInfo prop in t.GetProperties(InstanceMemberFlags))
+                {
+                    if (!prop.CanRead || !prop.CanWrite || prop.GetIndexParameters().Length > 0 || IsIl2CppInternalMemberName(prop.Name))
+                    {
+                        continue;
+                    }
+
+                    allProps.Add(prop);
+                    if (!NameMatchesAny(prop.Name, MetaMemberNameCandidates))
+                    {
+                        nonMetaProps.Add(prop);
+                    }
+                }
+
+                return new CopyMemberSet(
+                    allFields.ToArray(),
+                    nonMetaFields.ToArray(),
+                    allProps.ToArray(),
+                    nonMetaProps.ToArray());
+            });
+        }
+
         private static void CopyFieldsAndProperties(object source, object target, bool skipMetaDataMembers = false)
         {
             if (source is null || target is null) return;
-            Type type = source.GetType();
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            CopyMemberSet members = GetCopyMemberSet(source.GetType());
 
-            // 필드를 복사합니다.
-            foreach (FieldInfo field in type.GetFields(flags))
+            FieldInfo[] fields = skipMetaDataMembers ? members.NonMetaFields : members.AllFields;
+            for (int i = 0; i < fields.Length; i++)
             {
-                if (field.IsInitOnly) continue;
-                string name = field.Name;
-                if (skipMetaDataMembers && NameMatchesAny(name, new[] { "metadata" }))
-                {
-                    continue;
-                }
-                if (string.Equals(name, "Pointer", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "m_CachedPtr", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "pooledPtr", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "isWrapped", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "ObjectClass", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
+                FieldInfo field = fields[i];
                 try
                 {
                     object? val = field.GetValue(source);
@@ -178,23 +241,10 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            // 프로퍼티를 복사합니다.
-            foreach (PropertyInfo prop in type.GetProperties(flags))
+            PropertyInfo[] props = skipMetaDataMembers ? members.NonMetaProps : members.AllProps;
+            for (int i = 0; i < props.Length; i++)
             {
-                if (!prop.CanRead || !prop.CanWrite) continue;
-                string name = prop.Name;
-                if (skipMetaDataMembers && NameMatchesAny(name, new[] { "metadata" }))
-                {
-                    continue;
-                }
-                if (string.Equals(name, "Pointer", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "m_CachedPtr", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "pooledPtr", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(name, "ObjectClass", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
+                PropertyInfo prop = props[i];
                 try
                 {
                     object? val = prop.GetValue(source);

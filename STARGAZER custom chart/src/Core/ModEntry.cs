@@ -47,6 +47,7 @@ namespace STARGAZER_custom_chart
         {
             try
             {
+                TryApplyFocusedTrackViewerPatches();
                 JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
                 TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
             }
@@ -58,6 +59,7 @@ namespace STARGAZER_custom_chart
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
+            TryApplyFocusedTrackViewerPatches();
             JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
             TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
         }

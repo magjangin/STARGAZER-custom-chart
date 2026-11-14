@@ -90,14 +90,15 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
+                content = content.TrimStart('\uFEFF');
+
                 var lines = new List<string>();
                 using (var reader = new StringReader(content))
                 {
                     string? line;
                     while ((line = reader.ReadLine()) != null)
                     {
-                        // 줄 시작 부분에 남아있을 수 있는 BOM(\uFEFF) 제거
-                        lines.Add(line.TrimStart('\uFEFF'));
+                        lines.Add(line);
                     }
                 }
 
