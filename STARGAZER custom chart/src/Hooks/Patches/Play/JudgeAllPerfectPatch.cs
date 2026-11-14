@@ -34,18 +34,20 @@ namespace STARGAZER_custom_chart
                 // 1. FromTimeDiffernce 패치 (RVA: 0x437510)
                 if (!_patched.Contains(nameof(FromTimeDiffernce_Postfix)))
                 {
-                    var fromTimeDiffMethod = AccessTools.Method(typeof(JudgementExtension), "FromTimeDiffernce",
-                        new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() })
-                        ?? AccessTools.Method(typeof(JudgementExtension), "FromTimeDifference",
-                            new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() })
-                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementExtension).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static),
-                            m => m.Name.IndexOf("TimeDiffer", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 3);
+                    var expectedParams = new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() };
+                    MethodInfo? fromTimeDiffMethod = ResolveJudgeMethod(
+                        typeof(JudgementExtension),
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                        new[] { "FromTimeDiffernce", "FromTimeDifference" },
+                        "TimeDiffer",
+                        typeof(EJudgements),
+                        expectedParams);
                     if (fromTimeDiffMethod != null)
                     {
                         var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(FromTimeDiffernce_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
                         harmony.Patch(fromTimeDiffMethod, postfix: new HarmonyMethod(postfix));
                         _patched.Add(nameof(FromTimeDiffernce_Postfix));
-                        MelonLogger.Msg("[JudgePatch] ✓ FromTimeDiffernce (BLUE 고정) 패치 성공");
+                        MelonLogger.Msg($"[JudgePatch] ✓ {fromTimeDiffMethod.Name} (BLUE 고정) 패치 성공");
                     }
                     else
                     {
@@ -56,16 +58,20 @@ namespace STARGAZER_custom_chart
                 // 2. TryJudgeHead 패치 (RVA: 0x437CC0)
                 if (!_patched.Contains(nameof(TryJudgeHead_Postfix)))
                 {
-                    var tryJudgeHeadMethod = AccessTools.Method(typeof(JudgementExtension), "TryJudgeHead",
-                        new[] { typeof(LaneIndex), typeof(float), typeof(EJudgements).MakeByRefType() })
-                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementExtension).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static),
-                            m => m.Name.IndexOf("JudgeHead", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 3);
+                    var expectedParams = new[] { typeof(LaneIndex), typeof(float), typeof(EJudgements).MakeByRefType() };
+                    MethodInfo? tryJudgeHeadMethod = ResolveJudgeMethod(
+                        typeof(JudgementExtension),
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                        new[] { "TryJudgeHead" },
+                        "JudgeHead",
+                        typeof(bool),
+                        expectedParams);
                     if (tryJudgeHeadMethod != null)
                     {
                         var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(TryJudgeHead_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
                         harmony.Patch(tryJudgeHeadMethod, postfix: new HarmonyMethod(postfix));
                         _patched.Add(nameof(TryJudgeHead_Postfix));
-                        MelonLogger.Msg("[JudgePatch] ✓ TryJudgeHead (BLUE 고정) 패치 성공");
+                        MelonLogger.Msg($"[JudgePatch] ✓ {tryJudgeHeadMethod.Name} (BLUE 고정) 패치 성공");
                     }
                     else
                     {
@@ -82,15 +88,20 @@ namespace STARGAZER_custom_chart
                             t => t.Name.IndexOf("Result", StringComparison.OrdinalIgnoreCase) >= 0);
                     if (innerResultType != null)
                     {
-                        var bufferProcessMethod = AccessTools.Method(innerResultType, "BufferProcess", new[] { typeof(TickEventData) })
-                            ?? System.Linq.Enumerable.FirstOrDefault(innerResultType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance),
-                                m => m.Name.IndexOf("Buffer", StringComparison.OrdinalIgnoreCase) >= 0 && m.GetParameters().Length == 1);
+                        var expectedParams = new[] { typeof(TickEventData) };
+                        MethodInfo? bufferProcessMethod = ResolveJudgeMethod(
+                            innerResultType,
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                            new[] { "BufferProcess" },
+                            "Buffer",
+                            typeof(void),
+                            expectedParams);
                         if (bufferProcessMethod != null)
                         {
                             var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(BufferProcess_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
                             harmony.Patch(bufferProcessMethod, prefix: new HarmonyMethod(prefix));
                             _patched.Add(nameof(BufferProcess_Prefix));
-                            MelonLogger.Msg("[JudgePatch] ✓ TravelPlayer.INNER_Result.BufferProcess (결과/점수 BLUE 집계) 패치 성공");
+                            MelonLogger.Msg($"[JudgePatch] ✓ TravelPlayer.{innerResultType.Name}.{bufferProcessMethod.Name} (결과/점수 BLUE 집계) 패치 성공");
                         }
                         else
                         {
@@ -106,15 +117,20 @@ namespace STARGAZER_custom_chart
                 // 4. JudgementWidget.Watch 패치 (RVA: 0x41CDD0)
                 if (!_patched.Contains(nameof(JudgementWidget_Watch_Prefix)))
                 {
-                    var watchMethod = AccessTools.Method(typeof(JudgementWidget), "Watch", new[] { typeof(TickEventData) })
-                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(JudgementWidget).GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance),
-                            m => m.Name == "Watch" && m.GetParameters().Length == 1);
+                    var expectedParams = new[] { typeof(TickEventData) };
+                    MethodInfo? watchMethod = ResolveJudgeMethod(
+                        typeof(JudgementWidget),
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                        new[] { "Watch" },
+                        "Watch",
+                        typeof(void),
+                        expectedParams);
                     if (watchMethod != null)
                     {
                         var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(JudgementWidget_Watch_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
                         harmony.Patch(watchMethod, prefix: new HarmonyMethod(prefix));
                         _patched.Add(nameof(JudgementWidget_Watch_Prefix));
-                        MelonLogger.Msg("[JudgePatch] ✓ JudgementWidget.Watch (UI 블루 이펙트) 패치 성공");
+                        MelonLogger.Msg($"[JudgePatch] ✓ JudgementWidget.{watchMethod.Name} (UI 블루 이펙트) 패치 성공");
                     }
                     else
                     {
@@ -138,6 +154,75 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Error($"[JudgePatch] 초기화 중 예외 발생: {ex}");
             }
+        }
+
+        private static MethodInfo? ResolveJudgeMethod(
+            Type targetType,
+            BindingFlags flags,
+            string[] exactNames,
+            string preferredNameFragment,
+            Type expectedReturnType,
+            Type[] expectedParamTypes)
+        {
+            foreach (string exactName in exactNames)
+            {
+                MethodInfo? exact = AccessTools.Method(targetType, exactName, expectedParamTypes);
+                if (exact is not null)
+                {
+                    return exact;
+                }
+            }
+
+            var signatureMatches = new List<MethodInfo>();
+            var fragmentMatches = new List<MethodInfo>();
+            foreach (MethodInfo method in targetType.GetMethods(flags))
+            {
+                if (method.DeclaringType != targetType || method.ReturnType != expectedReturnType)
+                {
+                    continue;
+                }
+
+                ParameterInfo[] parameters = method.GetParameters();
+                if (parameters.Length != expectedParamTypes.Length)
+                {
+                    continue;
+                }
+
+                bool paramsMatch = true;
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    if (parameters[i].ParameterType != expectedParamTypes[i])
+                    {
+                        paramsMatch = false;
+                        break;
+                    }
+                }
+
+                if (!paramsMatch)
+                {
+                    continue;
+                }
+
+                signatureMatches.Add(method);
+                if (method.Name.IndexOf(preferredNameFragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    fragmentMatches.Add(method);
+                }
+            }
+
+            if (fragmentMatches.Count == 1)
+            {
+                MelonLogger.Warning($"[JudgePatch][resolve] {targetType.Name}.{exactNames[0]} 대체 해석(이름 조각+시그니처 유일): {fragmentMatches[0].Name}");
+                return fragmentMatches[0];
+            }
+
+            if (signatureMatches.Count == 1)
+            {
+                MelonLogger.Warning($"[JudgePatch][resolve] {targetType.Name}.{exactNames[0]} 대체 해석(시그니처 유일): {signatureMatches[0].Name}");
+                return signatureMatches[0];
+            }
+
+            return null;
         }
 
         private static void FromTimeDiffernce_Postfix(ref EJudgements __result, ref float judgeTiming)

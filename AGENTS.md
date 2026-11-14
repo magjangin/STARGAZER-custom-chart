@@ -59,19 +59,28 @@
 
 ### 기록 보호 (Save Guard)
 - 커스텀 곡의 내부 `TrackID`가 공식 Starting Point와 같으므로, 결과 점수가 그대로 세이브 파일에 기록되면 공식 랭킹 및 로컬 기록이 오염됨.
-- 따라서 커스텀 곡 플레이 종료 시 세이브 루틴(`SaveData`, `TravelResultData`)을 가로채 저장을 원천 차단함.
+- 따라서 커스텀 곡 플레이 종료 시 세이브 루틴(`SaveTrackRecord`)을 가로채 `TryGetMemberByType`으로 `PlayData`/`PlayTrack`을 추출해 저장을 원천 차단함.
+- 게임 업데이트 등으로 `PlayData`/`PlayTrack` 추출이 실패하더라도 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태면 방어적으로 저장을 차단해 공식 기록 오염을 방지함.
 
-### 람다 후킹 이중래퍼 아키텍처 (Dual-Wrapper Fallback)
-- 컴파일러가 생성하는 람다 메서드(`_Load_b__5_0`)는 Unity 엔진/컴파일러 버전 패치 시 `<Load>b__0`, `_Load_b__0_0` 등으로 심볼명이 변경될 위험이 매우 큼.
+### 람다 후킹 이중래퍼 & 업데이트 내성 아키텍처
 - **1차 계층 (`PatchTargetSupport.ResolveTargetMethod`, 3단계 해석)**:
-  1. 이름 정확히 일치 + 파라미터 타입명 점수(정확 일치 2점 / 포함 1점) 최고 후보.
+  1. 정확 이름(또는 `PatchSpec.AlternateMethodNames`, 예: `LevelSelector.FetchJacektImage` → `"FetchJacketImage"`) + 파라미터 타입명 점수(정확 일치 2점 / 포함 1점) 최고 후보.
   2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음).
   3. 이름은 같고 파라미터 개수만 맞는 후보가 **유일**할 때만 경고와 함께 채택.
   - 대체 해석이 일어나면 `[HookPatch][resolve]` 경고가 로그에 남는다 → 업데이트 후 로그에서 이 태그부터 확인할 것.
 - **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시.
-- **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다 등)도 같은 핸들러에 연결된다.
-- **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 생성자 인자로 들어옴)를 래퍼로 교체. `로더 포인터 → 래퍼 델리게이트 포인터`를 기록해, 현재 onCompleted가 우리 래퍼면 재설치하지 않고 게임이 교체했으면 다시 감싼다. `PlayerBase.Play`마다 초기화.
+- **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다/오타 수정 메서드 등)도 같은 핸들러에 연결된다.
+- **타입 기반 멤버 폴백 (`ReflectionSupport.TryGetMemberByType`)**: 기대 이름(예: `currentTrack`, `beatInfo`, `property`, `notes`, `PlayData`, `PlayTrack`)을 먼저 조회하고 모두 없으면 기대 타입 짧은 이름의 **유일** 멤버(`k__BackingField`/`<*>` 후순위)로 자동 대체 해석해 `TypeFallbackAccessorCache`에 캐시하고 `[HookPatch][resolve]` 경고를 남김.
+- **패치별 안전 해석**: `JudgeAllPerfectPatch.ResolveJudgeMethod`는 정확 이름 → 이름 조각+시그니처 일치 → 유일 시그니처 일치 순으로 해석하며, `TrackUnlockAllPatch`는 `AmbiguousMatchException`을 피하기 위해 이름·인자 수 기반 안전 조회를 사용.
+- **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 이름 탐색 실패 시 `Action<Pattern>` 타입 폴백)를 래퍼로 교체. `로더 포인터 → 래퍼 델리게이트 포인터`를 기록해, 현재 onCompleted가 우리 래퍼면 재설치하지 않고 게임이 교체했으면 다시 감싼다. `PlayerBase.Play`마다 초기화.
 - **중복 주입 가드**: 람다 본문이 `onCompleted(=래퍼)`를 먼저 부르고 그 뒤 람다 Postfix가 불리므로 같은 Pattern이 두 번 들어온다. `ProbeNoteArrayMembers`가 **Pattern의 IL2CPP 네이티브 포인터**(`LastProbedPatternPtr`)로 거른다(공식곡 포함 — 같은 패턴 이중 순회 방지).
+
+### 성능 병목 제거 & 캐싱 아키텍처 (2026-11-14 감사 반영)
+- **리플렉션/생성/콜백 캐시**: `ReflectionSupport.cs` (`MemberAccessorCache`, `TypeFallbackAccessorCache`, `MemberSetterCache`, `InstantiatorCache`, `CallbackInvokeCache`), `HookNoteProbes.Collection.cs` (`CollectionAccessorCache`), `HookNoteProbes.BmsInject.cs` (`Area`/`BeatInfo`/`Note`/`NoteProperty` 메타 캐시), `TrackSelectorCloningSupport.cs` (`TrackMetaCtorCache`, `CopyMemberCache`), `TrackSelectorCollectionSupport.cs` (`InsertMethodCache`, `CastStrategyCache`)로 고빈도 리플렉션 탐색 제거.
+- **BMS/앨범 파싱 최적화**: `BmsChart.TryGetOrParse`가 파일 경로·`LastWriteTimeUtc` 기준으로 파싱 결과를 캐시하며 `ReadOnlySpan<char>` + 정수 채널 필터 + `00` 무음 청크 조기 스킵으로 할당 최소화. `CustomAlbum.TryLoad`는 `Directory.GetFiles` 결과를 파일명/확장자 사전으로 1회 인덱싱.
+- **조기 탈출(Fast-Path Exit)**: `CustomBgmLoaderPatch`/`CustomJacketLoaderPatch`는 `TryGetAlbumForTrack`로 공식 트랙을 즉시 반환하고, `TrackSelectorHookSupport.HandleTrackSelectorSetTracks`는 앨범 유무 및 첫 항목 중복 주입을 전수 열거 전에 검사하며, `ProbeNoteArrayMembers`와 `TryWrapPatternLoaderOnCompleted`는 비커스텀 플레이 시 즉시 복귀함.
+- **FocusedTrackViewer Postfix 전용 훅**: 빈 Prefix를 제거하고 `successCount > 0`일 때만 `_focusedTrackViewerPatched`를 설정하며, `ModEntry`의 `OnLateInitializeMelon`/`OnSceneWasLoaded`에서 지연 재시도를 지원.
+- **죽은 프로브·로그 전용 코드 정리**: 미사용·로그 전용 16개 파일(`ExperimentChartSettings`, `AssetBundleLoader`, `SoundInvocation`, `TrackLoaderInvocation`, `TrackListViewerProbe`, `AreaCreate`/`Catalog`/`LinkHold`/`Wipe`/`LongNote`/`Reflection`, `JacketObjectProbe`, `LevelSelectorHookSupport`/`ProbingSupport`, `TrackSelectorMetadataSupport`) 및 빈 폴더 4개 제거.
 
 ### 다국어 (중국어 / 영어 / 한국어 / 일본어) 지원 & 인코딩 내성
 - **SafeTextReader**: UTF-8 BOM(\uFEFF), UTF-16, ANSI(GB18030/GBK/CP949) 자동 감지 및 BOM 프리 헤더 파싱 (`#BPM`, `#WAV` 누락 방지).
@@ -153,4 +162,5 @@
   - `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Latest.log`
   - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]`.
 - **검증 이력**:
-  - 2026-11-14: 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치. **커스텀 곡 플레이(BMS 주입·중복 가드)는 아직 실기 미확인.**
+  - 2026-11-14 (리팩토링 전 실기): 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치.
+  - 2026-11-14 (전체 감사/성능/내성 리팩토링): 16개 죽은 파일 제거·공용 캐싱·타입 기반 폴백·하드닝 리팩토링 후 MSBuild `Debug /t:Rebuild` 성공(오류 0개, C# 경고 0개, 기존 `.csproj` MSIL/AMD64 `MSB3270` 1건) 및 `Mods\STARGAZER custom chart.dll` 배포 확인. **리팩토링 후 인게임 실기 플레이(커스텀 곡 BMS 주입·Save Guard·난이도 UI)는 아직 미확인.**

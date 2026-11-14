@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -77,29 +78,40 @@ namespace STARGAZER_custom_chart
                 return null;
             }
 
-            album.BmsPath = FirstWithExtension(files, ".bms");
+            var byName = new Dictionary<string, string>(files.Length, StringComparer.OrdinalIgnoreCase);
+            var byExtension = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string file in files)
+            {
+                byName.TryAdd(Path.GetFileName(file), file);
+                string ext = Path.GetExtension(file);
+                if (!string.IsNullOrEmpty(ext))
+                {
+                    byExtension.TryAdd(ext, file);
+                }
+            }
 
-            // 음원은 MusicNameCandidates 후보를 우선하고, 없으면 .ogg/.mp3/.wav 순으로 찾는다.
+            album.BmsPath = FirstWithExtension(byExtension, ".bms");
+
+            // 음원은 MusicNameCandidates 후보를 우선하고, 없으면 .ogg/.mp3 순으로 찾는다.
             // 폴더 내 BMS 키음(*.wav)과의 충돌을 피하기 위해 명시적인 음악 파일명 후보군을 우선시한다.
-            album.MusicPath = FindFirstCandidate(files, MusicNameCandidates)
-                ?? FirstWithExtension(files, ".ogg")
-                ?? FirstWithExtension(files, ".mp3");
+            album.MusicPath = FindFirstCandidate(byName, MusicNameCandidates)
+                ?? FirstWithExtension(byExtension, ".ogg")
+                ?? FirstWithExtension(byExtension, ".mp3");
 
-            album.PreviewPath = FindFirstCandidate(files, PreviewNameCandidates) ?? album.MusicPath;
-            album.JacketPath = FindJacket(files);
+            album.PreviewPath = FindFirstCandidate(byName, PreviewNameCandidates) ?? album.MusicPath;
+            album.JacketPath = FindJacket(files, byName);
 
-            string? infoPath = FirstNamed(files, "info.txt") ?? FirstWithExtension(files, ".txt");
+            string? infoPath = FirstNamed(byName, "info.txt") ?? FirstWithExtension(byExtension, ".txt");
             album.Info = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
 
             return album;
         }
 
-        private static string? FindFirstCandidate(string[] files, string[] candidates)
+        private static string? FindFirstCandidate(Dictionary<string, string> byName, string[] candidates)
         {
             foreach (string candidate in candidates)
             {
-                string? hit = FirstNamed(files, candidate);
-                if (hit is not null)
+                if (byName.TryGetValue(candidate, out string? hit))
                 {
                     return hit;
                 }
@@ -107,25 +119,22 @@ namespace STARGAZER_custom_chart
             return null;
         }
 
-        private static string? FirstNamed(string[] files, string fileName)
+        private static string? FirstNamed(Dictionary<string, string> byName, string fileName)
         {
-            return files.FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+            return byName.TryGetValue(fileName, out string? hit) ? hit : null;
         }
 
-        private static string? FirstWithExtension(string[] files, string extension)
+        private static string? FirstWithExtension(Dictionary<string, string> byExtension, string extension)
         {
-            return files.FirstOrDefault(f => string.Equals(Path.GetExtension(f), extension, StringComparison.OrdinalIgnoreCase));
+            return byExtension.TryGetValue(extension, out string? hit) ? hit : null;
         }
 
-        private static string? FindJacket(string[] files)
+        private static string? FindJacket(string[] files, Dictionary<string, string> byName)
         {
-            foreach (string candidate in JacketNameCandidates)
+            string? candidateHit = FindFirstCandidate(byName, JacketNameCandidates);
+            if (candidateHit is not null)
             {
-                string? hit = FirstNamed(files, candidate);
-                if (hit is not null)
-                {
-                    return hit;
-                }
+                return candidateHit;
             }
 
             // 이름 후보와 안 맞아도 이미지 확장자면 자켓으로 인정한다(사용자가 자유롭게 이름 지어도 되도록).

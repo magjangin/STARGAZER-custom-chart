@@ -10,6 +10,27 @@ namespace STARGAZER_custom_chart
     {
         private static readonly char[] InfoSeparators = { ':', '=' };
 
+        private static readonly HashSet<string> TitleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "곡 제목", "제목", "title", "name", "曲名", "歌曲名称", "歌名", "标题", "曲目",
+        };
+
+        private static readonly HashSet<string> ArtistKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "아티스트", "artist", "composer", "작곡", "艺术家", "作曲", "曲师", "曲目作者", "作者",
+        };
+
+        private static readonly Dictionary<string, string> LevelKeyMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "cosmic", "cosmic" },
+            { "宇宙", "cosmic" },
+            { "星空", "cosmic" },
+            { "stellar", "stellar" },
+            { "恒星", "stellar" },
+            { "void", "void" },
+            { "虚空", "void" },
+        };
+
         public string? Title { get; private set; }
         public string? Artist { get; private set; }
         public Dictionary<string, string> Levels { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -24,8 +45,8 @@ namespace STARGAZER_custom_chart
             var info = new CustomTrackInfo();
             foreach (string rawLine in SafeTextReader.ReadAllLines(filePath))
             {
-                string line = rawLine.Trim().TrimStart('\uFEFF');
-                if (line.Length == 0 || line.StartsWith("#"))
+                string line = rawLine.Trim();
+                if (line.Length == 0 || line[0] == '#')
                 {
                     continue;
                 }
@@ -43,48 +64,17 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (string.Equals(key, "곡 제목", StringComparison.Ordinal)
-                    || string.Equals(key, "제목", StringComparison.Ordinal)
-                    || string.Equals(key, "title", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "name", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "曲名", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "歌曲名称", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "歌名", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "标题", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "曲目", StringComparison.OrdinalIgnoreCase))
+                if (TitleKeys.Contains(key))
                 {
                     info.Title = value;
                 }
-                else if (string.Equals(key, "아티스트", StringComparison.Ordinal)
-                    || string.Equals(key, "artist", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "composer", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "작곡", StringComparison.Ordinal)
-                    || string.Equals(key, "艺术家", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "作曲", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "曲师", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "曲目作者", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "作者", StringComparison.OrdinalIgnoreCase))
+                else if (ArtistKeys.Contains(key))
                 {
                     info.Artist = value;
                 }
-                else if (string.Equals(key, "cosmic", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "stellar", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "void", StringComparison.OrdinalIgnoreCase))
+                else if (LevelKeyMap.TryGetValue(key, out string? canonicalLevel))
                 {
-                    info.Levels[key.ToLowerInvariant()] = value;
-                }
-                else if (string.Equals(key, "宇宙", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(key, "星空", StringComparison.OrdinalIgnoreCase))
-                {
-                    info.Levels["cosmic"] = value;
-                }
-                else if (string.Equals(key, "恒星", StringComparison.OrdinalIgnoreCase))
-                {
-                    info.Levels["stellar"] = value;
-                }
-                else if (string.Equals(key, "虚空", StringComparison.OrdinalIgnoreCase))
-                {
-                    info.Levels["void"] = value;
+                    info.Levels[canonicalLevel] = value;
                 }
             }
 

@@ -19,46 +19,22 @@ namespace STARGAZER_custom_chart
                     MelonLogger.Msg("[TrackSelector.Set] TrackSelector의 Set 메서드가 호출되었습니다!");
                 }
 
-                int trackCount = TryGetCollectionCount(tracks) ?? 0;
-                int enumerateLimit = Math.Max(8, trackCount > 0 ? trackCount : 256);
-                var items = EnumerateCollectionItems(tracks, enumerateLimit).ToList();
-                if (trackCount <= 0)
+                IReadOnlyList<CustomAlbum> albums = CustomAlbumRegistry.GetAlbums();
+                if (albums.Count == 0)
                 {
-                    trackCount = items.Count;
-                }
-
-                if (EnableTrackSelectorVerboseLogging)
-                {
-                    MelonLogger.Msg($"[TrackSelector.Set] 트랙 데이터 리스트: count={trackCount}");
-                }
-
-                if (items.Count == 0)
-                {
-                    MelonLogger.Msg("[TrackSelector.Set] 트랙 리스트가 비어 있습니다.");
+                    MelonLogger.Msg("[TrackSelector.Set] hwa에 앨범이 없어 주입을 건너뜁니다.");
                     return;
-                }
-
-                if (EnableTrackSelectorVerboseLogging)
-                {
-                    for (int i = 0; i < Math.Min(5, items.Count); i++)
-                    {
-                        object? track = items[i];
-                        if (track is null)
-                        {
-                            MelonLogger.Msg($"[TrackSelector.Set] - 트랙 {i}: null");
-                            continue;
-                        }
-
-                        Type concreteType = track.GetType();
-                        string displayName = TryGetMemberValue(track, concreteType, "TrackDisplayName")?.ToString() ?? "?";
-                        string displayNameEn = TryGetMemberValue(track, concreteType, "TrackDisplayNameEN")?.ToString() ?? "?";
-                        MelonLogger.Msg($"[TrackSelector.Set] - 트랙 {i}: type={concreteType.FullName ?? concreteType.Name}, TrackDisplayName={displayName}, TrackDisplayNameEN={displayNameEn}");
-                    }
                 }
 
                 // 항상 목록 맨 앞에 주입하므로, 첫 항목이 우리 트랙이면 이미 주입된 것으로 본다.
                 // 공식 startingpoint 트랙도 TrackID가 같아서 IsStartingPointTrack으로는 판정할 수 없다.
                 object? firstItem = EnumerateCollectionItems(tracks, 1).FirstOrDefault();
+                if (firstItem is null)
+                {
+                    MelonLogger.Msg("[TrackSelector.Set] 트랙 리스트가 비어 있습니다.");
+                    return;
+                }
+
                 if (IsCustomChartTrack(firstItem))
                 {
                     if (EnableTrackSelectorVerboseLogging)
@@ -68,14 +44,31 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                IReadOnlyList<CustomAlbum> albums = CustomAlbumRegistry.GetAlbums();
-                if (albums.Count == 0)
+                int trackCount = TryGetCollectionCount(tracks) ?? 0;
+                int enumerateLimit = Math.Max(8, trackCount > 0 ? trackCount : 256);
+
+                if (EnableTrackSelectorVerboseLogging)
                 {
-                    MelonLogger.Msg("[TrackSelector.Set] hwa에 앨범이 없어 주입을 건너뜁니다.");
-                    return;
+                    MelonLogger.Msg($"[TrackSelector.Set] 트랙 데이터 리스트: count={trackCount}");
+                    int i = 0;
+                    foreach (object? track in EnumerateCollectionItems(tracks, 5))
+                    {
+                        if (track is null)
+                        {
+                            MelonLogger.Msg($"[TrackSelector.Set] - 트랙 {i}: null");
+                        }
+                        else
+                        {
+                            Type concreteType = track.GetType();
+                            string displayName = TryGetMemberValue(track, concreteType, "TrackDisplayName")?.ToString() ?? "?";
+                            string displayNameEn = TryGetMemberValue(track, concreteType, "TrackDisplayNameEN")?.ToString() ?? "?";
+                            MelonLogger.Msg($"[TrackSelector.Set] - 트랙 {i}: type={concreteType.FullName ?? concreteType.Name}, TrackDisplayName={displayName}, TrackDisplayNameEN={displayNameEn}");
+                        }
+                        i++;
+                    }
                 }
 
-                object? source = items.FirstOrDefault(IsStartingPointTrack);
+                object? source = EnumerateCollectionItems(tracks, enumerateLimit).FirstOrDefault(IsStartingPointTrack);
                 if (source is null)
                 {
                     MelonLogger.Msg("[TrackSelector.Set] startingpoint 트랙을 찾지 못했습니다. 복사 삽입을 건너뜁니다.");
@@ -105,7 +98,7 @@ namespace STARGAZER_custom_chart
 
                     // 커스텀 트랙 식별은 표시명도 TrackID도 아닌 객체 동일성으로 하므로,
                     // 표시명에는 "테스트 " 같은 내부용 접두를 붙이지 않는다.
-                    ApplyStartingPointMetadataOverrides(clone, concreteTrackType, album.DisplayName, album.Artist, album.Info?.Levels);
+                    ApplyStartingPointMetadataOverrides(clone, concreteTrackType, album.DisplayName, album.Artist);
 
                     // 자켓/BGM/차트가 공식 트랙을 건드리지 않도록, 방금 만든 이 객체만 앨범과 함께 등록한다.
                     RegisterInjectedCustomTrack(clone, album);
@@ -140,10 +133,6 @@ namespace STARGAZER_custom_chart
                     int updatedCount = TryGetCollectionCount(tracks) ?? (trackCount + applied);
                     string names = string.Join(", ", pending.Select(p => p.Album.DisplayName));
                     MelonLogger.Msg($"[TrackSelector.Set] 커스텀 트랙을 주입했습니다! 적용={applied}/{albums.Count} 현재 트랙 수: {updatedCount} ({names})");
-                    if (EnableTrackSelectorMetadataDump)
-                    {
-                        DumpInjectedTracksMetadata(tracks);
-                    }
                 }
                 else
                 {

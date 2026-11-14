@@ -234,6 +234,7 @@ namespace STARGAZER_custom_chart
                 NormalizeSpeedChaosRange();
 
                 MelonLogger.Msg($"[Config] autoplay={_autoPlay}");
+                MelonLogger.Msg($"[Config] AllPerfect={_allPerfect}");
                 MelonLogger.Msg($"[Config] UnlockAll={_unlockAll}");
                 MelonLogger.Msg($"[Config] NoteSway={_noteSway} amplitude={_noteSwayAmplitude} speed={_noteSwaySpeed} damping={_noteSwayDamping}/{_noteSwayDampingTime}s");
                 MelonLogger.Msg($"[Config] NoteSpeedChaos={_noteSpeedChaos} range={_noteSpeedChaosMin}~{_noteSpeedChaosMax} perLane={_noteSpeedChaosPerLane}");
@@ -348,7 +349,7 @@ namespace STARGAZER_custom_chart
 
             foreach (string rawLine in SafeTextReader.ReadAllLines(path))
             {
-                string line = rawLine.Trim().TrimStart('\uFEFF');
+                string line = rawLine.Trim();
                 if (line.Length == 0 || line[0] == '#')
                 {
                     continue;
@@ -391,6 +392,8 @@ namespace STARGAZER_custom_chart
                 case "1":
                 case "켜기":
                 case "사용":
+                case "켜짐":
+                case "예":
                 case "是":
                 case "开":
                 case "开启":
@@ -402,6 +405,8 @@ namespace STARGAZER_custom_chart
                 case "no":
                 case "0":
                 case "끄기":
+                case "꺼짐":
+                case "아니오":
                 case "사용안함":
                 case "否":
                 case "关":

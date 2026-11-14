@@ -40,20 +40,7 @@ namespace STARGAZER_custom_chart
                     new PatchSpec("Il2CppStargazer.Play.StargazerLongNote", "Behaviour", 1, "Single"),
                 };
 
-                foreach (PatchSpec spec in specs)
-                {
-                    MethodInfo? target = ResolveTargetMethod(spec);
-                    if (target is null)
-                    {
-                        MelonLogger.Warning($"[NoteMotion] 대상을 찾지 못했습니다: {spec.TypeName}.{spec.MethodName}");
-                        continue;
-                    }
-
-                    MelonLogger.Msg($"[NoteMotion] 훅 대상: {target.DeclaringType?.FullName}.{target.Name}");
-                    ResolvedTargets.Add(target);
-                }
-
-                if (ResolvedTargets.Count == 0)
+                if (!PrepareTargets(ResolvedTargets, specs))
                 {
                     MelonLogger.Warning("[NoteMotion] 노트 타입을 하나도 찾지 못해 연출을 켜지 못했습니다.");
                     return false;

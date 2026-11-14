@@ -1,39 +1,49 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
     public sealed partial class GameTypeEnumeratorMod
     {
-        private static bool TryResolveAreaNotesMember(object area, out PropertyInfo notesProperty, out object? notesValue)
+        private sealed class CollectionAccessor
         {
-            notesProperty = null!;
-            notesValue = null;
-
-            Type areaType = area.GetType();
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            PropertyInfo? prop = areaType.GetProperty("notes", flags)
-                ?? areaType.GetProperty("Notes", flags);
-            if (prop is null || !prop.CanRead)
+            public CollectionAccessor(PropertyInfo? countProp, MethodInfo? getItemMethod, MethodInfo? addMethod, MethodInfo? clearMethod)
             {
-                return false;
+                CountProp = countProp;
+                GetItemMethod = getItemMethod;
+                AddMethod = addMethod;
+                ClearMethod = clearMethod;
             }
 
-            try
+            public PropertyInfo? CountProp { get; }
+            public MethodInfo? GetItemMethod { get; }
+            public MethodInfo? AddMethod { get; }
+            public MethodInfo? ClearMethod { get; }
+        }
+
+        private static readonly ConcurrentDictionary<Type, CollectionAccessor> CollectionAccessorCache =
+            new ConcurrentDictionary<Type, CollectionAccessor>();
+
+        private static CollectionAccessor GetCollectionAccessor(Type type)
+        {
+            if (CollectionAccessorCache.TryGetValue(type, out CollectionAccessor? cached))
             {
-                notesValue = prop.GetValue(area);
-            }
-            catch
-            {
-                return false;
+                return cached;
             }
 
-            notesProperty = prop;
-            return true;
+            PropertyInfo? countProp = type.GetProperty("Count", InstanceMemberFlags)
+                ?? type.GetProperty("Length", InstanceMemberFlags);
+            MethodInfo? getItemMethod = type.GetMethod("get_Item", InstanceMemberFlags, null, new[] { typeof(int) }, null);
+            MethodInfo? addMethod = type.GetMethods(InstanceMemberFlags)
+                .FirstOrDefault(m => string.Equals(m.Name, "Add", StringComparison.Ordinal) && m.GetParameters().Length == 1);
+            MethodInfo? clearMethod = type.GetMethod("Clear", InstanceMemberFlags, null, Type.EmptyTypes, null);
+
+            var resolved = new CollectionAccessor(countProp, getItemMethod, addMethod, clearMethod);
+            CollectionAccessorCache.TryAdd(type, resolved);
+            return resolved;
         }
 
         private static IEnumerable<object?> EnumerateCollectionItems(object collectionValue, int maxCount)
@@ -96,11 +106,8 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            Type type = collectionValue.GetType();
-            BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-            PropertyInfo? countProperty = type.GetProperty("Count", flags) ?? type.GetProperty("Length", flags);
-            MethodInfo? getItemMethod = type.GetMethod("get_Item", flags, null, new[] { typeof(int) }, null);
-            if (countProperty is null || getItemMethod is null)
+            CollectionAccessor accessor = GetCollectionAccessor(collectionValue.GetType());
+            if (accessor.CountProp is null || accessor.GetItemMethod is null)
             {
                 yield break;
             }
@@ -108,7 +115,7 @@ namespace STARGAZER_custom_chart
             object? countObj;
             try
             {
-                countObj = countProperty.GetValue(collectionValue);
+                countObj = accessor.CountProp.GetValue(collectionValue);
             }
             catch
             {
@@ -131,12 +138,14 @@ namespace STARGAZER_custom_chart
             }
 
             int limit = Math.Min(maxCount, reflectedCount);
+            object[] indexArgs = new object[1];
             for (int i = 0; i < limit; i++)
             {
                 object? item;
                 try
                 {
-                    item = getItemMethod.Invoke(collectionValue, new object[] { i });
+                    indexArgs[0] = i;
+                    item = accessor.GetItemMethod.Invoke(collectionValue, indexArgs);
                 }
                 catch
                 {
@@ -159,17 +168,18 @@ namespace STARGAZER_custom_chart
                 return array.Length;
             }
 
-            Type type = value.GetType();
+            CollectionAccessor accessor = GetCollectionAccessor(value.GetType());
+            if (accessor.CountProp is null)
+            {
+                return null;
+            }
+
             try
             {
-                PropertyInfo? countProperty = type.GetProperty("Count", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (countProperty is not null)
+                object? countValue = accessor.CountProp.GetValue(value);
+                if (countValue is not null)
                 {
-                    object? countValue = countProperty.GetValue(value);
-                    if (countValue is not null)
-                    {
-                        return Convert.ToInt32(countValue);
-                    }
+                    return Convert.ToInt32(countValue);
                 }
             }
             catch

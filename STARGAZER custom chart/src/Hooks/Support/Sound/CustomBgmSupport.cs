@@ -83,29 +83,6 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[BgmDebug] play state custom={IsCustomChartPlayActive} album={CurrentPlayAlbum?.Name ?? "<none>"} title={title}");
         }
 
-        private static void LogBgmDebugInvocation(MethodBase method, object? instance, object[] args)
-        {
-            string typeName = method.DeclaringType?.FullName ?? "<unknown>";
-            string instanceText = DescribeObjectIdentity(instance);
-            if (string.Equals(method.Name, "PlayBGM", StringComparison.Ordinal))
-            {
-                string clip = DescribeAudioClip(args.Length > 0 ? args[0] : null);
-                string soundType = args.Length > 1 ? args[1]?.ToString() ?? "<null>" : "<missing>";
-                MelonLogger.Msg($"[BgmDebug][PlayBGM] owner={typeName} instance={instanceText} soundType={soundType} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive} clip={clip}");
-            }
-            else if (string.Equals(method.Name, "LoadBGMClip", StringComparison.Ordinal))
-            {
-                string callback = args.Length > 0 && args[0] is not null
-                    ? args[0]!.GetType().FullName ?? args[0]!.GetType().Name
-                    : "<null>";
-                MelonLogger.Msg($"[BgmDebug][LoadBGMClip] owner={typeName} instance={instanceText} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive} callback={callback}");
-            }
-            else if (string.Equals(method.Name, "StopBGM", StringComparison.Ordinal))
-            {
-                MelonLogger.Msg($"[BgmDebug][StopBGM] owner={typeName} instance={instanceText} inPlay={IsInPlayScene} custom={IsCustomChartPlayActive}");
-            }
-        }
-
         private static string DescribeAudioClip(object? value)
         {
             if (value is not AudioClip clip)
@@ -123,41 +100,10 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static string DescribeObjectIdentity(object? value)
-        {
-            if (value is null)
-            {
-                return "<null>";
-            }
-
-            return $"{value.GetType().FullName ?? value.GetType().Name}@{DescribePointer(value)}";
-        }
-
         private static string DescribePointer(object value)
         {
             IntPtr ptr = TryGetIl2CppPointer(value);
             return ptr != IntPtr.Zero ? $"0x{ptr.ToInt64():X}" : "<unknown>";
-        }
-
-        private static void InvokeActionOfAudioClip(object? callback, AudioClip? clip)
-        {
-            if (callback == null) return;
-            try
-            {
-                MethodInfo? invoke = callback.GetType().GetMethod("Invoke", BindingFlags.Instance | BindingFlags.Public);
-                if (invoke != null)
-                {
-                    invoke.Invoke(callback, new object?[] { clip });
-                }
-                else
-                {
-                    MelonLogger.Warning("[CustomBgm] 콜백 객체에서 Invoke 메서드를 찾지 못했습니다.");
-                }
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Warning($"[CustomBgm] Failed to invoke callback: {ex.Message}");
-            }
         }
 
         private static void StartCustomAudioClipLoad(string filePath)
@@ -275,7 +221,7 @@ namespace STARGAZER_custom_chart
 
             foreach (object callback in callbacks)
             {
-                InvokeActionOfAudioClip(callback, clip);
+                TryInvokeSingleArgCallback(callback, clip, "CustomBgm");
             }
 
             MelonLogger.Msg($"[CustomBgm] Completed pending callbacks: {path} count={callbacks.Count} clipReady={clip != null}");
@@ -315,36 +261,33 @@ namespace STARGAZER_custom_chart
                 {
                     if (__args.Length == 0 || __args[0] is null) return true;
 
-                    Type t = __instance.GetType();
-                    string displayName = TryGetMemberValue(__instance, t, "TrackDisplayName")?.ToString()
-                        ?? TryGetMemberValue(__instance, t, "TrackDisplayNameEN")?.ToString()
-                        ?? string.Empty;
-
                     // 공식 트랙을 건드리지 않도록 우리가 주입한 객체인지로 판별한다(TrackID는 원본과 동일해 못 씀).
                     // 어느 앨범 폴더의 음원을 쓸지도 이 조회 결과로 정해진다.
                     CustomAlbum? album = TryGetAlbumForTrack(__instance);
-                    if (album is not null)
+                    if (album is null)
                     {
-                        string? path = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
-                            ? album.PreviewPath
-                            : album.MusicPath;
+                        return true;
+                    }
 
-                        if (path is not null && File.Exists(path))
+                    string? path = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
+                        ? album.PreviewPath
+                        : album.MusicPath;
+
+                    if (path is not null && File.Exists(path))
+                    {
+                        if (TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
                         {
-                            if (TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
-                            {
-                                MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{displayName}': {path}");
-                                InvokeActionOfAudioClip(__args[0], clip);
-                                return false;
-                            }
-
-                            QueueCustomBgmCallback(path, __args[0]);
+                            MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{album.DisplayName}': {path}");
+                            TryInvokeSingleArgCallback(__args[0], clip, "CustomBgm");
                             return false;
                         }
-                        else
-                        {
-                            MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
-                        }
+
+                        QueueCustomBgmCallback(path, __args[0]);
+                        return false;
+                    }
+                    else
+                    {
+                        MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
                     }
                 }
                 catch (Exception ex)
