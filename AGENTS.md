@@ -87,6 +87,14 @@
 - **이름 기반 세터 정확 일치 우선 (2026-11-15)**: `ResolveMemberSetter`는 밑줄 제거·소문자 정규화 이름이 후보와 **완전히 같은** 프로퍼티/필드를 먼저 고르고, 없을 때만 예전의 "포함" 일치로 내려간다. 포함 일치만 쓰면 `displayname`이 선언 순서에 따라 `displayNameEN`에, `targetlayer`가 `<TargetLayer>k__BackingField`에 걸릴 수 있었다.
 - **죽은 프로브·로그 전용 코드 정리**: 미사용·로그 전용 16개 파일(`ExperimentChartSettings`, `AssetBundleLoader`, `SoundInvocation`, `TrackLoaderInvocation`, `TrackListViewerProbe`, `AreaCreate`/`Catalog`/`LinkHold`/`Wipe`/`LongNote`/`Reflection`, `JacketObjectProbe`, `LevelSelectorHookSupport`/`ProbingSupport`, `TrackSelectorMetadataSupport`) 및 빈 폴더 4개 제거.
 
+### 훅 상태 요약 & 게임 업데이트 감지 (2026-11-16, `src/Core/HookHealth.cs`)
+- **목적**: 훅이 `PrepareTargets` / 수동 Patch(Judge·UnlockAll·FocusedTrackViewer) / 지연 재시도로 흩어져 걸리고 실패 로그도 각자 따로라, 업데이트 직후 "무엇이 살아 있나"를 로그 여러 곳에서 모아 봐야 했음.
+- **동작**: 각 기능이 `HookHealth.Report(기능명, 적용 수, 기대 수)`를 남기고(`PrepareTargets`는 필수 `feature` 인자로 자동 기록), `ApplyDeferredPatches` 끝에서 `HookHealth.LogSummary()`가 `[Health]` 블록을 한 번 찍는다(요약이 같으면 재출력 없음). 일부/전부 실패면 Warning, 설정으로 끈 기능은 "꺼짐"으로 표시(실패로 세지 않음).
+- **업데이트 감지**: `HookHealth.CheckGameFingerprint()`가 `GameAssembly.dll`의 크기+수정시각을 `savecustomkey/.game-fingerprint`에 저장하고, 다음 실행에서 달라지면 `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` 경고와 함께 확인 순서를 안내. 동작은 바꾸지 않는 힌트 전용이며 파일이 없거나 읽기 실패해도 조용히 넘어간다.
+- **새 패치를 추가할 때 규칙**: `PrepareTargets(…, "기능명")`을 쓰거나, 수동 Patch면 적용 수를 `HookHealth.Report`로 남길 것. 그렇지 않으면 `[Health]`에서 그 기능이 빠진다.
+- **FocusedTrackViewer 철자 변형**: 게임 원본에 `FetchJacektImage` 오타가 있어 `FetchJacketImage` ↔ `FetchJacektImage`를 같은 훅으로 취급(`FocusedTrackViewerAlternateNames`). 새 변형이 생기면 이 표에 추가.
+- **UnlockAll 오버로드 모호성**: 같은 이름 오버로드 중 기대 인자 수와 맞는 것이 없으면 첫 후보로 대체하되 `[UnlockAllPatch] … 오버로드 … 대체` 경고를 1회 남긴다.
+
 ### 다국어 (중국어 / 영어 / 한국어 / 일본어) 지원 & 인코딩 내성
 - **SafeTextReader**: UTF-8 BOM(\uFEFF), UTF-16, ANSI(GB18030/GBK/CP949) 자동 감지 및 BOM 프리 헤더 파싱 (`#BPM`, `#WAV` 누락 방지).
 - **info.txt & config.txt 중국어 키워드 지원**: `곡 제목` 외에 `曲名`/`歌名`/`标题`, `艺术家`/`作曲`/`曲师`, `宇宙`/`恒星`/`虚空`, `是`/`开`/`关` 등 완벽 파싱.
@@ -149,6 +157,10 @@
     - 원인: 한쪽 핸들러만 있는 대상에도 빈 반대쪽이 붙어 호출마다 디스패치·박싱이 2회 돌았음.
     - 규칙: 새 공용 훅은 `InvocationPatchSpecs`에 `.InPhase(HookPhase.Prefix|Postfix)`로 필요한 쪽만 등록하고, 해당 `HookKind` 분기를 `HookPrefix` 또는 `HookPostfix` 한쪽에만 둘 것.
 
+12. **`TargetMethods()`가 빈 목록 반환 (치명적)**
+    - 원인: Harmony가 어트리뷰트에서 대상을 찾다 "Undefined target method"로 던져 PatchAll이 중단, 이후 훅 전부 미적용.
+    - 규칙: 항상 `Prepare()`에서 `PrepareTargets`로 해석하고 못 찾으면 `false`.
+
 ---
 
 ## 6. 빌드 및 배포 워크플로
@@ -169,7 +181,15 @@
 - **로그 확인**:
   - `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Latest.log`
   - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]`.
+- **게임 업데이트 대응 체크리스트** (순서대로):
+  1. Steam 자동 업데이트가 걸렸다면 `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` 경고가 뜬다. 고정 빌드(Build ID `21205351`)라면 뜨지 않아야 정상.
+  2. 로그에서 `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]` 요약 순으로 본다.
+  3. `[Health]` 가 "일부/실패"면 해당 기능의 `PatchSpec`(PatchTargetSupport.cs) 또는 수동 패치 대상 이름을 `dump_game_reference` 등으로 재확인.
+  4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
+  5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
+- **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`는 `Il2CppStargazer.*` 타입을 컴파일 타임 참조(`typeof`)한다. 인터롭에서 타입이 이동·삭제되면 런타임 해석 폴백이 아니라 **빌드 오류**로 드러난다(런타임 조용한 실패보다 낫다고 판단). 이름 기반 `ResolveGameType`으로 완전 전환하는 것은 `ELockType`/`EJudgements` 같은 enum 형 `__result` 때문에 보류.
 - **검증 이력**:
+  - 2026-11-16 (HookHealth·업데이트 감지·철자 변형 대응): MSBuild `Debug /t:Rebuild` 성공 및 `Mods\` 배포. **실기 기동·`[Health]` 로그 출력은 아직 미확인** — 다음 실행에서 `[Health]` 블록과 `.game-fingerprint` 생성부터 확인할 것.
   - 2026-11-14 (리팩토링 전 실기): 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치.
   - 2026-11-15 (훅 단계 분리·설정 기반 무패치·서빙 경로 경량화·죽은 코드 정리): MSBuild `Debug /t:Rebuild` 성공(오류 0, C# 경고 0, IDE0005 미사용 using 0, 기존 `MSB3270` 1건) 및 `Mods\` 배포. **실기 기동 확인**: 공용 훅 8개(Prefix 2 + Postfix 6) 전부 1단계 정확 일치, `[resolve]`·예외 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, 3개 앨범 `TrackSelector.Set` 주입 성공(정확 일치 세터로 `actual=` 제목 일치). **커스텀 곡 실제 플레이(BMS 주입·Save Guard·결과 화면 난이도)는 이번에도 미확인** — 다음 실기 때 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 로그부터 볼 것.
   - 2026-11-14 (전체 감사/성능/내성 리팩토링): 16개 죽은 파일 제거·공용 캐싱·타입 기반 폴백·하드닝 리팩토링 후 MSBuild `Debug /t:Rebuild` 성공(오류 0개, C# 경고 0개, 기존 `.csproj` MSIL/AMD64 `MSB3270` 1건) 및 `Mods\STARGAZER custom chart.dll` 배포 확인. **리팩토링 후 인게임 실기 플레이(커스텀 곡 BMS 주입·Save Guard·난이도 UI)는 아직 미확인.**

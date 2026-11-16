@@ -509,14 +509,15 @@ namespace STARGAZER_custom_chart
         // 그 자리에서 멈춰 나머지 훅까지 전부 안 걸린다(모드 전체 미기동). 게임 업데이트로 로그용 훅
         // 하나만 사라져도 그렇게 되므로, 모든 패치 클래스가 이 함수를 거친다.
         // Prepare()는 클래스 단위로 한 번, 대상마다 한 번씩 더 불리므로 결과를 resolved에 담아 재사용한다.
-        private static bool PrepareTargets(List<MethodBase> resolved, IEnumerable<PatchSpec> specs)
+        private static bool PrepareTargets(List<MethodBase> resolved, IEnumerable<PatchSpec> specs, string feature)
         {
             if (resolved.Count > 0)
             {
                 return true;
             }
 
-            foreach (PatchSpec spec in specs)
+            PatchSpec[] specList = specs as PatchSpec[] ?? specs.ToArray();
+            foreach (PatchSpec spec in specList)
             {
                 MethodInfo? target = ResolveTargetMethod(spec);
                 if (target is null)
@@ -539,6 +540,8 @@ namespace STARGAZER_custom_chart
                 resolved.Add(target);
             }
 
+            // 기능별 적용 수를 [Health] 요약에 남긴다(중복으로 건너뛴 항목은 적용으로 세지 않는다).
+            HookHealth.Report(feature, resolved.Count, specList.Length);
             return resolved.Count > 0;
         }
 

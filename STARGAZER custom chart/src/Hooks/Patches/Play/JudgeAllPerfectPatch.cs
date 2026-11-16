@@ -41,6 +41,7 @@ namespace STARGAZER_custom_chart
                 {
                     _disabledLogged = true;
                     MelonLogger.Msg("[JudgePatch] AllPerfect=false 라 판정 훅을 걸지 않습니다.");
+                    HookHealth.ReportDisabled("올 퍼펙트 판정", "설정으로 꺼짐");
                 }
                 return;
             }
@@ -156,6 +157,7 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
+                HookHealth.Report("올 퍼펙트 판정", _patched.Count, TotalPatchCount);
                 if (_patched.Count >= TotalPatchCount)
                 {
                     MelonLogger.Msg($"=================================================");

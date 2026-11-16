@@ -28,7 +28,13 @@ namespace STARGAZER_custom_chart
 
         public static void Initialize(HarmonyLib.Harmony harmony)
         {
-            if (!CustomConfig.UnlockAll || _patched.Count >= TotalPatchCount)
+            if (!CustomConfig.UnlockAll)
+            {
+                HookHealth.ReportDisabled("전곡 해금", "설정으로 꺼짐");
+                return;
+            }
+
+            if (_patched.Count >= TotalPatchCount)
             {
                 return;
             }
@@ -57,6 +63,7 @@ namespace STARGAZER_custom_chart
                 // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
                 PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), preferredParamCount: 0);
 
+                HookHealth.Report("전곡 해금", _patched.Count, TotalPatchCount);
                 if (_patched.Count != patchedBefore)
                 {
                     MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 ({_patched.Count}/{TotalPatchCount}개 훅 등록)");
@@ -148,7 +155,15 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                method ??= exactMatches[0];
+                if (method == null)
+                {
+                    // 오버로드가 여럿인데 기대 인자 수와 맞는 게 없으면 첫 후보를 쓰되, 잘못 걸렸을 가능성을 로그로 남긴다.
+                    method = exactMatches[0];
+                    if (_warned.Add(key + "#ambiguous"))
+                    {
+                        MelonLogger.Warning($"[UnlockAllPatch] {key} 오버로드 {exactMatches.Count}개 중 인자 {preferredParamCount?.ToString() ?? "?"}개짜리가 없어 첫 후보({method})로 대체합니다. 게임 업데이트 후 해금이 어긋나면 이 줄부터 확인하세요.");
+                    }
+                }
             }
 
             if (method != null)

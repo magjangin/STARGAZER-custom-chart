@@ -21,6 +21,7 @@ namespace STARGAZER_custom_chart
                 LoggerInstance.Msg($"[Mod] autoplay={CustomConfig.AutoPlay} (설정: {CustomConfig.FilePath})");
                 LoggerInstance.Msg($"[Mod] NoteSway={CustomConfig.NoteSway} NoteSpeedChaos={CustomConfig.NoteSpeedChaos}");
 
+                HookHealth.CheckGameFingerprint();
                 LogBgmDebugFileInfo();
                 StartCustomBgmPreload();
                 ApplyDeferredPatches();
@@ -62,6 +63,9 @@ namespace STARGAZER_custom_chart
             TryApplyFocusedTrackViewerPatches();
             JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
             TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
+
+            // 상태가 바뀐 경우에만 [Health] 요약이 다시 찍힌다(HookHealth.LogSummary 참고).
+            HookHealth.LogSummary();
         }
 
         // 게임 디렉터리에 'hwa' 폴더(커스텀 곡 루트)를 자동으로 만든다.
