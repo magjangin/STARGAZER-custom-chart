@@ -20,7 +20,7 @@ namespace STARGAZER_custom_chart
             private static bool Prepare() => PrepareTargets(Targets, new[]
             {
                 new PatchSpec("Il2CppStargazer.UserDataLoader+INNER_TrackRecordModule", "SaveTrackRecord", 1, "ITravelResultData"),
-            });
+            }, "기록 보호(SaveGuard)");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 

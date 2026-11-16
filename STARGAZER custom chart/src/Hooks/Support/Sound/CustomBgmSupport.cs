@@ -256,7 +256,7 @@ namespace STARGAZER_custom_chart
             {
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
-            });
+            }, "커스텀 BGM/프리뷰");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 

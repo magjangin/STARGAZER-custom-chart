@@ -17,7 +17,7 @@ namespace STARGAZER_custom_chart
         {
             private static readonly List<MethodBase> Targets = new List<MethodBase>();
 
-            private static bool Prepare() => PrepareTargets(Targets, GetInvocationPatchSpecs(HookPhase.Prefix));
+            private static bool Prepare() => PrepareTargets(Targets, GetInvocationPatchSpecs(HookPhase.Prefix), "공용 훅(Prefix)");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 
@@ -29,7 +29,7 @@ namespace STARGAZER_custom_chart
         {
             private static readonly List<MethodBase> Targets = new List<MethodBase>();
 
-            private static bool Prepare() => PrepareTargets(Targets, GetInvocationPatchSpecs(HookPhase.Postfix));
+            private static bool Prepare() => PrepareTargets(Targets, GetInvocationPatchSpecs(HookPhase.Postfix), "공용 훅(Postfix)");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 

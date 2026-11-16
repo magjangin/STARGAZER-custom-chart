@@ -14,6 +14,13 @@ namespace STARGAZER_custom_chart
             "SetTrack", "Refresh", "FetchJacketImage", "LoadPreviewBGM",
         };
 
+        // 게임 원본의 오타(LevelSelector.FetchJacektImage)가 이 타입에도 있을 수 있고, 수정/되돌림될 수도 있어
+        // 같은 역할의 철자 변형을 하나로 취급한다(키 = 기대 이름, 값 = 허용하는 대체 이름).
+        private static readonly Dictionary<string, string[]> FocusedTrackViewerAlternateNames = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["FetchJacketImage"] = new[] { "FetchJacektImage" },
+        };
+
         private static readonly MethodInfo? FocusedTrackViewerPostfixMethod =
             typeof(GameTypeEnumeratorMod).GetMethod(nameof(FocusedTrackViewerPostfix), BindingFlags.Static | BindingFlags.NonPublic);
 
@@ -45,12 +52,12 @@ namespace STARGAZER_custom_chart
                 // 매 프레임 메서드가 생기는 순간 매 프레임 리플렉션 열거가 돌게 된다. 실측상 필요한 4개만 명시적으로 건다.
                 MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
                     .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
-                    .Where(m => FocusedTrackViewerHookMethodNames.Contains(m.Name))
+                    .Where(m => IsFocusedTrackViewerHookName(m.Name))
                     .ToArray();
 
                 foreach (string expected in FocusedTrackViewerHookMethodNames)
                 {
-                    if (!methods.Any(m => string.Equals(m.Name, expected, StringComparison.Ordinal))
+                    if (!methods.Any(m => MatchesExpectedHookName(m.Name, expected))
                         && LogOnce($"FocusedTrackViewerProbe.Missing.{expected}"))
                     {
                         LoggerInstance.Warning($"[FocusedTrackViewerProbe] {expected} 메서드를 찾지 못했습니다(게임 업데이트로 이름이 바뀌었을 수 있음).");
@@ -82,7 +89,9 @@ namespace STARGAZER_custom_chart
 
                 if (successCount > 0)
                 {
+                    // 일부만 걸려도 기록은 남기되, 다 걸릴 때까지 다음 씬 로드에서 빠진 것을 다시 시도하지는 않는다(중복 패치 방지).
                     _focusedTrackViewerPatched = true;
+                    HookHealth.Report("선택 화면 난이도(FocusedTrackViewer)", successCount, FocusedTrackViewerHookMethodNames.Count);
                     LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer (postfix only).");
                 }
                 else if (LogOnce("FocusedTrackViewerProbe.NoneApplied"))
@@ -94,6 +103,40 @@ namespace STARGAZER_custom_chart
             {
                 LoggerInstance.Warning($"[FocusedTrackViewerProbe] 패치를 적용하지 못했습니다: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+
+        private static bool IsFocusedTrackViewerHookName(string methodName)
+        {
+            foreach (string expected in FocusedTrackViewerHookMethodNames)
+            {
+                if (MatchesExpectedHookName(methodName, expected))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool MatchesExpectedHookName(string actual, string expected)
+        {
+            if (string.Equals(actual, expected, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (FocusedTrackViewerAlternateNames.TryGetValue(expected, out string[]? alternates))
+            {
+                foreach (string alternate in alternates)
+                {
+                    if (string.Equals(actual, alternate, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static void FocusedTrackViewerPostfix(object? __instance)

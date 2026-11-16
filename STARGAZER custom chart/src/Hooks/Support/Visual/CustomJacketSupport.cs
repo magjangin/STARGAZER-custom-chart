@@ -68,7 +68,7 @@ namespace STARGAZER_custom_chart
             private static bool Prepare() => PrepareTargets(Targets, new[]
             {
                 new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadJacketSprite", 1, "Action"),
-            });
+            }, "커스텀 자켓");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
 

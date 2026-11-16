@@ -28,6 +28,7 @@ namespace STARGAZER_custom_chart
                 if (!NoteMotionEnabled)
                 {
                     MelonLogger.Msg("[NoteMotion] NoteSway/NoteSpeedChaos가 모두 꺼져 있어 노트 훅을 걸지 않습니다.");
+                    HookHealth.ReportDisabled("노트 연출", "설정으로 꺼짐");
                     return false;
                 }
 
@@ -40,7 +41,7 @@ namespace STARGAZER_custom_chart
                     new PatchSpec("Il2CppStargazer.Play.StargazerLongNote", "Behaviour", 1, "Single"),
                 };
 
-                if (!PrepareTargets(ResolvedTargets, specs))
+                if (!PrepareTargets(ResolvedTargets, specs, "노트 연출"))
                 {
                     MelonLogger.Warning("[NoteMotion] 노트 타입을 하나도 찾지 못해 연출을 켜지 못했습니다.");
                     return false;
