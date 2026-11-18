@@ -27,7 +27,8 @@ STARGAZER의 게임 타입은 대부분 `Il2Cpp...` 네임스페이스 아래의
 | `src/Hooks/Support/Sound/CustomBgmSupport.cs` | `AudioClip` 포인터 설명, 커스텀 BGM/프리뷰 캐시 서빙 및 콜백 전달 |
 | `src/Hooks/Support/Visual/CustomJacketSupport.cs` | 커스텀 자켓 `Sprite` 캐시 서빙 및 콜백 전달 |
 | `src/Hooks/Support/Common/HookInvocationSupport.cs` | `INNER_PatternLoader.onCompleted` 이중래퍼(Dual-Wrapper) 설치 및 로더/델리게이트 `Pointer` 비교 |
-| `src/Hooks/Support/Common/ReflectionSupport.cs` | 프로퍼티/필드/getter 캐시 조회(`TryGetMemberValue`), 타입 기반 유일 멤버 폴백(`TryGetMemberByType`), 단일 인자 콜백 호출(`TryInvokeSingleArgCallback`) |
+| `src/Hooks/Support/Common/ReflectionSupport.cs` | 프로퍼티/필드/getter 캐시 조회(`TryGetMemberValue`), 타입 기반 유일 멤버 폴백(`TryGetMemberByType`), 이름 기반 세터(`TrySetValueByNameCandidates`) |
+| `src/Hooks/Support/Common/ReflectionSupport.Instantiation.cs` | IL2CPP 래퍼 인스턴스 생성 캐시(`InstantiateIl2CppObject`), 단일 인자 콜백 호출(`TryInvokeSingleArgCallback`) |
 
 ## 캐스트 흐름
 
@@ -105,7 +106,7 @@ STARGAZER의 게임 타입은 대부분 `Il2Cpp...` 네임스페이스 아래의
 
 ### `TryInvokeSingleArgCallback`
 
-위치: `ReflectionSupport.cs` (호출부: `CustomBgmSupport.cs`, `CustomJacketSupport.cs`)
+위치: `ReflectionSupport.Instantiation.cs` (호출부: `CustomBgmSupport.cs`, `CustomJacketSupport.cs`)
 
 커스텀 BGM/프리뷰 및 자켓 로더는 게임의 `LoadBGMClip`, `LoadPreviewClip`, `LoadJacketSprite`에 전달된 콜백을 받아 로컬 에셋(`AudioClip` 또는 `Sprite`)을 전달합니다.
 

@@ -171,6 +171,12 @@ namespace STARGAZER_custom_chart
                 || string.Equals(name, "ObjectClass", StringComparison.OrdinalIgnoreCase);
         }
 
+        private static bool IsTrackMetaDataMember(string memberName, Type memberType)
+        {
+            return NameMatchesAny(memberName, MetaMemberNameCandidates)
+                || MatchesShortTypeName(memberType, "INNER_TrackMetaData", matchGenericArgs: false);
+        }
+
         private static CopyMemberSet GetCopyMemberSet(Type type)
         {
             return CopyMemberCache.GetOrAdd(type, t =>
@@ -185,7 +191,7 @@ namespace STARGAZER_custom_chart
                     }
 
                     allFields.Add(field);
-                    if (!NameMatchesAny(field.Name, MetaMemberNameCandidates))
+                    if (!IsTrackMetaDataMember(field.Name, field.FieldType))
                     {
                         nonMetaFields.Add(field);
                     }
@@ -201,7 +207,7 @@ namespace STARGAZER_custom_chart
                     }
 
                     allProps.Add(prop);
-                    if (!NameMatchesAny(prop.Name, MetaMemberNameCandidates))
+                    if (!IsTrackMetaDataMember(prop.Name, prop.PropertyType))
                     {
                         nonMetaProps.Add(prop);
                     }

@@ -52,7 +52,7 @@
 
 * **포인터는 식별용**: 
   `Pointer`는 IL2CPP 래퍼가 가리키는 네이티브 객체 주소입니다. 이 모드는 메모리를 직접 고치지 않고,
-  주입한 복제 트랙을 공식 트랙과 구분하는 데(`Dictionary<IntPtr, CustomAlbum>`)만 씁니다
+  주입한 복제 트랙을 공식 트랙과 구분하는 데(`Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)>`)만 씁니다
   ([REFERENCE_CUSTOM_TRACK_PIPELINE.md](REFERENCE_CUSTOM_TRACK_PIPELINE.md#커스텀-트랙-식별--객체-동일성)).
 * **딕셔너리 구조 필드**:
   `artistInfos` 및 `levelString` 같은 구조는 복제 주입 시 단순히 값을 할당하는 것뿐만 아니라 `Il2CppSystem.Collections` 클래스군과의 호환 처리가 필요함을 시사합니다.

@@ -162,5 +162,44 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal("ProcessBufferRenamed", method!.Name);
             Assert.Equal("이름 조각+시그니처 유일", reason);
         }
+
+        private sealed class FakeLoaderWithTwoOuterLambdas
+        {
+            private void _Load_b__1_0(Pattern p) { }
+            private void _Load_b__2_0(Pattern p) { }
+        }
+
+        private sealed class FakeSignatureOverloads
+        {
+            public void Target(PatternLoader loader) { }
+            public void Target(Pattern pattern) { }
+        }
+
+        [Fact]
+        public void ResolveLambdaMethod_ReturnsNullWhenOuterLambdasAreAmbiguous()
+        {
+            var (chosen, ambiguous) = PatchResolutionLogic.ResolveLambdaMethod(
+                typeof(FakeLoaderWithTwoOuterLambdas),
+                "Load",
+                1,
+                new[] { "Pattern" });
+
+            Assert.Null(chosen);
+            Assert.Equal(2, ambiguous.Count);
+        }
+
+        [Fact]
+        public void PickBestBySignature_PrefersExactTypeMatchAndRespectsExactFlag()
+        {
+            MethodInfo[] methods = typeof(FakeSignatureOverloads).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+
+            MethodInfo? best = PatchResolutionLogic.PickBestBySignature(methods, 1, new[] { "Pattern" }, exactTypeNames: false);
+            Assert.NotNull(best);
+            Assert.Equal(typeof(Pattern), best!.GetParameters()[0].ParameterType);
+
+            MethodInfo? loaderOnly = methods[0].GetParameters()[0].ParameterType == typeof(PatternLoader) ? methods[0] : methods[1];
+            Assert.Equal(-1, PatchResolutionLogic.ScoreSignature(loaderOnly, 1, new[] { "Pattern" }, exactTypeNames: true));
+            Assert.Equal(1, PatchResolutionLogic.ScoreSignature(loaderOnly, 1, new[] { "Pattern" }, exactTypeNames: false));
+        }
     }
 }

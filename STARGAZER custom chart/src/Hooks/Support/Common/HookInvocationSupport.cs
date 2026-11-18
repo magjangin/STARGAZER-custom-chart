@@ -197,13 +197,16 @@ namespace STARGAZER_custom_chart
                 if (_autoPlayOwnerType != type)
                 {
                     const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-                    PropertyInfo? prop = type.GetProperty("IsAutoPlay", Flags);
+                    PropertyInfo? prop = type.GetProperty("IsAutoPlay", Flags)
+                        ?? type.GetProperty("AutoPlay", Flags);
                     _autoPlayProp = (prop is not null && prop.CanWrite && prop.PropertyType == typeof(bool)) ? prop : null;
 
                     FieldInfo? field = null;
                     if (_autoPlayProp is null)
                     {
-                        FieldInfo? candidate = type.GetField("IsAutoPlay", Flags) ?? type.GetField("isAutoPlay", Flags);
+                        FieldInfo? candidate = type.GetField("IsAutoPlay", Flags)
+                            ?? type.GetField("isAutoPlay", Flags)
+                            ?? type.GetField("autoPlay", Flags);
                         if (candidate is not null && candidate.FieldType == typeof(bool))
                         {
                             field = candidate;
@@ -234,6 +237,10 @@ namespace STARGAZER_custom_chart
                 {
                     _autoPlaySetter.Invoke(playerBaseInstance, new object[] { true });
                     applied = true;
+                }
+                else if (LogOnce($"PlayerBaseAutoPlay.Missing.{type.FullName}"))
+                {
+                    MelonLogger.Warning($"[PlayerBaseAutoPlay] {type.FullName} 에서 IsAutoPlay 멤버를 찾지 못해 오토플레이를 적용할 수 없습니다.");
                 }
 
                 if (EnableRuntimeProbeLogging)

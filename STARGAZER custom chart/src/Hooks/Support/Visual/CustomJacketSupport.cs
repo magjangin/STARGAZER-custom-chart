@@ -17,6 +17,8 @@ namespace STARGAZER_custom_chart
         // 메인 스레드 전용
         private static readonly Dictionary<string, (Sprite Sprite, DateTime LastWriteUtc)> CustomJacketCache =
             new Dictionary<string, (Sprite, DateTime)>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, DateTime> CustomJacketFailedCache =
+            new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
 
         private static void EvictJacketCacheEntry(string fullPath)
         {
@@ -37,10 +39,21 @@ namespace STARGAZER_custom_chart
             if (!File.Exists(fullPath))
             {
                 EvictJacketCacheEntry(fullPath);
+                CustomJacketFailedCache.Remove(fullPath);
                 return null;
             }
 
             DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
+            if (CustomJacketFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
+            {
+                if (failedWriteUtc == lastWriteUtc)
+                {
+                    return null;
+                }
+
+                CustomJacketFailedCache.Remove(fullPath);
+            }
+
             if (CustomJacketCache.TryGetValue(fullPath, out var cached))
             {
                 if (cached.Sprite != null && cached.LastWriteUtc == lastWriteUtc)
@@ -57,6 +70,7 @@ namespace STARGAZER_custom_chart
                 var texture = new Texture2D(2, 2);
                 if (!ImageConversion.LoadImage(texture, bytes))
                 {
+                    CustomJacketFailedCache[fullPath] = lastWriteUtc;
                     MelonLogger.Warning($"[CustomJacket] 이미지 디코딩 실패: {fullPath}");
                     UnityEngine.Object.Destroy(texture);
                     return null;
@@ -66,12 +80,14 @@ namespace STARGAZER_custom_chart
                 var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
                 sprite.name = "CustomJacket_" + Path.GetFileNameWithoutExtension(fullPath);
                 sprite.hideFlags |= HideFlags.DontUnloadUnusedAsset;
+                CustomJacketFailedCache.Remove(fullPath);
                 CustomJacketCache[fullPath] = (sprite, lastWriteUtc);
                 MelonLogger.Msg($"[CustomJacket] Cached custom jacket: {fullPath} ({texture.width}x{texture.height})");
                 return sprite;
             }
             catch (Exception ex)
             {
+                CustomJacketFailedCache[fullPath] = lastWriteUtc;
                 MelonLogger.Warning($"[CustomJacket] 로드 실패: {fullPath}: {ex.Message}");
                 return null;
             }
