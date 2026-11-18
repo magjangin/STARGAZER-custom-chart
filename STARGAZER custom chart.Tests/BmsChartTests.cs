@@ -80,12 +80,36 @@ namespace STARGAZER_custom_chart.Tests
         }
 
         [Fact]
+        public void TryParse_Channel02MeasureLength_ScalesLengthRatioAndBeatPositions()
+        {
+            string path = WriteBms("time_sig.bms", string.Join("\n",
+                "#BPM 120",
+                "#WAV01 tap.wav",
+                "#00002:0.75",
+                "#00016:010101"));
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Empty(chart!.Warnings);
+            Assert.Single(chart.Measures);
+            Assert.Equal(0.75d, chart.Measures[0].LengthRatio, 6);
+            Assert.Equal(3, chart.Measures[0].Notes.Count);
+            // 3/4 마디(3비트)를 3등분하면 박자 위치는 0, 1, 2
+            Assert.Equal(0, chart.Measures[0].Notes[0].BeatNumerator);
+            Assert.Equal(1, chart.Measures[0].Notes[0].BeatDenominator);
+            Assert.Equal(1, chart.Measures[0].Notes[1].BeatNumerator);
+            Assert.Equal(1, chart.Measures[0].Notes[1].BeatDenominator);
+            Assert.Equal(2, chart.Measures[0].Notes[2].BeatNumerator);
+            Assert.Equal(1, chart.Measures[0].Notes[2].BeatDenominator);
+        }
+
+        [Fact]
         public void TryParse_UnsupportedChannelsAndSpacelessBpm_RecordWarnings()
         {
             string path = WriteBms("warn.bms", string.Join("\n",
                 "#BPM140",
                 "#WAV01 tap.wav",
-                "#00002:0.5",
                 "#00003:80",
                 "#00009:01",
                 "#00016:0100"));
@@ -94,7 +118,7 @@ namespace STARGAZER_custom_chart.Tests
 
             Assert.NotNull(chart);
             Assert.Equal(120d, chart!.Bpm);
-            Assert.Equal(4, chart.Warnings.Count);
+            Assert.Equal(3, chart.Warnings.Count);
         }
 
         [Fact]

@@ -14,15 +14,29 @@ namespace STARGAZER_custom_chart
         // 시그니처가 동일한 트랙별 콜백 로더다(decompiled/Assembly-CSharp/Il2CppStargazer/TrackLoader.cs).
         // TryGetAlbumForTrack(객체 동일성 기준)으로 그 트랙이 어느 앨범(hwa 하위 폴더)인지 찾아
         // 그 앨범의 자켓 이미지를 서빙한다 — BGM 서빙과 같은 방식.
+        // 메인 스레드 전용
         private static readonly Dictionary<string, (Sprite Sprite, DateTime LastWriteUtc)> CustomJacketCache =
             new Dictionary<string, (Sprite, DateTime)>(StringComparer.OrdinalIgnoreCase);
+
+        private static void EvictJacketCacheEntry(string fullPath)
+        {
+            if (CustomJacketCache.Remove(fullPath, out var cached) && cached.Sprite != null)
+            {
+                Texture2D? tex = cached.Sprite.texture;
+                UnityEngine.Object.Destroy(cached.Sprite);
+                if (tex != null)
+                {
+                    UnityEngine.Object.Destroy(tex);
+                }
+            }
+        }
 
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
             if (!File.Exists(fullPath))
             {
-                CustomJacketCache.Remove(fullPath);
+                EvictJacketCacheEntry(fullPath);
                 return null;
             }
 
@@ -34,7 +48,7 @@ namespace STARGAZER_custom_chart
                     return cached.Sprite;
                 }
 
-                CustomJacketCache.Remove(fullPath);
+                EvictJacketCacheEntry(fullPath);
             }
 
             try

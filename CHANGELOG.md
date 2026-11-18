@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-18 (2차: BGM 캐시/메모리 누수 수정 · BMS 02 채널 지원 · 테스트 보강 · 파일 분할)
+- **BGM / 자켓 캐시 및 메모리 관리**:
+  - `CustomBgmSupport`: 핫리로드·LRU 퇴거 시 `UnityEngine.Object.Destroy(clip)` 및 `DownloadHandlerAudioClip.Dispose()` 즉시 호출.
+  - `CustomBgmFailedCache`: 로드 실패 시 수정 시각 기준 실패 캐시를 기록해 커서 이동마다 재시도/에러 로그 반복 방지.
+  - `BgmCacheMaxEntries`(기본 `24`, `0` = 무제한): `config.txt`에 LRU 캐시 상한 추가.
+  - `LoadCustomAudioClipCoroutine` `finally`에서 미완료 `PendingCustomBgmCallbacks` 정리 보장 및 메인 스레드 전용 주석 명시.
+  - `CustomJacketSupport`: 핫리로드 시 이전 `Sprite`/`Texture2D` 파괴.
+- **BMS 마디 길이 변경(채널 02) 지원**:
+  - `BmsChart`: `#mmm02:<비율>` 파싱(`LengthRatio`) 및 마디 내 노트 박자 비율 스케일링 적용.
+  - `HookNoteProbes.BmsInject`: 비-4/4 마디에 대해 `Area.length`(`BeatInfo`) 비율 생성 및 적용.
+- **테스트 보강 · 코드/문서 정리**:
+  - `PatchResolutionLogic`·`SaveGuardLogic` 순수 로직 분리 및 xUnit 단위 테스트 9건 + BMS 02 채널 테스트 1건 추가(총 23건 통과).
+  - `ReflectionSupport.Instantiation.cs` · `HookNoteProbes.BmsInject.Meta.cs` 분할로 대형 파일 정리.
+  - `TrackRecordSaveGuardPatch` 공식 AllPerfect 차단 로그 `LogOnce` 적용, `decompiled/Directory.Build.props` 추가.
+
 ## 2026-11-18 (감사 개선 · 안전성 강화 · 난이도별 BMS · xUnit 테스트)
 - **동작 · 안전**:
   - `AllPerfect` 기본값을 `false`로 변경하고 `AllPerfectCustomOnly`(기본 `true`) 추가. 커스텀 곡 전용이 꺼진 상태(`AllPerfectCustomOnly=false`)로 공식 곡을 플레이할 때는 `TrackRecordSaveGuardPatch`가 공식 기록 저장도 차단하도록 보강.

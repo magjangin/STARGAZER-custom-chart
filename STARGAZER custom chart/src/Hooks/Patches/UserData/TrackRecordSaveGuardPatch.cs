@@ -32,43 +32,38 @@ namespace STARGAZER_custom_chart
                 try
                 {
                     object? result = __args is { Length: > 0 } ? __args[0] : null;
-                    if (result is null)
-                    {
-                        if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
-                        {
-                            MelonLogger.Warning($"[SaveGuard] 결과 인자가 비어 있지만 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
-                            return false;
-                        }
-
-                        return true;
-                    }
-
-                    object? playData = TryGetMemberByType(result, "TravelArgs", "PlayData", "playData");
+                    object? playData = result is null ? null : TryGetMemberByType(result, "TravelArgs", "PlayData", "playData");
                     object? playTrack = playData is null ? null : TryGetMemberByType(playData, "ITrackData", "PlayTrack", "playTrack");
-                    if (playTrack is null)
+                    CustomAlbum? album = playTrack is null ? null : TryGetAlbumForTrack(playTrack);
+
+                    SaveGuardDecision decision = SaveGuardLogic.Evaluate(
+                        hasResult: result is not null,
+                        hasPlayTrack: playTrack is not null,
+                        isCustomTrack: album is not null,
+                        isCustomPlayActive: IsCustomChartPlayActive && CurrentPlayAlbum is not null,
+                        allPerfectEnabled: CustomConfig.AllPerfect,
+                        allPerfectCustomOnly: CustomConfig.AllPerfectCustomOnly);
+
+                    switch (decision)
                     {
-                        if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
-                        {
-                            MelonLogger.Warning($"[SaveGuard] PlayTrack 추출에 실패했으나 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
+                        case SaveGuardDecision.BlockDefensiveNullResult:
+                            MelonLogger.Warning($"[SaveGuard] 결과 인자가 비어 있지만 커스텀 곡({CurrentPlayAlbum!.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
                             return false;
-                        }
-
-                        return true;
-                    }
-
-                    CustomAlbum? album = TryGetAlbumForTrack(playTrack);
-                    if (album is null)
-                    {
-                        if (CustomConfig.AllPerfect && !CustomConfig.AllPerfectCustomOnly)
-                        {
-                            MelonLogger.Msg("[SaveGuard] AllPerfect가 공식 곡에도 활성화되어 있으므로 공식 기록 저장을 차단합니다.");
+                        case SaveGuardDecision.BlockDefensiveMissingTrack:
+                            MelonLogger.Warning($"[SaveGuard] PlayTrack 추출에 실패했으나 커스텀 곡({CurrentPlayAlbum!.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
                             return false;
-                        }
-                        return true;
+                        case SaveGuardDecision.BlockCustomTrack:
+                            MelonLogger.Msg($"[SaveGuard] 커스텀 트랙({album!.Name}) 저장을 막았습니다 — 공식 Starting Point 기록 보호.");
+                            return false;
+                        case SaveGuardDecision.BlockOfficialAllPerfect:
+                            if (LogOnce("SaveGuard.OfficialAllPerfect"))
+                            {
+                                MelonLogger.Msg("[SaveGuard] AllPerfect가 공식 곡에도 활성화되어 있으므로 공식 기록 저장을 차단합니다 (이후 같은 로그는 생략).");
+                            }
+                            return false;
+                        default:
+                            return true;
                     }
-
-                    MelonLogger.Msg($"[SaveGuard] 커스텀 트랙({album.Name}) 저장을 막았습니다 — 공식 Starting Point 기록 보호.");
-                    return false;
                 }
                 catch (Exception ex)
                 {
