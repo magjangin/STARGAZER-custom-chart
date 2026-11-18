@@ -31,12 +31,18 @@ namespace STARGAZER_custom_chart
 
         // 못 찾은 대상 경고는 씬 로드마다 반복하지 않도록 키별로 한 번만 남긴다.
         private static readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
+        private static bool _disabledLogged;
 
         public static void Initialize(HarmonyLib.Harmony harmony)
         {
             if (!CustomConfig.UnlockAll)
             {
-                HookHealth.ReportDisabled("전곡 해금", "설정으로 꺼짐");
+                if (!_disabledLogged)
+                {
+                    _disabledLogged = true;
+                    MelonLogger.Msg("[UnlockAllPatch] UnlockAll=false 라 전곡 해금 훅을 걸지 않습니다.");
+                    HookHealth.ReportDisabled("전곡 해금", "설정으로 꺼짐");
+                }
                 return;
             }
 

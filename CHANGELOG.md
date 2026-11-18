@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-19 (2차: 수정 기록·업데이트 내성 감사, 리팩토링 및 인수인계 강화)
+- **업데이트 내성 감사 & 버그 예방**:
+  - `TrackSelectorCloningSupport.GetCopyMemberSet`: `skipMetaDataMembers` 판정에 이름(`metadata`)뿐 아니라 `INNER_TrackMetaData` 타입 일치도 포함해, `_metaData` 이름이 변경돼도 복제 시 새 메타데이터가 원본으로 덮어씌워지는 회귀를 방지.
+  - `CustomJacketSupport`: `CustomJacketFailedCache`(파일 수정 시각 기준)를 추가해 손상된 자켓 이미지로 인한 반복 디스크 읽기·텍스처 할당·경고 스팸을 차단(파일 교체 시 자동 재시도).
+  - `HookInvocationSupport.TryEnablePlayerBaseAutoPlay`: `AutoPlay`/`autoPlay` 대체 멤버명 추가 및 미발견 시 `LogOnce` 경고 출력.
+  - `TrackUnlockAllPatch`: `UnlockAll=false`일 때 1회 로그(`_disabledLogged`)를 남겨 `JudgeAllPerfectPatch`·`NoteMotionPatches`와 동작 일관화.
+- **리팩토링 & 테스트 보강**:
+  - `HookNoteProbes.BmsInject`: `GetOrBuildNoteMeta`/`GetOrBuildNotePropertyMeta`의 중복 유일 쓰기 멤버 탐색을 `TryFindUniqueWritableMember` 헬퍼로 통합, `ResolveLaneUidsInOrder`에 `id`/`Id` 폴백 이름 추가.
+  - `PatchResolutionLogicTests`: 모호한 외부 람다(`null` 반환 → Dual-Wrapper 위임) 및 `PickBestBySignature`/`ScoreSignature` 정확·부분 일치 테스트 2건 추가(총 28건 통과).
+- **인수인계 문서 강화**:
+  - `AGENTS.md`: `InjectedCustomTrackAlbums` 시그니처 최신화 및 "빠른 트러블슈팅 인수인계 맵(증상 → 로그 태그 → 파일)" 추가.
+  - `docs/TRACK_METADATA_REFERENCE.md`, `docs/CAST_AND_WRAPPER_CODE_REFERENCE.md`: `TrackRef` 튜플 타입 및 `ReflectionSupport.Instantiation.cs` 분할 위치 반영.
+
 ## 2026-11-19 (업데이트 내성 격리 · 위치 기반 바인딩 · 문서 정합성 강화)
 - **업데이트 내성 & 패치 격리 강화**:
   - `JudgeAllPerfectPatch`: `Initialize()`의 대상 타입 해석을 컴파일 타임 `typeof`에서 `ResolveGameType`으로 전환하고 4개 패치를 개별 `try/catch`로 격리. `PatchResolutionLogic.ResolveNestedType`(유일성 조건) 및 `ResolveMethodByShortSignature`(짧은 타입명·`ref` 여부 검증) 적용. 4개 훅 핸들러를 이름 기반에서 Harmony 위치 기반 바인딩(`__0`, `__2`)으로 전환해 파라미터 이름 변경·메타데이터 스트립 내성 확보.

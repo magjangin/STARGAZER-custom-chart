@@ -55,7 +55,7 @@
 ### IntPtr 기반 객체 동일성 판정 (포인터 1:1 매핑)
 - **표시명 기반 식별 불가**: 사용자가 `info.txt`에서 곡명을 임의로 지정하므로 고정 식별자로 사용 불가.
 - **TrackID 기반 식별 불가**: 복제 원본의 ID인 `startingpoint`를 그대로 유지함. 만약 `StartsWith` 등으로 문자열 비교를 수행할 경우, 공식 수록곡인 `"Starting Point"` 및 `"Starting Point (yomoha Jazz Arrange)"`까지 커스텀으로 오인되어 공식 곡 플레이 시 커스텀 차트와 자켓이 주입되는 버그 발생.
-- **해결책**: 주입 시점에 생성된 IL2CPP C++ 인스턴스의 네이티브 포인터(`IntPtr`)를 수집하여 `Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums`에 보관하고, 포인터 일치 여부로만 커스텀 곡을 식별함.
+- **해결책**: 주입 시점에 생성된 IL2CPP C++ 인스턴스의 네이티브 포인터(`IntPtr`)와 관리 래퍼 참조(`TrackRef`, GC 수거 및 주소 재사용 방지)를 `Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbums`에 보관하고, 포인터 일치 여부로만 커스텀 곡을 식별함.
 
 ### 기록 보호 (Save Guard)
 - 커스텀 곡의 내부 `TrackID`가 공식 Starting Point와 같으므로, 결과 점수가 그대로 세이브 파일에 기록되면 공식 랭킹 및 로컬 기록이 오염됨.
@@ -196,4 +196,11 @@
   4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
   5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
 - **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`의 `Initialize()`는 `ResolveGameType`으로 런타임 해석·격리되지만, 개별 훅 핸들러 시그니처는 `EJudgements`/`TickEventData`/`ELockType`을 직접 참조한다. 인터롭에서 해당 enum/이벤트 타입이 이동·삭제되면 재빌드 시 컴파일 오류로 드러난다.
+- **빠른 트러블슈팅 인수인계 맵 (증상 → 로그 태그 → 확인할 파일)**:
+  - **커스텀 곡이 목록에 안 뜸** → `[Album]`, `[TrackSelector.Set]` → `src/Custom/CustomAlbumRegistry.cs`, `src/Hooks/Support/TrackSelector/TrackSelectorHookSupport.cs`, `TrackSelectorCloningSupport.cs`
+  - **자켓/BGM/프리뷰가 원본으로 나옴** → `[CustomJacket]`, `[CustomBgm]` → `src/Hooks/Support/Visual/CustomJacketSupport.cs`, `src/Hooks/Support/Sound/CustomBgmSupport.cs`
+  - **BMS 채보가 주입되지 않음** → `[HookPatch][resolve]`, `[DualWrapper]`, `[NoteProbe]`, `[BmsInject]` → `src/Hooks/Support/Common/HookInvocationSupport.cs`, `src/Probes/Notes/HookNoteProbes.cs`, `HookNoteProbes.BmsInject.cs`
+  - **난이도 숫자가 원본으로 표시됨** → `[FocusedTrackViewerProbe]`, `[CustomLevel]` → `src/Probes/Track/FocusedTrackViewerProbe.cs`, `src/Hooks/Support/LevelSelector/LevelSelectorDisplaySupport.cs`
+  - **공식 기록 오염/저장 차단 이상** → `[SaveGuard]` → `src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`, `SaveGuardLogic.cs`
+  - **올 퍼펙트 / 전곡 해금 / 오토플레이 미동작** → `[JudgePatch]`, `[UnlockAllPatch]`, `[PlayerBaseAutoPlay]`, `[Health]` → `JudgeAllPerfectPatch.cs`, `TrackUnlockAllPatch.cs`, `HookInvocationSupport.cs`, `HookHealth.cs`
 - **변경 이력**: [CHANGELOG.md](CHANGELOG.md) 참고 (과거 작업 일지는 `docs/archive/` 보관).
