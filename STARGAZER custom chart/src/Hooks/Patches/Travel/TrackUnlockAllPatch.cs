@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using MelonLoader;
-using Il2CppStargazer;
 using Il2CppStargazer.Travel;
 
 namespace STARGAZER_custom_chart
@@ -21,6 +20,13 @@ namespace STARGAZER_custom_chart
     public static class TrackUnlockAllPatch
     {
         private const int TotalPatchCount = 7;
+
+        private const string InnerTrackDataTypeName = "Il2CppStargazer.TrackLoader+INNER_TrackData";
+        private const string ITrackDataTypeName = "Il2CppStargazer.Travel.ITrackData";
+        private const string UnlockDataModuleTypeName = "Il2CppStargazer.UserDataLoader+INNER_UnlockDataModule";
+        private const string CurrencyModuleTypeName = "Il2CppStargazer.UserDataLoader+INNER_CurrencyModule";
+        private const string LockTypeEnumName = "Il2CppStargazer.Travel.ELockType";
+
         private static readonly HashSet<string> _patched = new HashSet<string>(StringComparer.Ordinal);
 
         // 못 찾은 대상 경고는 씬 로드마다 반복하지 않도록 키별로 한 번만 남긴다.
@@ -40,98 +46,134 @@ namespace STARGAZER_custom_chart
             }
 
             int patchedBefore = _patched.Count;
+
+            // 대상 타입을 컴파일 타임 typeof 대신 ResolveGameType(네임스페이스 변경 시 짧은 이름 폴백)으로 찾고,
+            // 각 패치를 개별 try/catch로 격리해 한 타입이 바뀌어도 나머지 해금 패치가 살아남도록 한다.
+            Type? innerTrackDataType = StargazerCustomChartMod.ResolveGameType(InnerTrackDataTypeName);
+            Type? iTrackDataType = StargazerCustomChartMod.ResolveGameType(ITrackDataTypeName);
+            Type? unlockModuleType = StargazerCustomChartMod.ResolveGameType(UnlockDataModuleTypeName);
+            Type? currencyModuleType = StargazerCustomChartMod.ResolveGameType(CurrencyModuleTypeName);
+            Type? lockTypeEnum = StargazerCustomChartMod.ResolveGameType(LockTypeEnumName);
+
+            // 1. INNER_TrackData.get_IsUnlocked
+            PatchGetter(harmony, innerTrackDataType, InnerTrackDataTypeName, typeof(bool), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
+
+            // 2. INNER_TrackData.get_LockType
+            PatchGetter(harmony, innerTrackDataType, InnerTrackDataTypeName, lockTypeEnum, "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
+
+            // 3. INNER_TrackData.get_UnlockCost
+            PatchGetter(harmony, innerTrackDataType, InnerTrackDataTypeName, typeof(int), "UnlockCost", nameof(Get_UnlockCost_Prefix), "Cost", "Price");
+
+            // 4. ITrackData.get_IsUnlocked
+            PatchGetter(harmony, iTrackDataType, ITrackDataTypeName, typeof(bool), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
+
+            // 5. ITrackData.get_LockType
+            PatchGetter(harmony, iTrackDataType, ITrackDataTypeName, lockTypeEnum, "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
+
+            // 6. UserDataLoader.INNER_UnlockDataModule.IsUnlocked
+            PatchMethod(harmony, unlockModuleType, UnlockDataModuleTypeName, "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix), typeof(bool), preferredParamCount: 1, "IsTrackUnlocked", "CheckUnlocked");
+
+            // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
+            PatchMethod(harmony, currencyModuleType, CurrencyModuleTypeName, "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), typeof(long), preferredParamCount: 0, "GetVolt", "GetCurrency");
+
+            HookHealth.Report("전곡 해금", _patched.Count, TotalPatchCount);
+            if (_patched.Count != patchedBefore)
+            {
+                MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 ({_patched.Count}/{TotalPatchCount}개 훅 등록)");
+            }
+        }
+
+        private static void PatchGetter(
+            HarmonyLib.Harmony harmony,
+            Type? targetType,
+            string targetTypeLabel,
+            Type? expectedReturnType,
+            string propName,
+            string prefixMethodName,
+            params string[] alternatePropNames)
+        {
+            string key = $"{targetTypeLabel}.get_{propName}";
+            if (_patched.Contains(key)) return;
+
+            if (targetType is null)
+            {
+                if (_warned.Add($"type.{targetTypeLabel}"))
+                {
+                    MelonLogger.Warning($"[UnlockAllPatch] {targetTypeLabel} 타입을 찾을 수 없습니다.");
+                }
+                return;
+            }
+
+            if (expectedReturnType is null)
+            {
+                if (_warned.Add($"ret.{key}"))
+                {
+                    MelonLogger.Warning($"[UnlockAllPatch] {key} 기대 반환 타입을 찾을 수 없습니다.");
+                }
+                return;
+            }
+
             try
             {
-                // 1. INNER_TrackData.get_IsUnlocked
-                PatchGetter<bool>(harmony, typeof(TrackLoader.INNER_TrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
+                const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+                MethodInfo? getter = FindGetterByName(targetType, propName, expectedReturnType, Flags);
 
-                // 2. INNER_TrackData.get_LockType
-                PatchGetter<ELockType>(harmony, typeof(TrackLoader.INNER_TrackData), "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
-
-                // 3. INNER_TrackData.get_UnlockCost
-                PatchGetter<int>(harmony, typeof(TrackLoader.INNER_TrackData), "UnlockCost", nameof(Get_UnlockCost_Prefix), "Cost", "Price");
-
-                // 4. ITrackData.get_IsUnlocked
-                PatchGetter<bool>(harmony, typeof(ITrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
-
-                // 5. ITrackData.get_LockType
-                PatchGetter<ELockType>(harmony, typeof(ITrackData), "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
-
-                // 6. UserDataLoader.INNER_UnlockDataModule.IsUnlocked
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_UnlockDataModule), "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix), typeof(bool), preferredParamCount: 1, "IsTrackUnlocked", "CheckUnlocked");
-
-                // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), typeof(long), preferredParamCount: 0, "GetVolt", "GetCurrency");
-
-                HookHealth.Report("전곡 해금", _patched.Count, TotalPatchCount);
-                if (_patched.Count != patchedBefore)
+                if (getter == null && alternatePropNames.Length > 0)
                 {
-                    MelonLogger.Msg($"[UnlockAllPatch] 전곡 해금 패치 적용 ({_patched.Count}/{TotalPatchCount}개 훅 등록)");
+                    foreach (string altName in alternatePropNames)
+                    {
+                        getter = FindGetterByName(targetType, altName, expectedReturnType, Flags);
+                        if (getter != null)
+                        {
+                            MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 프로퍼티 '{getter.Name}' 으로 연결합니다.");
+                            break;
+                        }
+                    }
+                }
+
+                // ELockType 같은 고유 enum 반환 타입이면 이름이 완전히 바뀌어도 유일한 인자 0개 getter로 폴백한다.
+                if (getter == null && expectedReturnType.IsEnum)
+                {
+                    var enumGetters = new List<MethodInfo>();
+                    foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+                    {
+                        if (candidate.DeclaringType == targetType
+                            && candidate.Name.StartsWith("get_", StringComparison.Ordinal)
+                            && candidate.GetParameters().Length == 0
+                            && candidate.ReturnType == expectedReturnType)
+                        {
+                            enumGetters.Add(candidate);
+                        }
+                    }
+
+                    if (enumGetters.Count == 1)
+                    {
+                        getter = enumGetters[0];
+                        MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 반환 타입({expectedReturnType.Name}) 유일 getter '{getter.Name}' 으로 연결합니다.");
+                    }
+                }
+
+                if (getter != null)
+                {
+                    MethodInfo? prefix = typeof(TrackUnlockAllPatch).GetMethod(prefixMethodName, BindingFlags.Static | BindingFlags.NonPublic);
+                    if (prefix != null)
+                    {
+                        harmony.Patch(getter, prefix: new HarmonyMethod(prefix));
+                        _patched.Add(key);
+                        MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
+                    }
+                }
+                else if (_warned.Add(key))
+                {
+                    MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
                 }
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[UnlockAllPatch] 초기화 중 예외 발생: {ex.GetType().Name}: {ex.Message}");
-            }
-        }
-
-        private static void PatchGetter<T>(HarmonyLib.Harmony harmony, Type targetType, string propName, string prefixMethodName, params string[] alternatePropNames)
-        {
-            string key = $"{targetType.FullName}.get_{propName}";
-            if (_patched.Contains(key)) return;
-
-            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-            Type expectedReturnType = typeof(T);
-            MethodInfo? getter = FindGetterByName(targetType, propName, expectedReturnType, Flags);
-
-            if (getter == null && alternatePropNames.Length > 0)
-            {
-                foreach (string altName in alternatePropNames)
+                if (_warned.Add($"ex.{key}"))
                 {
-                    getter = FindGetterByName(targetType, altName, expectedReturnType, Flags);
-                    if (getter != null)
-                    {
-                        MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 프로퍼티 '{getter.Name}' 으로 연결합니다.");
-                        break;
-                    }
+                    MelonLogger.Warning($"[UnlockAllPatch] {key} 패치 중 예외: {ex.GetType().Name}: {ex.Message}");
                 }
-            }
-
-            // ELockType 같은 고유 enum 반환 타입이면 이름이 완전히 바뀌어도 유일한 인자 0개 getter로 폴백한다.
-            if (getter == null && expectedReturnType.IsEnum)
-            {
-                var enumGetters = new List<MethodInfo>();
-                foreach (MethodInfo candidate in targetType.GetMethods(Flags))
-                {
-                    if (candidate.DeclaringType == targetType
-                        && candidate.Name.StartsWith("get_", StringComparison.Ordinal)
-                        && candidate.GetParameters().Length == 0
-                        && candidate.ReturnType == expectedReturnType)
-                    {
-                        enumGetters.Add(candidate);
-                    }
-                }
-
-                if (enumGetters.Count == 1)
-                {
-                    getter = enumGetters[0];
-                    MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 반환 타입({expectedReturnType.Name}) 유일 getter '{getter.Name}' 으로 연결합니다.");
-                }
-            }
-
-            if (getter != null)
-            {
-                MethodInfo? prefix = typeof(TrackUnlockAllPatch).GetMethod(prefixMethodName, BindingFlags.Static | BindingFlags.NonPublic);
-                if (prefix != null)
-                {
-                    harmony.Patch(getter, prefix: new HarmonyMethod(prefix));
-                    _patched.Add(key);
-                    MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
-                }
-            }
-            else if (_warned.Add(key))
-            {
-                MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
             }
         }
 
@@ -165,75 +207,95 @@ namespace STARGAZER_custom_chart
 
         private static void PatchMethod(
             HarmonyLib.Harmony harmony,
-            Type targetType,
+            Type? targetType,
+            string targetTypeLabel,
             string methodName,
             string prefixMethodName,
             Type expectedReturnType,
             int? preferredParamCount = null,
             params string[] alternateMethodNames)
         {
-            string key = $"{targetType.FullName}.{methodName}";
+            string key = $"{targetTypeLabel}.{methodName}";
             if (_patched.Contains(key)) return;
 
-            const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-            var exactMatches = CollectMatchingMethods(targetType, methodName, expectedReturnType, Flags);
-
-            if (exactMatches.Count == 0 && alternateMethodNames.Length > 0)
+            if (targetType is null)
             {
-                foreach (string altName in alternateMethodNames)
+                if (_warned.Add($"type.{targetTypeLabel}"))
                 {
-                    exactMatches = CollectMatchingMethods(targetType, altName, expectedReturnType, Flags);
-                    if (exactMatches.Count > 0)
-                    {
-                        MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 이름 '{altName}' 후보로 연결합니다.");
-                        break;
-                    }
+                    MelonLogger.Warning($"[UnlockAllPatch] {targetTypeLabel} 타입을 찾을 수 없습니다.");
                 }
+                return;
             }
 
-            MethodInfo? method = null;
-            if (exactMatches.Count == 1)
+            try
             {
-                method = exactMatches[0];
-            }
-            else if (exactMatches.Count > 1)
-            {
-                if (preferredParamCount.HasValue)
+                const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+                var exactMatches = CollectMatchingMethods(targetType, methodName, expectedReturnType, Flags);
+
+                if (exactMatches.Count == 0 && alternateMethodNames.Length > 0)
                 {
-                    foreach (MethodInfo candidate in exactMatches)
+                    foreach (string altName in alternateMethodNames)
                     {
-                        if (candidate.GetParameters().Length == preferredParamCount.Value)
+                        exactMatches = CollectMatchingMethods(targetType, altName, expectedReturnType, Flags);
+                        if (exactMatches.Count > 0)
                         {
-                            method = candidate;
+                            MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 이름 '{altName}' 후보로 연결합니다.");
                             break;
                         }
                     }
                 }
 
-                if (method == null)
+                MethodInfo? method = null;
+                if (exactMatches.Count == 1)
                 {
-                    // 오버로드가 여럿인데 기대 인자 수와 맞는 게 없으면 첫 후보를 쓰되, 잘못 걸렸을 가능성을 로그로 남긴다.
                     method = exactMatches[0];
-                    if (_warned.Add(key + "#ambiguous"))
+                }
+                else if (exactMatches.Count > 1)
+                {
+                    if (preferredParamCount.HasValue)
                     {
-                        MelonLogger.Warning($"[UnlockAllPatch] {key} 오버로드 {exactMatches.Count}개 중 인자 {preferredParamCount?.ToString() ?? "?"}개짜리가 없어 첫 후보({method})로 대체합니다. 게임 업데이트 후 해금이 어긋나면 이 줄부터 확인하세요.");
+                        foreach (MethodInfo candidate in exactMatches)
+                        {
+                            if (candidate.GetParameters().Length == preferredParamCount.Value)
+                            {
+                                method = candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (method == null)
+                    {
+                        // 오버로드가 여럿인데 기대 인자 수와 맞는 게 없으면 첫 후보를 쓰되, 잘못 걸렸을 가능성을 로그로 남긴다.
+                        method = exactMatches[0];
+                        if (_warned.Add(key + "#ambiguous"))
+                        {
+                            MelonLogger.Warning($"[UnlockAllPatch] {key} 오버로드 {exactMatches.Count}개 중 인자 {preferredParamCount?.ToString() ?? "?"}개짜리가 없어 첫 후보({method})로 대체합니다. 게임 업데이트 후 해금이 어긋나면 이 줄부터 확인하세요.");
+                        }
                     }
                 }
-            }
 
-            if (method != null)
-            {
-                MethodInfo? prefix = typeof(TrackUnlockAllPatch).GetMethod(prefixMethodName, BindingFlags.Static | BindingFlags.NonPublic);
-                if (prefix != null)
+                if (method != null)
                 {
-                    harmony.Patch(method, prefix: new HarmonyMethod(prefix));
-                    _patched.Add(key);
-                    MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
+                    MethodInfo? prefix = typeof(TrackUnlockAllPatch).GetMethod(prefixMethodName, BindingFlags.Static | BindingFlags.NonPublic);
+                    if (prefix != null)
+                    {
+                        harmony.Patch(method, prefix: new HarmonyMethod(prefix));
+                        _patched.Add(key);
+                        MelonLogger.Msg($"[UnlockAllPatch] ✓ {key} 패치 성공");
+                    }
+                }
+                else if (_warned.Add(key))
+                {
+                    MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
                 }
             }
-            else if (_warned.Add(key))
+            catch (Exception ex)
             {
-                MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
+                if (_warned.Add($"ex.{key}"))
+                {
+                    MelonLogger.Warning($"[UnlockAllPatch] {key} 패치 중 예외: {ex.GetType().Name}: {ex.Message}");
+                }
             }
         }
 

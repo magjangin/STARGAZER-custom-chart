@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-19 (업데이트 내성 격리 · 위치 기반 바인딩 · 문서 정합성 강화)
+- **업데이트 내성 & 패치 격리 강화**:
+  - `JudgeAllPerfectPatch`: `Initialize()`의 대상 타입 해석을 컴파일 타임 `typeof`에서 `ResolveGameType`으로 전환하고 4개 패치를 개별 `try/catch`로 격리. `PatchResolutionLogic.ResolveNestedType`(유일성 조건) 및 `ResolveMethodByShortSignature`(짧은 타입명·`ref` 여부 검증) 적용. 4개 훅 핸들러를 이름 기반에서 Harmony 위치 기반 바인딩(`__0`, `__2`)으로 전환해 파라미터 이름 변경·메타데이터 스트립 내성 확보.
+  - `TrackUnlockAllPatch`: `Initialize()` 대상 타입 및 `ELockType` 해석을 `ResolveGameType`으로 전환하고 7개 패치를 개별 `try/catch`로 격리.
+  - `PatchTargetSupport`: 지연 로드 어셈블리가 추가되면 `_shortTypeNameIndex`를 자동 재구축하도록 `_shortTypeNameIndexAssemblyCount` 추적 추가.
+  - `HookNoteProbes.BmsInject`: `Note.property` 및 `NoteProperty.linked` 이름 변경 시 타입/`None·StartPoint·EndPoint` enum 일치 유일 멤버 폴백 추가.
+  - `FocusedTrackViewerProbe`: 타입 미발견 시에도 `HookHealth.Report(..., 0, 4, "타입 미발견")`을 기록해 `[Health]` 요약 누락 방지.
+  - `NoteMotionPatches`: `StargazerNote`/`StargazerLongNote.Behaviour`에 대체 메서드명(`UpdateBehaviour`, `OnBehaviour`) 추가.
+- **단위 테스트 보강**:
+  - `PatchResolutionLogicTests`: `ResolveNestedType` 유일성/모호성, `ResolveMethodByShortSignature` 대체 이름·`ref` 구분·이름 조각 폴백 테스트 3건 추가(총 26건 통과).
+- **문서 정합성 강화**:
+  - `docs/README.md`, `docs/REFERENCE_BMS_CONVERSION.md`: `docs/archive/` 이관 후 깨졌던 워크로그 링크 일괄 수정, BMS 채널 02 지원 반영 및 제거된 중복 노트 억제 섹션 정리.
+  - `docs/GUIDE_CUSTOM_ALBUM.md`, `docs/REFERENCE_ALL_PERFECT.md`: `AllPerfect` 기본값(`false`), `AllPerfectCustomOnly`, `BgmCacheMaxEntries`, 디버그 로그 키, 난이도별 `.bms`, 핫리로드 및 위치 기반 바인딩 반영.
+  - `docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md`, `README.md`, `AGENTS.md`, `BmsChart.cs`: 최신 구현(래퍼 참조 보관, `STARGAZER custom chart.Tests/`, 삭제된 `scripts/build_mod.bat` 제거, BMS 채널 02 주석) 동기화.
+
 ## 2026-11-18 (2차: BGM 캐시/메모리 누수 수정 · BMS 02 채널 지원 · 테스트 보강 · 파일 분할)
 - **BGM / 자켓 캐시 및 메모리 관리**:
   - `CustomBgmSupport`: 핫리로드·LRU 퇴거 시 `UnityEngine.Object.Destroy(clip)` 및 `DownloadHandlerAudioClip.Dispose()` 즉시 호출.

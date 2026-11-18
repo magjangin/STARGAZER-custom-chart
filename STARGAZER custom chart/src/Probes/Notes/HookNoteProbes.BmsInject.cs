@@ -311,6 +311,38 @@ namespace STARGAZER_custom_chart
                         ?? type.GetField("noteProperty", InstanceMemberFlags))
                     : null;
 
+                // 업데이트로 Note.property 이름이 바뀐 경우 NoteProperty 타입의 유일 쓰기 가능 멤버로 폴백한다.
+                if ((propProp is null || !propProp.CanWrite) && propField is null)
+                {
+                    PropertyInfo[] typedProps = type.GetProperties(InstanceMemberFlags)
+                        .Where(p => p.CanWrite && p.GetIndexParameters().Length == 0 && !IsCompilerBackingMember(p.Name)
+                            && MatchesShortTypeName(p.PropertyType, "NoteProperty", matchGenericArgs: false))
+                        .ToArray();
+                    if (typedProps.Length == 1)
+                    {
+                        propProp = typedProps[0];
+                        if (LogOnce($"BmsInject.resolve.NoteProp.{type.FullName}"))
+                        {
+                            MelonLogger.Warning($"[HookPatch][resolve] {type.FullName}.property 대신 타입 일치 프로퍼티 '{propProp.Name}' 로 연결합니다.");
+                        }
+                    }
+                    else
+                    {
+                        FieldInfo[] typedFields = type.GetFields(InstanceMemberFlags)
+                            .Where(f => !f.IsInitOnly && !IsCompilerBackingMember(f.Name)
+                                && MatchesShortTypeName(f.FieldType, "NoteProperty", matchGenericArgs: false))
+                            .ToArray();
+                        if (typedFields.Length == 1)
+                        {
+                            propField = typedFields[0];
+                            if (LogOnce($"BmsInject.resolve.NoteProp.{type.FullName}"))
+                            {
+                                MelonLogger.Warning($"[HookPatch][resolve] {type.FullName}.property 대신 타입 일치 필드 '{propField.Name}' 로 연결합니다.");
+                            }
+                        }
+                    }
+                }
+
                 return new NoteInjectorMetadata
                 {
                     Ctor3 = ctor3,
@@ -318,6 +350,14 @@ namespace STARGAZER_custom_chart
                     PropertyField = propField,
                 };
             });
+        }
+
+        private static bool IsLinkedStateEnum(Type type)
+        {
+            return type.IsEnum
+                && Enum.IsDefined(type, "None")
+                && Enum.IsDefined(type, "StartPoint")
+                && Enum.IsDefined(type, "EndPoint");
         }
 
         private static NotePropertyInjectorMetadata GetOrBuildNotePropertyMeta(Type propType)
@@ -336,6 +376,38 @@ namespace STARGAZER_custom_chart
                 FieldInfo? linkedField = linkedProp is null
                     ? (type.GetField("linked", InstanceMemberFlags) ?? type.GetField("Linked", InstanceMemberFlags))
                     : null;
+
+                // 업데이트로 linked 이름이 바뀐 경우 None/StartPoint/EndPoint를 가진 유일 enum 멤버로 폴백한다.
+                if ((linkedProp is null || !linkedProp.CanWrite) && linkedField is null)
+                {
+                    PropertyInfo[] enumProps = type.GetProperties(InstanceMemberFlags)
+                        .Where(p => p.CanWrite && p.GetIndexParameters().Length == 0 && !IsCompilerBackingMember(p.Name)
+                            && IsLinkedStateEnum(p.PropertyType))
+                        .ToArray();
+                    if (enumProps.Length == 1)
+                    {
+                        linkedProp = enumProps[0];
+                        if (LogOnce($"BmsInject.resolve.Linked.{type.FullName}"))
+                        {
+                            MelonLogger.Warning($"[HookPatch][resolve] {type.FullName}.linked 대신 enum 일치 프로퍼티 '{linkedProp.Name}' 로 연결합니다.");
+                        }
+                    }
+                    else
+                    {
+                        FieldInfo[] enumFields = type.GetFields(InstanceMemberFlags)
+                            .Where(f => !f.IsInitOnly && !IsCompilerBackingMember(f.Name)
+                                && IsLinkedStateEnum(f.FieldType))
+                            .ToArray();
+                        if (enumFields.Length == 1)
+                        {
+                            linkedField = enumFields[0];
+                            if (LogOnce($"BmsInject.resolve.Linked.{type.FullName}"))
+                            {
+                                MelonLogger.Warning($"[HookPatch][resolve] {type.FullName}.linked 대신 enum 일치 필드 '{linkedField.Name}' 로 연결합니다.");
+                            }
+                        }
+                    }
+                }
 
                 Type? linkedEnumType = linkedProp?.PropertyType ?? linkedField?.FieldType;
                 object? linkedNone = null;

@@ -28,11 +28,13 @@ Sixtar Gate STARGAZER/
 
 | 역할 | 찾는 순서 |
 | --- | --- |
-| 차트 | 첫 번째 `*.bms` |
+| 차트 | 난이도별 파일(`cosmic.bms`, `stellar.bms`, `void.bms` 또는 `*_cosmic.bms` 등) → 없으면 기본 `*.bms` (정렬 기준 첫 번째) |
 | 음원 | `music` / `bgm` / `audio` / `song` / `track` (`.ogg` `.mp3` `.wav`) → 첫 번째 `*.ogg` → 첫 번째 `*.mp3` |
 | 프리뷰 | `music_preview` / `preview` / `bgm_preview` (`.ogg` `.mp3` `.wav`) → 없으면 음원과 동일 |
-| 자켓 | `jacket` / `cover` / `thumbnail` (`.png` `.jpg` `.jpeg`), `자켓.png` / `커버.png` / `썸네일.png`, `封面` / `封套` / `曲绘` / `插图` → 없으면 폴더 안 첫 번째 이미지(`.png` `.jpg` `.jpeg`) |
-| 정보 | `info.txt` → 첫 번째 `*.txt` |
+| 자켓 | `jacket` / `cover` / `thumbnail` (`.png` `.jpg` `.jpeg`), `자켓.png` / `커버.png` / `썸네일.png`, `封面` / `封套` / `曲绘` / `插图` → 없으면 폴더 안 첫 번째 이미지(`.png` `.jpg` `.jpeg`, 배경 이미지 `bg.*` 등 제외) |
+| 정보 | `info.txt` → 첫 번째 `*.txt` (`readme.txt` 제외) |
+
+- **핫리로드**: 게임 실행 중에 `.bms`, 음원, 자켓 파일을 수정하면 파일 수정 시각(`LastWriteTimeUtc`) 변경을 감지해 다음 로드 시 자동으로 새로 읽습니다.
 
 확장자 기준 음원 폴백이 `.ogg`/`.mp3`로만 한정된 이유가 있습니다. 폴더에는 BMS 키음(`*.wav`)이 함께 들어있는데,
 임의의 `.wav`를 곡 음원으로 잘못 집으면 짧은 키음이 재생되기 때문입니다. 곡 음원을 `.wav`로 넣을 때는 반드시 `music.wav`처럼 지정된 이름을 쓰거나, 가급적 `.ogg`/`.mp3`로 넣으세요.
@@ -77,9 +79,7 @@ void = 8
 - 참/거짓 값은 `true/false`, `on/off`, `yes/no`, `1/0`, `켜기/끄기`, `사용/사용안함`을 모두 받습니다.
 - 소수점은 항상 `.`입니다(`0.8`). 지역 설정과 무관합니다.
 - **설정은 게임 시작 시 한 번만 읽습니다.** 바꾼 뒤에는 게임을 다시 켜야 합니다.
-- 아래 표에 없는 키는 읽지 않습니다(경고도 없음). 예를 들어 예전 빌드가 파일에 남긴 `EnableNoiseSuppression` 줄은
-  지금 아무 효과가 없습니다 — 중복 노트 억제는 코드에서 꺼져 있습니다
-  ([REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md#중복-노트-억제-현재-꺼짐)).
+- 아래 표에 없는 키는 읽지 않습니다(경고도 없음).
 - 파일을 읽지 못하거나 값을 해석하지 못하면 그 항목은 아래 기본값으로 동작합니다(로그에 경고가 남습니다).
 
 ### 플레이 및 해금
@@ -87,8 +87,19 @@ void = 8
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
 | `autoplay` | `false` | 오토플레이 강제 사용 여부 (`true` = 자동 연주) |
-| `AllPerfect` | `true` | 올 퍼펙트 판정 모드 (`true` = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, `false` = 기본 판정 및 판정 훅 미적용) |
+| `AllPerfect` | `false` | 올 퍼펙트 판정 모드 (`true` = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, `false` = 기본 판정 및 판정 훅 미적용) |
+| `AllPerfectCustomOnly` | `true` | `AllPerfect=true`일 때 커스텀 곡에서만 적용할지 여부 (`true` = 커스텀 곡 전용, `false` = 공식 곡에도 적용 및 공식 기록 저장 차단) |
 | `UnlockAll` | `true` | 전곡 해금 및 볼트 제한 해제 (`true` = 볼트/DLC/어드벤처 잠금 없이 모든 공식 수록곡 즉시 플레이 가능 및 999,999 볼트 표시, `false` = 기본 잠금 유지) |
+| `BgmCacheMaxEntries` | `24` | 메모리에 유지할 커스텀 BGM `AudioClip` 최대 개수 (`0` = 무제한, 초과 시 가장 오래 안 쓴 클립부터 LRU 해제) |
+
+### 디버그 로그
+
+| 키 | 기본값 | 설명 |
+| --- | --- | --- |
+| `VerboseInvocationLogging` | `false` | Harmony 훅 호출 로그 출력 여부 |
+| `FocusedHarmonyInvocationLogging` | `true` | `VerboseInvocationLogging` 활성 시 주요 훅만 출력 |
+| `RuntimeProbeLogging` | `false` | 런타임 프로브 상세 로그 출력 여부 |
+| `TrackSelectorVerboseLogging` | `false` | `TrackSelector.Set` 주입 상세 로그 출력 여부 |
 
 ### 노트 연출
 

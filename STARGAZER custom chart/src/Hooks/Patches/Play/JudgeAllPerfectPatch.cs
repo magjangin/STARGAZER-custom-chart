@@ -4,8 +4,6 @@ using System.Reflection;
 using HarmonyLib;
 using MelonLoader;
 using Il2CppStargazer.Play;
-using Il2CppStargazer.Play.Extensions;
-using Il2CppStargazer.Play.Widgets;
 using Il2CppStargazer.Travel;
 
 namespace STARGAZER_custom_chart
@@ -20,6 +18,10 @@ namespace STARGAZER_custom_chart
     public static class JudgeAllPerfectPatch
     {
         private const int TotalPatchCount = 4;
+
+        private const string JudgementExtensionTypeName = "Il2CppStargazer.Play.Extensions.JudgementExtension";
+        private const string TravelPlayerTypeName = "Il2CppStargazer.Play.TravelPlayer";
+        private const string JudgementWidgetTypeName = "Il2CppStargazer.Play.Widgets.JudgementWidget";
 
         // 이미 걸린 패치의 이름. Initialize는 OnInitializeMelon / OnLateInitializeMelon / OnSceneWasLoaded에서
         // 여러 번 불리므로, 4개가 모두 걸릴 때까지는 빠진 것만 다시 시도하고 이미 건 것은 다시 걸지 않는다.
@@ -48,131 +50,178 @@ namespace STARGAZER_custom_chart
 
             int patchedBefore = _patched.Count;
 
+            // 대상 타입은 컴파일 타임 typeof 대신 ResolveGameType(네임스페이스 변경 시 짧은 이름 폴백)으로 찾고,
+            // 각 패치를 개별 try/catch로 격리해 한 타입이 바뀌어도 나머지 판정 훅이 살아남도록 한다.
+            Type? judgeExtType = StargazerCustomChartMod.ResolveGameType(JudgementExtensionTypeName);
+
+            // 1. FromTimeDiffernce 패치 (RVA: 0x437510)
+            if (!_patched.Contains(nameof(FromTimeDiffernce_Postfix)))
+            {
+                TryPatchJudgeTarget(
+                    harmony,
+                    judgeExtType,
+                    JudgementExtensionTypeName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                    new[] { "FromTimeDiffernce", "FromTimeDifference" },
+                    "TimeDiffer",
+                    "EJudgements",
+                    new[] { ("Single", false), ("Single", false), ("Single", true) },
+                    nameof(FromTimeDiffernce_Postfix),
+                    isPrefix: false,
+                    "BLUE 고정");
+            }
+
+            // 2. TryJudgeHead 패치 (RVA: 0x437CC0)
+            if (!_patched.Contains(nameof(TryJudgeHead_Postfix)))
+            {
+                TryPatchJudgeTarget(
+                    harmony,
+                    judgeExtType,
+                    JudgementExtensionTypeName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                    new[] { "TryJudgeHead" },
+                    "JudgeHead",
+                    "Boolean",
+                    new[] { ("LaneIndex", false), ("Single", false), ("EJudgements", true) },
+                    nameof(TryJudgeHead_Postfix),
+                    isPrefix: false,
+                    "BLUE 고정");
+            }
+
+            // 3. TravelPlayer.INNER_Result.BufferProcess 패치 (RVA: 0x41A070)
+            if (!_patched.Contains(nameof(BufferProcess_Prefix)))
+            {
+                Type? innerResultType = ResolveInnerResultType();
+                TryPatchJudgeTarget(
+                    harmony,
+                    innerResultType,
+                    $"{TravelPlayerTypeName}+INNER_Result",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    new[] { "BufferProcess" },
+                    "Buffer",
+                    "Void",
+                    new[] { ("TickEventData", false) },
+                    nameof(BufferProcess_Prefix),
+                    isPrefix: true,
+                    "결과/점수 BLUE 집계");
+            }
+
+            // 4. JudgementWidget.Watch 패치 (RVA: 0x41CDD0)
+            if (!_patched.Contains(nameof(JudgementWidget_Watch_Prefix)))
+            {
+                Type? widgetType = StargazerCustomChartMod.ResolveGameType(JudgementWidgetTypeName);
+                TryPatchJudgeTarget(
+                    harmony,
+                    widgetType,
+                    JudgementWidgetTypeName,
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    new[] { "Watch" },
+                    "Watch",
+                    "Void",
+                    new[] { ("TickEventData", false) },
+                    nameof(JudgementWidget_Watch_Prefix),
+                    isPrefix: true,
+                    "UI 블루 이펙트");
+            }
+
+            HookHealth.Report("올 퍼펙트 판정", _patched.Count, TotalPatchCount);
+            if (_patched.Count >= TotalPatchCount)
+            {
+                MelonLogger.Msg($"=================================================");
+                MelonLogger.Msg($" [JudgeAllPerfectPatch] 올 퍼펙트 시스템 초기화 완료 ({_patched.Count}/{TotalPatchCount})");
+                MelonLogger.Msg($" AllPerfect 활성 상태: {CustomConfig.AllPerfect}");
+                MelonLogger.Msg($"=================================================");
+            }
+            else if (_patched.Count != patchedBefore || WarnOnceKey("partial"))
+            {
+                MelonLogger.Warning($"[JudgePatch] 올 퍼펙트 패치가 {_patched.Count}/{TotalPatchCount}개만 적용됐습니다. 다음 초기화 시점(후기 초기화/씬 로드)에 빠진 패치만 다시 시도합니다.");
+            }
+        }
+
+        private static Type? ResolveInnerResultType()
+        {
+            Type? direct = StargazerCustomChartMod.ResolveGameType($"{TravelPlayerTypeName}+INNER_Result");
+            if (direct is not null)
+            {
+                return direct;
+            }
+
+            Type? travelPlayerType = StargazerCustomChartMod.ResolveGameType(TravelPlayerTypeName);
+            if (travelPlayerType is null)
+            {
+                return null;
+            }
+
+            var (nested, usedFallback) = PatchResolutionLogic.ResolveNestedType(travelPlayerType, "INNER_Result", "Result");
+            if (nested is not null && usedFallback && WarnOnceKey("resolve.INNER_Result"))
+            {
+                MelonLogger.Warning($"[JudgePatch][resolve] TravelPlayer+INNER_Result 대신 중첩 타입 '{nested.Name}' 으로 연결합니다.");
+            }
+
+            return nested;
+        }
+
+        private static void TryPatchJudgeTarget(
+            HarmonyLib.Harmony harmony,
+            Type? targetType,
+            string targetTypeLabel,
+            BindingFlags flags,
+            string[] exactNames,
+            string preferredNameFragment,
+            string expectedReturnTypeName,
+            (string TypeName, bool IsByRef)[] expectedParams,
+            string hookMethodName,
+            bool isPrefix,
+            string description)
+        {
             try
             {
-                // 1. FromTimeDiffernce 패치 (RVA: 0x437510)
-                if (!_patched.Contains(nameof(FromTimeDiffernce_Postfix)))
+                if (targetType is null)
                 {
-                    var expectedParams = new[] { typeof(float), typeof(float), typeof(float).MakeByRefType() };
-                    MethodInfo? fromTimeDiffMethod = ResolveJudgeMethod(
-                        typeof(JudgementExtension),
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
-                        new[] { "FromTimeDiffernce", "FromTimeDifference" },
-                        "TimeDiffer",
-                        typeof(EJudgements),
-                        expectedParams);
-                    if (fromTimeDiffMethod != null)
-                    {
-                        var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(FromTimeDiffernce_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
-                        harmony.Patch(fromTimeDiffMethod, postfix: new HarmonyMethod(postfix));
-                        _patched.Add(nameof(FromTimeDiffernce_Postfix));
-                        MelonLogger.Msg($"[JudgePatch] ✓ {fromTimeDiffMethod.Name} (BLUE 고정) 패치 성공");
-                    }
-                    else
-                    {
-                        WarnOnce("FromTimeDiffernce", "[JudgePatch] FromTimeDiffernce 메서드를 찾지 못했습니다.");
-                    }
+                    WarnOnce($"type.{targetTypeLabel}", $"[JudgePatch] {targetTypeLabel} 타입을 찾지 못했습니다.");
+                    return;
                 }
 
-                // 2. TryJudgeHead 패치 (RVA: 0x437CC0)
-                if (!_patched.Contains(nameof(TryJudgeHead_Postfix)))
+                var (method, fallbackReason) = PatchResolutionLogic.ResolveMethodByShortSignature(
+                    targetType,
+                    flags,
+                    exactNames,
+                    preferredNameFragment,
+                    expectedReturnTypeName,
+                    expectedParams);
+
+                if (method is null)
                 {
-                    var expectedParams = new[] { typeof(LaneIndex), typeof(float), typeof(EJudgements).MakeByRefType() };
-                    MethodInfo? tryJudgeHeadMethod = ResolveJudgeMethod(
-                        typeof(JudgementExtension),
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
-                        new[] { "TryJudgeHead" },
-                        "JudgeHead",
-                        typeof(bool),
-                        expectedParams);
-                    if (tryJudgeHeadMethod != null)
-                    {
-                        var postfix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(TryJudgeHead_Postfix), BindingFlags.Static | BindingFlags.NonPublic);
-                        harmony.Patch(tryJudgeHeadMethod, postfix: new HarmonyMethod(postfix));
-                        _patched.Add(nameof(TryJudgeHead_Postfix));
-                        MelonLogger.Msg($"[JudgePatch] ✓ {tryJudgeHeadMethod.Name} (BLUE 고정) 패치 성공");
-                    }
-                    else
-                    {
-                        WarnOnce("TryJudgeHead", "[JudgePatch] TryJudgeHead 메서드를 찾지 못했습니다.");
-                    }
+                    WarnOnce(exactNames[0], $"[JudgePatch] {targetType.Name}.{exactNames[0]} 메서드를 찾지 못했습니다.");
+                    return;
                 }
 
-                // 3. TravelPlayer.INNER_Result.BufferProcess 패치 (RVA: 0x41A070)
-                // TravelPlayer는 Il2CppStargazer.Play 네임스페이스에 위치하며, INNER_Result는 private nested 타입입니다.
-                if (!_patched.Contains(nameof(BufferProcess_Prefix)))
+                if (fallbackReason is not null && WarnOnceKey($"resolve.{targetType.Name}.{exactNames[0]}"))
                 {
-                    var innerResultType = typeof(TravelPlayer).GetNestedType("INNER_Result", BindingFlags.NonPublic | BindingFlags.Public)
-                        ?? System.Linq.Enumerable.FirstOrDefault(typeof(TravelPlayer).GetNestedTypes(BindingFlags.NonPublic | BindingFlags.Public),
-                            t => t.Name.IndexOf("Result", StringComparison.OrdinalIgnoreCase) >= 0);
-                    if (innerResultType != null)
-                    {
-                        var expectedParams = new[] { typeof(TickEventData) };
-                        MethodInfo? bufferProcessMethod = ResolveJudgeMethod(
-                            innerResultType,
-                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
-                            new[] { "BufferProcess" },
-                            "Buffer",
-                            typeof(void),
-                            expectedParams);
-                        if (bufferProcessMethod != null)
-                        {
-                            var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(BufferProcess_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
-                            harmony.Patch(bufferProcessMethod, prefix: new HarmonyMethod(prefix));
-                            _patched.Add(nameof(BufferProcess_Prefix));
-                            MelonLogger.Msg($"[JudgePatch] ✓ TravelPlayer.{innerResultType.Name}.{bufferProcessMethod.Name} (결과/점수 BLUE 집계) 패치 성공");
-                        }
-                        else
-                        {
-                            WarnOnce("BufferProcess", "[JudgePatch] BufferProcess 메서드를 찾지 못했습니다.");
-                        }
-                    }
-                    else
-                    {
-                        WarnOnce("INNER_Result", "[JudgePatch] TravelPlayer+INNER_Result 타입을 찾지 못했습니다.");
-                    }
+                    MelonLogger.Warning($"[JudgePatch][resolve] {targetType.Name}.{exactNames[0]} 대체 해석({fallbackReason}): {method.Name}");
                 }
 
-                // 4. JudgementWidget.Watch 패치 (RVA: 0x41CDD0)
-                if (!_patched.Contains(nameof(JudgementWidget_Watch_Prefix)))
+                MethodInfo? hookMethod = typeof(JudgeAllPerfectPatch).GetMethod(hookMethodName, BindingFlags.Static | BindingFlags.NonPublic);
+                if (hookMethod is null)
                 {
-                    var expectedParams = new[] { typeof(TickEventData) };
-                    MethodInfo? watchMethod = ResolveJudgeMethod(
-                        typeof(JudgementWidget),
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
-                        new[] { "Watch" },
-                        "Watch",
-                        typeof(void),
-                        expectedParams);
-                    if (watchMethod != null)
-                    {
-                        var prefix = typeof(JudgeAllPerfectPatch).GetMethod(nameof(JudgementWidget_Watch_Prefix), BindingFlags.Static | BindingFlags.NonPublic);
-                        harmony.Patch(watchMethod, prefix: new HarmonyMethod(prefix));
-                        _patched.Add(nameof(JudgementWidget_Watch_Prefix));
-                        MelonLogger.Msg($"[JudgePatch] ✓ JudgementWidget.{watchMethod.Name} (UI 블루 이펙트) 패치 성공");
-                    }
-                    else
-                    {
-                        WarnOnce("Watch", "[JudgePatch] JudgementWidget.Watch 메서드를 찾지 못했습니다.");
-                    }
+                    return;
                 }
 
-                HookHealth.Report("올 퍼펙트 판정", _patched.Count, TotalPatchCount);
-                if (_patched.Count >= TotalPatchCount)
+                if (isPrefix)
                 {
-                    MelonLogger.Msg($"=================================================");
-                    MelonLogger.Msg($" [JudgeAllPerfectPatch] 올 퍼펙트 시스템 초기화 완료 ({_patched.Count}/{TotalPatchCount})");
-                    MelonLogger.Msg($" AllPerfect 활성 상태: {CustomConfig.AllPerfect}");
-                    MelonLogger.Msg($"=================================================");
+                    harmony.Patch(method, prefix: new HarmonyMethod(hookMethod));
                 }
-                else if (_patched.Count != patchedBefore || WarnOnceKey("partial"))
+                else
                 {
-                    MelonLogger.Warning($"[JudgePatch] 올 퍼펙트 패치가 {_patched.Count}/{TotalPatchCount}개만 적용됐습니다. 다음 초기화 시점(후기 초기화/씬 로드)에 빠진 패치만 다시 시도합니다.");
+                    harmony.Patch(method, postfix: new HarmonyMethod(hookMethod));
                 }
+
+                _patched.Add(hookMethodName);
+                MelonLogger.Msg($"[JudgePatch] ✓ {targetType.Name}.{method.Name} ({description}) 패치 성공");
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"[JudgePatch] 초기화 중 예외 발생: {ex}");
+                WarnOnce($"patch.{hookMethodName}", $"[JudgePatch] {targetTypeLabel}.{exactNames[0]} 패치 중 예외: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -186,111 +235,44 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static MethodInfo? ResolveJudgeMethod(
-            Type targetType,
-            BindingFlags flags,
-            string[] exactNames,
-            string preferredNameFragment,
-            Type expectedReturnType,
-            Type[] expectedParamTypes)
-        {
-            foreach (string exactName in exactNames)
-            {
-                MethodInfo? exact = AccessTools.Method(targetType, exactName, expectedParamTypes);
-                if (exact is not null)
-                {
-                    return exact;
-                }
-            }
-
-            var signatureMatches = new List<MethodInfo>();
-            var fragmentMatches = new List<MethodInfo>();
-            foreach (MethodInfo method in targetType.GetMethods(flags))
-            {
-                if (method.DeclaringType != targetType || method.ReturnType != expectedReturnType)
-                {
-                    continue;
-                }
-
-                ParameterInfo[] parameters = method.GetParameters();
-                if (parameters.Length != expectedParamTypes.Length)
-                {
-                    continue;
-                }
-
-                bool paramsMatch = true;
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    if (parameters[i].ParameterType != expectedParamTypes[i])
-                    {
-                        paramsMatch = false;
-                        break;
-                    }
-                }
-
-                if (!paramsMatch)
-                {
-                    continue;
-                }
-
-                signatureMatches.Add(method);
-                if (method.Name.IndexOf(preferredNameFragment, StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    fragmentMatches.Add(method);
-                }
-            }
-
-            if (fragmentMatches.Count == 1)
-            {
-                MelonLogger.Warning($"[JudgePatch][resolve] {targetType.Name}.{exactNames[0]} 대체 해석(이름 조각+시그니처 유일): {fragmentMatches[0].Name}");
-                return fragmentMatches[0];
-            }
-
-            if (signatureMatches.Count == 1)
-            {
-                MelonLogger.Warning($"[JudgePatch][resolve] {targetType.Name}.{exactNames[0]} 대체 해석(시그니처 유일): {signatureMatches[0].Name}");
-                return signatureMatches[0];
-            }
-
-            return null;
-        }
-
         private static bool ShouldApplyAllPerfect()
         {
             return CustomConfig.AllPerfect
                 && (!CustomConfig.AllPerfectCustomOnly || StargazerCustomChartMod.IsCustomChartPlayActive);
         }
 
-        private static void FromTimeDiffernce_Postfix(ref EJudgements __result, ref float judgeTiming)
+        // Harmony 위치 기반 바인딩(__0, __2)을 사용해 게임 업데이트로 파라미터 이름이 바뀌거나
+        // IL2CPP 메타데이터에서 이름이 스트립돼도 안전하게 바인딩된다.
+        private static void FromTimeDiffernce_Postfix(ref EJudgements __result, ref float __2)
         {
             if (ShouldApplyAllPerfect())
             {
                 __result = EJudgements.BLUE; // 무조건 최고 판정 (BLUESTAR = 0)
-                judgeTiming = 0.0f; // 오차 0ms (FAST/SLOW 오프셋 제거)
+                __2 = 0.0f; // 오차 0ms (FAST/SLOW 오프셋 제거)
             }
         }
 
-        private static void TryJudgeHead_Postfix(bool __result, ref EJudgements result)
+        private static void TryJudgeHead_Postfix(bool __result, ref EJudgements __2)
         {
             if (ShouldApplyAllPerfect() && __result)
             {
-                result = EJudgements.BLUE;
+                __2 = EJudgements.BLUE;
             }
         }
 
-        private static void BufferProcess_Prefix(TickEventData te)
+        private static void BufferProcess_Prefix(TickEventData __0)
         {
-            if (ShouldApplyAllPerfect() && te != null)
+            if (ShouldApplyAllPerfect() && __0 != null)
             {
-                te.judge = EJudgements.BLUE;
+                __0.judge = EJudgements.BLUE;
             }
         }
 
-        private static void JudgementWidget_Watch_Prefix(TickEventData t)
+        private static void JudgementWidget_Watch_Prefix(TickEventData __0)
         {
-            if (ShouldApplyAllPerfect() && t != null)
+            if (ShouldApplyAllPerfect() && __0 != null)
             {
-                t.judge = EJudgements.BLUE;
+                __0.judge = EJudgements.BLUE;
             }
         }
     }

@@ -59,13 +59,13 @@ STARGAZER custom chart/
 ├── README.md                            # 본 문서
 ├── build.bat                            # 모드 빌드 및 Mods 폴더 배포 스크립트
 ├── scripts/
-│   ├── build_mod.bat                    # 모드 빌드 및 Mods 폴더 배포 스크립트
 │   ├── dump_il2cpp.ps1                  # Il2CppDumper 자동 실행
 │   ├── decompile.ps1                    # 게임 어셈블리를 decompiled/로 디컴파일
 │   ├── strip_bodies.py                  # 디컴파일 결과에서 시그니처만 추출 (decompile.ps1이 호출)
 │   ├── disasm.ps1                       # 특정 클래스/메서드 심볼 주석 어셈블리 덤프
 │   └── slice.ps1                        # 조각 PE 추출 (정적 분석용)
 ├── docs/                                # 문서 (목록과 분류는 docs/README.md)
+├── STARGAZER custom chart.Tests/        # 게임 DLL 불필요 xUnit 단위 테스트 (net8.0)
 └── STARGAZER custom chart/
     ├── STARGAZER custom chart.csproj    # C# 프로젝트 파일 (빌드 후 게임 Mods 폴더로 자동 복사)
     ├── Properties/                      # 어셈블리 정보

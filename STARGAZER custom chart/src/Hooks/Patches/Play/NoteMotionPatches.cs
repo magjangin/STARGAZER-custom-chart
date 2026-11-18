@@ -37,8 +37,10 @@ namespace STARGAZER_custom_chart
                 // ApplyNoteMotion의 프레임 가드가 두 번째 호출을 걸러 낸다.
                 var specs = new[]
                 {
-                    new PatchSpec("Il2CppStargazer.Play.StargazerNote", "Behaviour", 1, "Single"),
-                    new PatchSpec("Il2CppStargazer.Play.StargazerLongNote", "Behaviour", 1, "Single"),
+                    new PatchSpec("Il2CppStargazer.Play.StargazerNote", "Behaviour", 1, "Single")
+                        .WithAlternates("UpdateBehaviour", "OnBehaviour"),
+                    new PatchSpec("Il2CppStargazer.Play.StargazerLongNote", "Behaviour", 1, "Single")
+                        .WithAlternates("UpdateBehaviour", "OnBehaviour"),
                 };
 
                 if (!PrepareTargets(ResolvedTargets, specs, "노트 연출"))

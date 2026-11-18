@@ -68,10 +68,14 @@
   2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음).
   3. 이름은 같고 파라미터 개수만 맞는 후보가 **유일**할 때만 경고와 함께 채택.
   - 대체 해석이 일어나면 `[HookPatch][resolve]` 경고가 로그에 남는다 → 업데이트 후 로그에서 이 태그부터 확인할 것.
-- **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시.
+- **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시하며, 로드된 어셈블리 수가 늘어나면 `_shortTypeNameIndex`를 자동 재구축해 지연 로드 어셈블리도 놓치지 않는다.
 - **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다/오타 수정 메서드 등)도 같은 핸들러에 연결된다.
 - **타입 기반 멤버 폴백 (`ReflectionSupport.TryGetMemberByType`)**: 기대 이름(예: `currentTrack`, `beatInfo`, `property`, `notes`, `PlayData`, `PlayTrack`)을 먼저 조회하고 모두 없으면 기대 타입 짧은 이름의 **유일** 멤버(`k__BackingField`/`<*>` 후순위)로 자동 대체 해석해 `TypeFallbackAccessorCache`에 캐시하고 `[HookPatch][resolve]` 경고를 남김. 기대 타입이 `"List<T>"` 형태일 때 정확 일치 후보가 없으면 원소 타입 `T`가 같은 배열/컬렉션(`T[]`, `Il2CppReferenceArray<T>`, `IList<T>` 등) 유일 후보로 한 단계 더 폴백함.
-- **패치별 안전 해석**: `JudgeAllPerfectPatch.ResolveJudgeMethod`는 정확 이름 → 이름 조각+시그니처 일치 → 유일 시그니처 일치 순으로 해석하며, `TrackUnlockAllPatch`는 반환 타입(`typeof(T)`) 검증 + 대체 프로퍼티/메서드명 + 고유 enum(`ELockType`) 유일 getter 폴백을 사용.
+- **패치별 안전 해석 & 격리 (2026-11-19 보강)**:
+  - `JudgeAllPerfectPatch`와 `TrackUnlockAllPatch`는 `Initialize()`에서 컴파일 타임 `typeof` 대신 `ResolveGameType`으로 대상 타입을 해석하고 각 패치를 개별 `try/catch`로 격리해, 한 타입이 이동·삭제돼도 JIT 실패로 전체 패치가 죽지 않고 나머지 훅이 살아남는다.
+  - `JudgeAllPerfectPatch`는 `PatchResolutionLogic.ResolveNestedType`(유일성 보장) + `ResolveMethodByShortSignature`(짧은 타입명·`ref` 여부 일치) 및 Harmony 위치 기반 바인딩(`__0`/`__2`)을 사용해 파라미터 이름 변경/메타데이터 스트립에도 내성을 가진다.
+  - `HookNoteProbes.BmsInject`의 `GetOrBuildNoteMeta`/`GetOrBuildNotePropertyMeta`는 `Note.property`와 `NoteProperty.linked` 이름이 바뀔 경우 `NoteProperty` 타입·`None/StartPoint/EndPoint` enum 일치 유일 멤버로 폴백한다.
+  - `FocusedTrackViewerProbe`는 타입 미발견 시에도 `HookHealth.Report(..., 0, 4, "타입 미발견")`을 기록해 `[Health]` 요약에서 누락되지 않게 한다.
 - **UI 세터 & 플레이 상태 진입부 내성 강화 (2026-11-18)**:
   - `CustomBgmSupport.UpdateCustomChartPlayState`(`PlayerBase.Play` 진입부)가 `TravelArgs`에서 `PlayLevel`/`PlayTrack`을 추출할 때 `TryGetMemberByType`(`ELevels`/`ITrackData`)을 사용하여 프로퍼티 이름 변경 시에도 커스텀 곡 판정(`IsCustomChartPlayActive`)이 끊기지 않도록 통일.
   - `CustomBgmLoaderPatch.Prefix`가 런타임 메서드명 대신 `TryGetResolvedTargetLogicalName(__originalMethod)`를 우선 참조하여 `LoadPreviewClip`이 대체 이름(예: `LoadPreviewBGM`)으로 연결돼도 프리뷰 음원을 정확히 서빙.
@@ -191,5 +195,5 @@
   3. `[Health]` 가 "일부/실패"면 해당 기능의 `PatchSpec`(PatchTargetSupport.cs) 또는 수동 패치 대상 이름을 `dump_game_reference` 등으로 재확인.
   4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
   5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
-- **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`는 `Il2CppStargazer.*` 타입을 컴파일 타임 참조(`typeof`)한다. 인터롭에서 타입이 이동·삭제되면 런타임 해석 폴백이 아니라 **빌드 오류**로 드러난다.
+- **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`의 `Initialize()`는 `ResolveGameType`으로 런타임 해석·격리되지만, 개별 훅 핸들러 시그니처는 `EJudgements`/`TickEventData`/`ELockType`을 직접 참조한다. 인터롭에서 해당 enum/이벤트 타입이 이동·삭제되면 재빌드 시 컴파일 오류로 드러난다.
 - **변경 이력**: [CHANGELOG.md](CHANGELOG.md) 참고 (과거 작업 일지는 `docs/archive/` 보관).
