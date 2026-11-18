@@ -8,30 +8,33 @@ using UnityEngine;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // INNER_TrackData.LoadJacketSprite(Action<Sprite>)는 LoadBGMClip/LoadPreviewClip과
         // 시그니처가 동일한 트랙별 콜백 로더다(decompiled/Assembly-CSharp/Il2CppStargazer/TrackLoader.cs).
         // TryGetAlbumForTrack(객체 동일성 기준)으로 그 트랙이 어느 앨범(hwa 하위 폴더)인지 찾아
         // 그 앨범의 자켓 이미지를 서빙한다 — BGM 서빙과 같은 방식.
-        private static readonly Dictionary<string, Sprite> CustomJacketCache = new Dictionary<string, Sprite>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, (Sprite Sprite, DateTime LastWriteUtc)> CustomJacketCache =
+            new Dictionary<string, (Sprite, DateTime)>(StringComparer.OrdinalIgnoreCase);
 
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
-            if (CustomJacketCache.TryGetValue(fullPath, out Sprite? cached))
+            if (!File.Exists(fullPath))
             {
-                if (cached != null)
+                CustomJacketCache.Remove(fullPath);
+                return null;
+            }
+
+            DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
+            if (CustomJacketCache.TryGetValue(fullPath, out var cached))
+            {
+                if (cached.Sprite != null && cached.LastWriteUtc == lastWriteUtc)
                 {
-                    return cached;
+                    return cached.Sprite;
                 }
 
                 CustomJacketCache.Remove(fullPath);
-            }
-
-            if (!File.Exists(fullPath))
-            {
-                return null;
             }
 
             try
@@ -49,7 +52,7 @@ namespace STARGAZER_custom_chart
                 var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
                 sprite.name = "CustomJacket_" + Path.GetFileNameWithoutExtension(fullPath);
                 sprite.hideFlags |= HideFlags.DontUnloadUnusedAsset;
-                CustomJacketCache[fullPath] = sprite;
+                CustomJacketCache[fullPath] = (sprite, lastWriteUtc);
                 MelonLogger.Msg($"[CustomJacket] Cached custom jacket: {fullPath} ({texture.width}x{texture.height})");
                 return sprite;
             }

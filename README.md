@@ -19,12 +19,13 @@
 
 ### 🎼 BMS 차트 주입 (BMS Chart Injection)
 * 커스텀 곡을 플레이하면 패턴이 로드된 직후 차트 전체를 폴더의 `.bms` 내용으로 교체합니다.
-* BMS 마디 하나를 게임의 `Area` 하나로, 마디 안 위치를 `BeatInfo` 분수로 그대로 옮깁니다.
+* `cosmic.bms`, `stellar.bms`, `void.bms`(또는 `*_cosmic.bms` 등)를 두면 난이도별로 다른 차트를 사용할 수 있고, 없으면 기본 `.bms`로 폴백합니다.
+* BMS 마디 하나를 게임의 `Area` 하나로, 마디 안 위치를 `BeatInfo` 분수로 그대로 옮깁니다. (고정 BPM / 4/4 박자 기준)
 
 ### 🎯 올 퍼펙트 판정 모드 (All-Perfect Mode)
 * 키 입력 시 타이밍 오차 없이 무조건 BLUE(BLUESTAR) 최고 판정으로 유도하고 결과/점수/콤보 100% 반영 및 연출을 고정합니다.
 * `JudgementExtension.FromTimeDiffernce`, `JudgementExtension.TryJudgeHead`, `TravelPlayer.INNER_Result.BufferProcess`, `JudgementWidget.Watch` 4중 런타임 패치 적용.
-* `savecustomkey/config.txt`의 `AllPerfect` 옵션(`true`/`false`)으로 손쉽게 켜고 끌 수 있습니다.
+* `savecustomkey/config.txt`의 `AllPerfect` 옵션(기본값 `false`)으로 켜고 끌 수 있으며, `AllPerfectCustomOnly`(기본값 `true`)로 커스텀 곡에서만 작동하게 제한합니다. (`AllPerfectCustomOnly=false`로 공식 곡에 켤 경우 공식 기록 오염 방지를 위해 저장이 차단됩니다.)
 
 ### 🔓 전곡 해금 및 볼트 제한 해제 (Unlock All)
 * 오프라인 영구 보존 환경에서도 볼트(VOLT)/DLC/어드벤처 잠금 없이 모든 공식 수록곡을 즉시 플레이할 수 있습니다.
@@ -87,8 +88,9 @@ STARGAZER custom chart/
 * **타겟 플랫폼**: PC Steam (Sixtar Gate: STARGAZER, IL2CPP)
 
 ### 💻 빌드 및 배포 방법
-1. Visual Studio를 통해 `STARGAZER custom chart.slnx` 솔루션을 엽니다.
-2. 빌드를 실행하거나, `scripts/build_mod.bat` 스크립트를 사용하여 최신 빌드된 DLL 파일을 게임 디렉토리 내 `Mods/` 폴더에 자동으로 복사해 배포할 수 있습니다.
+1. Visual Studio를 통해 `STARGAZER custom chart.slnx` 솔루션을 열거나 루트의 `build.bat`를 실행합니다.
+2. 빌드 후 `STARGAZER custom chart.csproj`의 배포 타깃이 게임 디렉토리 내 `Mods/` 폴더로 DLL을 자동 복사합니다.
+3. 게임 의존성이 없는 단위 테스트는 `dotnet test "STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj"`로 실행할 수 있습니다.
 
 빌드에는 게임 폴더의 `MelonLoader/Il2CppAssemblies/`(MelonLoader가 게임 실행 시 생성하는 인터롭 DLL)가 필요합니다.
 이 폴더가 없으면 게임을 MelonLoader와 함께 한 번 실행한 뒤 빌드하세요.
@@ -104,7 +106,7 @@ STARGAZER custom chart/
 * [BMS 변환 규칙](docs/REFERENCE_BMS_CONVERSION.md) — 채널·레인 매핑, 분수 매핑, 롱노트
 * [커스텀 트랙 파이프라인](docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md) — 어느 훅이 무엇을 하는지
 * [올 퍼펙트 판정 시스템](docs/REFERENCE_ALL_PERFECT.md) — 4중 후킹을 통한 무조건 최고 판정 유도 구조
-* [최신 작업 일지 (2026-08-08)](docs/WORKLOG_04_CUSTOM_TRACK_PIPELINE_2026-08-08.md)
+* [변경 이력 (CHANGELOG)](CHANGELOG.md) — 리팩토링 · 개선 · 테스트 기록 (과거 일지는 `docs/archive/`)
 
 ---
 

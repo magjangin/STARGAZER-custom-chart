@@ -69,8 +69,17 @@ namespace STARGAZER_custom_chart
 
             foreach (CustomAlbum album in result)
             {
+                foreach (string warning in album.Warnings)
+                {
+                    MelonLogger.Warning($"[Album][{album.Name}] {warning}");
+                }
+
+                string levelBms = album.LevelBmsPaths.Count == 0
+                    ? string.Empty
+                    : $" levelBms={string.Join("/", album.LevelBmsPaths.Select(kvp => $"{kvp.Key}:{Describe(kvp.Value)}"))}";
+
                 MelonLogger.Msg($"[Album] {album.Name}: title={album.DisplayName} artist={album.Artist} "
-                    + $"bms={Describe(album.BmsPath)} music={Describe(album.MusicPath)} jacket={Describe(album.JacketPath)} "
+                    + $"bms={Describe(album.BmsPath)}{levelBms} music={Describe(album.MusicPath)} jacket={Describe(album.JacketPath)} "
                     + $"levels={(album.Info is null || album.Info.Levels.Count == 0 ? "<none>" : string.Join("/", album.Info.Levels.Select(kvp => $"{kvp.Key}={kvp.Value}")))}");
             }
 

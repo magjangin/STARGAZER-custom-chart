@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private const BindingFlags InstanceMemberFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
@@ -38,8 +38,12 @@ namespace STARGAZER_custom_chart
                     {
                         return Property.GetValue(instance);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.GetProp.{Name}.{instance.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 프로퍼티 읽기 실패({instance.GetType().Name}.{Name}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -49,8 +53,12 @@ namespace STARGAZER_custom_chart
                     {
                         return Field.GetValue(instance);
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.GetField.{Name}.{instance.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 필드 읽기 실패({instance.GetType().Name}.{Name}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -60,8 +68,12 @@ namespace STARGAZER_custom_chart
                     {
                         return Getter.Invoke(instance, Array.Empty<object>());
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.GetMethod.{Name}.{instance.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 게터 호출 실패({instance.GetType().Name}.{Name}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -94,8 +106,12 @@ namespace STARGAZER_custom_chart
                         Property.SetValue(owner, value);
                         return true;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.SetProp.{Property.Name}.{owner.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 프로퍼티 쓰기 실패({owner.GetType().Name}.{Property.Name}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -106,8 +122,12 @@ namespace STARGAZER_custom_chart
                         Field.SetValue(owner, value);
                         return true;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.SetField.{Field.Name}.{owner.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 필드 쓰기 실패({owner.GetType().Name}.{Field.Name}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -118,8 +138,12 @@ namespace STARGAZER_custom_chart
                         Method.Invoke(owner, new[] { value });
                         return true;
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"Reflection.SetMethod.{Method.Name}.{owner.GetType().FullName}"))
+                        {
+                            MelonLogger.Warning($"[Reflection] 세터 호출 실패({owner.GetType().Name}.{Method.Name}): {ex.Message}");
+                        }
                     }
                 }
 

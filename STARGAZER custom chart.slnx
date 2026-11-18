@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="STARGAZER custom chart/STARGAZER custom chart.csproj" />
+  <Project Path="STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj" />
 </Solution>

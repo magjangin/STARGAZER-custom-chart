@@ -55,14 +55,14 @@ namespace STARGAZER_custom_chart
             new Dictionary<string, (DateTime, BmsChart)>(StringComparer.OrdinalIgnoreCase);
 
         public double Bpm { get; private set; } = 120;
-        public int SuppressedNoiseCount { get; private set; }
         public List<BmsMeasure> Measures { get; } = new List<BmsMeasure>();
+        public List<string> Warnings { get; } = new List<string>();
 
         // 사운드 ID -> 노트 종류. 로그로 매핑 결과를 확인할 수 있게 공개해 둔다.
         public IReadOnlyDictionary<string, BmsNoteKind> SoundKinds { get; private set; }
             = new Dictionary<string, BmsNoteKind>();
 
-        public static BmsChart? TryGetOrParse(string filePath, bool enableNoiseSuppression = false)
+        public static BmsChart? TryGetOrParse(string filePath)
         {
             if (string.IsNullOrEmpty(filePath))
             {
@@ -88,7 +88,7 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            BmsChart? parsed = TryParse(fullPath, enableNoiseSuppression);
+            BmsChart? parsed = TryParse(fullPath);
             if (parsed is not null)
             {
                 lock (CacheLock)
@@ -163,7 +163,7 @@ namespace STARGAZER_custom_chart
             return BmsNoteKind.Normal;
         }
 
-        public static BmsChart? TryParse(string filePath, bool enableNoiseSuppression = false)
+        public static BmsChart? TryParse(string filePath)
         {
             if (!File.Exists(filePath))
             {
@@ -173,7 +173,9 @@ namespace STARGAZER_custom_chart
             string[] rawLines = SafeTextReader.ReadAllLines(filePath);
             var dataLineIndices = new List<int>(rawLines.Length);
             var wavDefinitions = new List<(string RawId, string FileName)>();
+            var warnings = new List<string>();
             double bpm = 120;
+            bool warnedNoSpaceBpm = false;
 
             for (int lineIdx = 0; lineIdx < rawLines.Length; lineIdx++)
             {
@@ -195,12 +197,25 @@ namespace STARGAZER_custom_chart
 
                 // 곡 BPM 헤더는 "#BPM 140" 형태만이다. "#BPM01 180"처럼 번호가 붙은 줄은 채널 08(BPM 변경)이
                 // 참조하는 정의라, 같이 읽으면 마지막 정의 값이 곡 전체 BPM을 덮어쓴다.
-                if (line.Length > 4 && line.Slice(0, 4).Equals("#BPM".AsSpan(), StringComparison.OrdinalIgnoreCase) && char.IsWhiteSpace(line[4]))
+                if (line.Length > 4 && line.Slice(0, 4).Equals("#BPM".AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
-                    ReadOnlySpan<char> valueSpan = line.Slice(4).Trim();
-                    if (double.TryParse(valueSpan, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedBpm) && parsedBpm > 0)
+                    if (char.IsWhiteSpace(line[4]))
                     {
-                        bpm = parsedBpm;
+                        ReadOnlySpan<char> valueSpan = line.Slice(4).Trim();
+                        if (double.TryParse(valueSpan, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedBpm) && parsedBpm > 0)
+                        {
+                            bpm = parsedBpm;
+                        }
+                        continue;
+                    }
+
+                    ReadOnlySpan<char> afterBpm = line.Slice(4);
+                    if (afterBpm.IndexOfAny(' ', '\t') < 0
+                        && double.TryParse(afterBpm, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
+                        && !warnedNoSpaceBpm)
+                    {
+                        warnedNoSpaceBpm = true;
+                        warnings.Add("#BPM 헤더에 공백이 없어 무시되었습니다('#BPM 140' 형식만 지원).");
                     }
                     continue;
                 }
@@ -225,7 +240,11 @@ namespace STARGAZER_custom_chart
             }
 
             var chart = new BmsChart { Bpm = bpm, SoundKinds = kindBySoundId };
+            chart.Warnings.AddRange(warnings);
             var measuresByIndex = new Dictionary<int, BmsMeasure>();
+            bool hasMeasureLengthChange = false;
+            bool hasBpmChange = false;
+            bool hasStop = false;
 
             foreach (int lineIdx in dataLineIndices)
             {
@@ -242,7 +261,25 @@ namespace STARGAZER_custom_chart
                 }
 
                 // 노트로 취급하지 않는 채널: 01=BGM, 02=마디 길이, 03/08=BPM변경, 09=STOP.
-                if (channel is 1 or 2 or 3 or 8 or 9)
+                if (channel == 2)
+                {
+                    hasMeasureLengthChange = true;
+                    continue;
+                }
+
+                if (channel is 3 or 8)
+                {
+                    hasBpmChange = true;
+                    continue;
+                }
+
+                if (channel == 9)
+                {
+                    hasStop = true;
+                    continue;
+                }
+
+                if (channel == 1)
                 {
                     continue;
                 }
@@ -284,36 +321,20 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            int suppressedNoiseCount = 0;
-            if (enableNoiseSuppression)
+            if (hasMeasureLengthChange)
             {
-                foreach (BmsMeasure measure in measuresByIndex.Values)
-                {
-                    if (measure.Notes.Count > 1)
-                    {
-                        var uniqueNotes = new List<BmsNoteEvent>(measure.Notes.Count);
-                        var seenPositions = new HashSet<(int Channel, int Num, int Denom)>();
-
-                        foreach (BmsNoteEvent note in measure.Notes)
-                        {
-                            var key = (note.Channel, note.BeatNumerator, note.BeatDenominator);
-                            if (seenPositions.Add(key))
-                            {
-                                uniqueNotes.Add(note);
-                            }
-                            else
-                            {
-                                suppressedNoiseCount++;
-                            }
-                        }
-
-                        measure.Notes.Clear();
-                        measure.Notes.AddRange(uniqueNotes);
-                    }
-                }
+                chart.Warnings.Add("마디 길이 변경(채널 02)은 지원하지 않아 4/4 박자로 고정 처리됩니다.");
             }
 
-            chart.SuppressedNoiseCount = suppressedNoiseCount;
+            if (hasBpmChange)
+            {
+                chart.Warnings.Add("곡 중 BPM 변경(채널 03/08)은 지원하지 않아 초기 #BPM으로 고정 처리됩니다.");
+            }
+
+            if (hasStop)
+            {
+                chart.Warnings.Add("STOP 기믹(채널 09)은 지원하지 않아 무시됩니다.");
+            }
 
             // 중간에 비어있는 마디(노트가 없는 마디)가 누락되면 타임라인 영역(Area) 순서가 당겨져
             // 노트가 곡보다 일찍 끝나고 박자가 어긋나게 된다. 0부터 maxIndex까지 모든 마디를 순서대로 채운다.

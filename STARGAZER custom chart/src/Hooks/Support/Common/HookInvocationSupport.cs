@@ -7,7 +7,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // ─────────────────────────────────────────────────────────────────────────────
         // 공용 Prefix/Postfix 디스패치

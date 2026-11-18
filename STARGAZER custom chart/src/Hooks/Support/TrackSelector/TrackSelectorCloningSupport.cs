@@ -7,7 +7,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private static object? CloneTrackData(object sourceTrack, Type trackType, Type metaType)
         {
@@ -229,9 +229,12 @@ namespace STARGAZER_custom_chart
                     object? val = field.GetValue(source);
                     field.SetValue(target, val);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // 중요하지 않은 복사 오류는 무시합니다.
+                    if (LogOnce($"Clone.Field.{source.GetType().FullName}.{field.Name}"))
+                    {
+                        MelonLogger.Warning($"[TrackSelector.Set] 필드 복사 건너뜀({source.GetType().Name}.{field.Name}): {ex.Message}");
+                    }
                 }
             }
 
@@ -244,9 +247,12 @@ namespace STARGAZER_custom_chart
                     object? val = prop.GetValue(source);
                     prop.SetValue(target, val);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // 중요하지 않은 복사 오류는 무시합니다.
+                    if (LogOnce($"Clone.Prop.{source.GetType().FullName}.{prop.Name}"))
+                    {
+                        MelonLogger.Warning($"[TrackSelector.Set] 프로퍼티 복사 건너뜀({source.GetType().Name}.{prop.Name}): {ex.Message}");
+                    }
                 }
             }
         }

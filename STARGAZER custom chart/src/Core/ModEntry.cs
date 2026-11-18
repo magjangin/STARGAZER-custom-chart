@@ -4,9 +4,9 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod : MelonMod
+    public sealed partial class StargazerCustomChartMod : MelonMod
     {
-        private static readonly HarmonyLib.Harmony RuntimeHarmonyInstance = new HarmonyLib.Harmony("com.example.stargazer.customchart");
+        private static readonly HarmonyLib.Harmony RuntimeHarmonyInstance = new HarmonyLib.Harmony("com.hwayoungwang.stargazer.customchart");
 
         public override void OnInitializeMelon()
         {
@@ -15,6 +15,8 @@ namespace STARGAZER_custom_chart
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
 
                 SafeTextReader.EnsureInitialized();
+                CustomConfig.LogInfo = MelonLogger.Msg;
+                CustomConfig.LogWarning = MelonLogger.Warning;
                 EnsureAlbumRootExists();
 
                 // 여기서 한 번 읽어 두면 savecustomkey 폴더와 기본 config.txt가 없을 때 만들어진다.
@@ -48,6 +50,17 @@ namespace STARGAZER_custom_chart
         {
             try
             {
+                if (string.IsNullOrEmpty(sceneName) || sceneName.IndexOf("Play", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    ResetPlaySessionState();
+                    if (!string.IsNullOrEmpty(sceneName)
+                        && (sceneName.IndexOf("Title", StringComparison.OrdinalIgnoreCase) >= 0
+                            || sceneName.IndexOf("Main", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        LevelSelectorAlbum = null;
+                    }
+                }
+
                 ApplyDeferredPatches();
             }
             catch (Exception ex)

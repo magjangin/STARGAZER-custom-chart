@@ -39,6 +39,21 @@ namespace STARGAZER_custom_chart
 
         private static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg" };
 
+        private static readonly HashSet<string> NonInfoTxtNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "readme.txt", "license.txt", "changelog.txt", "credits.txt",
+        };
+
+        private static readonly HashSet<string> NonJacketImageStems = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "bg", "background", "bga", "stage", "banner", "wall", "wallpaper",
+        };
+
+        private static readonly string[] CanonicalLevels = { "cosmic", "stellar", "void" };
+
+        private readonly Dictionary<string, string> _levelBmsPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _warnings = new List<string>();
+
         private CustomAlbum(string directoryPath)
         {
             DirectoryPath = directoryPath;
@@ -49,16 +64,29 @@ namespace STARGAZER_custom_chart
         public string Name { get; }
         public CustomTrackInfo? Info { get; private set; }
         public string? BmsPath { get; private set; }
+        public IReadOnlyDictionary<string, string> LevelBmsPaths => _levelBmsPaths;
         public string? MusicPath { get; private set; }
         public string? PreviewPath { get; private set; }
         public string? JacketPath { get; private set; }
+        public IReadOnlyList<string> Warnings => _warnings;
 
         // 표시명은 info.txt의 제목을 쓰고, 없으면 폴더 이름으로 대체한다.
         public string DisplayName => string.IsNullOrEmpty(Info?.Title) ? Name : Info!.Title!;
         public string Artist => string.IsNullOrEmpty(Info?.Artist) ? "화영왕" : Info!.Artist!;
 
         // 곡으로 인정하는 최소 조건: 차트나 음원 중 하나는 있어야 한다.
-        public bool IsPlayable => BmsPath is not null || MusicPath is not null;
+        public bool IsPlayable => BmsPath is not null || _levelBmsPaths.Count > 0 || MusicPath is not null;
+
+        public string? GetBmsPath(string? levelKey)
+        {
+            if (!string.IsNullOrWhiteSpace(levelKey)
+                && _levelBmsPaths.TryGetValue(levelKey.Trim(), out string? levelPath))
+            {
+                return levelPath;
+            }
+
+            return BmsPath;
+        }
 
         public static CustomAlbum? TryLoad(string directoryPath)
         {
@@ -72,6 +100,7 @@ namespace STARGAZER_custom_chart
             try
             {
                 files = Directory.GetFiles(directoryPath);
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
             }
             catch
             {
@@ -90,7 +119,7 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            album.BmsPath = FirstWithExtension(byExtension, ".bms");
+            album.ResolveBmsPaths(files);
 
             // 음원은 MusicNameCandidates 후보를 우선하고, 없으면 .ogg/.mp3 순으로 찾는다.
             // 폴더 내 BMS 키음(*.wav)과의 충돌을 피하기 위해 명시적인 음악 파일명 후보군을 우선시한다.
@@ -99,12 +128,96 @@ namespace STARGAZER_custom_chart
                 ?? FirstWithExtension(byExtension, ".mp3");
 
             album.PreviewPath = FindFirstCandidate(byName, PreviewNameCandidates) ?? album.MusicPath;
-            album.JacketPath = FindJacket(files, byName);
+            album.JacketPath = album.FindJacket(files, byName);
 
-            string? infoPath = FirstNamed(byName, "info.txt") ?? FirstWithExtension(byExtension, ".txt");
+            string? infoPath = album.ResolveInfoPath(files, byName);
             album.Info = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
 
             return album;
+        }
+
+        private void ResolveBmsPaths(string[] sortedFiles)
+        {
+            var bmsFiles = sortedFiles
+                .Where(f => string.Equals(Path.GetExtension(f), ".bms", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (bmsFiles.Count == 0)
+            {
+                return;
+            }
+
+            var generalBms = new List<string>();
+            foreach (string file in bmsFiles)
+            {
+                string stem = Path.GetFileNameWithoutExtension(file);
+                string? matchedLevel = MatchLevelFromStem(stem);
+                if (matchedLevel is not null)
+                {
+                    // 정확히 "cosmic.bms" 형태가 접미사("*_cosmic.bms")보다 우선한다.
+                    if (!_levelBmsPaths.ContainsKey(matchedLevel)
+                        || string.Equals(stem, matchedLevel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _levelBmsPaths[matchedLevel] = file;
+                    }
+                }
+                else
+                {
+                    generalBms.Add(file);
+                }
+            }
+
+            if (generalBms.Count > 1)
+            {
+                _warnings.Add($"기본 .bms 파일이 {generalBms.Count}개 발견되어 '{Path.GetFileName(generalBms[0])}' 를 사용합니다.");
+            }
+
+            BmsPath = generalBms.Count > 0
+                ? generalBms[0]
+                : (_levelBmsPaths.TryGetValue("stellar", out string? stellar)
+                    ? stellar
+                    : _levelBmsPaths.Values.FirstOrDefault());
+        }
+
+        private static string? MatchLevelFromStem(string stem)
+        {
+            foreach (string level in CanonicalLevels)
+            {
+                if (string.Equals(stem, level, StringComparison.OrdinalIgnoreCase)
+                    || stem.EndsWith("_" + level, StringComparison.OrdinalIgnoreCase)
+                    || stem.EndsWith("-" + level, StringComparison.OrdinalIgnoreCase))
+                {
+                    return level;
+                }
+            }
+
+            return null;
+        }
+
+        private string? ResolveInfoPath(string[] sortedFiles, Dictionary<string, string> byName)
+        {
+            string? explicitInfo = FirstNamed(byName, "info.txt");
+            if (explicitInfo is not null)
+            {
+                return explicitInfo;
+            }
+
+            var txtCandidates = sortedFiles
+                .Where(f => string.Equals(Path.GetExtension(f), ".txt", StringComparison.OrdinalIgnoreCase)
+                    && !NonInfoTxtNames.Contains(Path.GetFileName(f)))
+                .ToList();
+
+            if (txtCandidates.Count == 0)
+            {
+                return null;
+            }
+
+            if (txtCandidates.Count > 1)
+            {
+                _warnings.Add($"info.txt 없이 .txt 파일이 {txtCandidates.Count}개 있어 '{Path.GetFileName(txtCandidates[0])}' 를 사용합니다.");
+            }
+
+            return txtCandidates[0];
         }
 
         private static string? FindFirstCandidate(Dictionary<string, string> byName, string[] candidates)
@@ -129,7 +242,7 @@ namespace STARGAZER_custom_chart
             return byExtension.TryGetValue(extension, out string? hit) ? hit : null;
         }
 
-        private static string? FindJacket(string[] files, Dictionary<string, string> byName)
+        private string? FindJacket(string[] sortedFiles, Dictionary<string, string> byName)
         {
             string? candidateHit = FindFirstCandidate(byName, JacketNameCandidates);
             if (candidateHit is not null)
@@ -137,8 +250,26 @@ namespace STARGAZER_custom_chart
                 return candidateHit;
             }
 
-            // 이름 후보와 안 맞아도 이미지 확장자면 자켓으로 인정한다(사용자가 자유롭게 이름 지어도 되도록).
-            return files.FirstOrDefault(f => ImageExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase));
+            var imageFiles = sortedFiles
+                .Where(f => ImageExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (imageFiles.Count == 0)
+            {
+                return null;
+            }
+
+            var preferred = imageFiles
+                .Where(f => !NonJacketImageStems.Contains(Path.GetFileNameWithoutExtension(f)))
+                .ToList();
+
+            string selected = preferred.Count > 0 ? preferred[0] : imageFiles[0];
+            if (imageFiles.Count > 1)
+            {
+                _warnings.Add($"자켓 후보 이미지가 {imageFiles.Count}개 있어 '{Path.GetFileName(selected)}' 를 자켓으로 사용합니다.");
+            }
+
+            return selected;
         }
     }
 }

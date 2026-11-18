@@ -3,7 +3,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 마지막으로 처리한 Pattern의 IL2CPP 포인터. PlayerBase.Play마다 비운다(UpdateCustomChartPlayState).
         private static IntPtr LastProbedPatternPtr;

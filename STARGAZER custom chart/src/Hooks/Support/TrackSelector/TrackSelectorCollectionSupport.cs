@@ -7,7 +7,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 복제 원본(공식 "Starting Point")을 찾는 용도로만 쓴다.
         // 주의: 우리가 주입한 커스텀 트랙도 이 원본의 복제본이라 TrackID가 똑같으므로,
@@ -32,11 +32,10 @@ namespace STARGAZER_custom_chart
             return trackId is not null && trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
         }
 
-        // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 -> 그 트랙이 어느 앨범(hwa 하위 폴더)에서 왔는지.
-        // 커스텀 트랙은 공식 트랙의 복제본이라 TrackID도, 표시명도(사용자가 info.txt로 바꾸므로)
-        // 식별 기준이 될 수 없다. 우리가 직접 생성한 객체이므로 포인터 동일성이 유일하게 확실한 기준이고,
-        // 앨범이 여러 개이므로 어느 트랙이 어느 폴더인지도 여기서 같이 관리한다.
-        private static readonly Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums = new Dictionary<IntPtr, CustomAlbum>();
+        // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 -> (앨범, 관리 래퍼 참조).
+        // 관리 래퍼 참조를 함께 보관해야 GC 수거로 네이티브 핸들이 해제되어 주소가 재사용되는 위험을 막는다.
+        private static readonly Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbums =
+            new Dictionary<IntPtr, (CustomAlbum, object)>();
 
         private static IntPtr TryGetIl2CppPointer(object instance)
         {
@@ -66,7 +65,7 @@ namespace STARGAZER_custom_chart
                 return;
             }
 
-            InjectedCustomTrackAlbums[ptr] = album;
+            InjectedCustomTrackAlbums[ptr] = (album, track);
         }
 
         private static bool IsCustomChartTrack(object? track) => TryGetAlbumForTrack(track) is not null;
@@ -85,7 +84,7 @@ namespace STARGAZER_custom_chart
                 return null;
             }
 
-            return InjectedCustomTrackAlbums.TryGetValue(ptr, out CustomAlbum? album) ? album : null;
+            return InjectedCustomTrackAlbums.TryGetValue(ptr, out var entry) ? entry.Album : null;
         }
 
         private static readonly ConcurrentDictionary<Type, (MethodInfo? Method, Type? ItemType)> InsertMethodCache =

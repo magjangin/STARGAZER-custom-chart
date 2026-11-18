@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
@@ -20,14 +19,19 @@ namespace STARGAZER_custom_chart
             "# STARGAZER Custom Chart 설정\n"
             + "# 값을 바꾼 뒤 게임을 다시 시작하면 적용됩니다.\n";
 
-        // 파일 생성과 "빠진 항목 덧붙이기"가 같은 정의를 쓰도록 한곳에 모아 둔다.
+        internal static Action<string> LogInfo = _ => { };
+        internal static Action<string> LogWarning = _ => { };
+
+        // 파일 생성·누락 항목 추가·기본값 조회가 모두 이 단일 정의를 사용한다.
         private static readonly ConfigEntry[] Entries =
         {
             new ConfigEntry("autoplay", "false",
                 "오토플레이 강제 사용 여부 (true = 자동 연주, false = 직접 플레이)"),
 
-            new ConfigEntry("AllPerfect", "true",
+            new ConfigEntry("AllPerfect", "false",
                 "올 퍼펙트 판정 모드 (true = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, false = 기본 판정)"),
+            new ConfigEntry("AllPerfectCustomOnly", "true",
+                "올 퍼펙트 판정을 커스텀 곡에서만 적용할지 여부 (true = 커스텀 곡 전용, false = 공식 곡에도 적용 및 공식 기록 저장 차단)"),
 
             new ConfigEntry("UnlockAll", "true",
                 "전곡 해금 및 볼트 제한 해제 (true = 볼트/DLC/어드벤처 잠금 없이 모든 공식 수록곡 즉시 플레이 가능, false = 기본 잠금 유지)"),
@@ -54,18 +58,38 @@ namespace STARGAZER_custom_chart
             new ConfigEntry("NoteSpeedChaosPerLane", "1",
                 "1 = 레인마다 속도가 다름(같은 레인 안에서는 순서 유지, 읽을 수는 있음)",
                 "0 = 노트마다 속도가 다름(완전 카오스)"),
+
+            new ConfigEntry("VerboseInvocationLogging", "false",
+                "[디버그] Harmony 훅 호출 로그 출력 여부 (true = 켜짐, false = 꺼짐)"),
+            new ConfigEntry("FocusedHarmonyInvocationLogging", "true",
+                "[디버그] VerboseInvocationLogging 활성 시 주요 훅만 로그 출력 (true = 주요 훅만, false = 전체)"),
+            new ConfigEntry("RuntimeProbeLogging", "false",
+                "[디버그] 런타임 프로브 상세 로그 출력 여부"),
+            new ConfigEntry("TrackSelectorVerboseLogging", "false",
+                "[디버그] TrackSelector 주입 상세 로그 출력 여부"),
         };
+
+        private static readonly Dictionary<string, string> DefaultsByKey = BuildDefaultsMap();
+
+        private static Dictionary<string, string> BuildDefaultsMap()
+        {
+            var map = new Dictionary<string, string>(Entries.Length, StringComparer.OrdinalIgnoreCase);
+            foreach (ConfigEntry entry in Entries)
+            {
+                map[entry.Key] = entry.DefaultValue;
+            }
+            return map;
+        }
 
         // 파일을 한 번만 읽어 만든 값 묶음. 설정은 게임 재시작 시에만 바뀌므로(HeaderText 안내) 다시 읽지 않는다.
         // 노트 연출/판정 훅이 프레임·노트마다 읽으므로 접근은 null 검사 1회로 끝나야 한다.
         private static Settings? _current;
 
-        private static Settings Current => _current ??= Load();
+        private static Settings Current => _current ??= Load(FolderPath, FilePath);
 
-        // 기본값 false는 config.txt를 새로 만들 때 쓰는 값(Entries의 "autoplay")과 같다.
-        // 파일을 못 읽거나 값을 해석하지 못해도 오토플레이가 멋대로 켜지지 않게 맞춰 둔다.
         public static bool AutoPlay => Current.AutoPlay;
         public static bool AllPerfect => Current.AllPerfect;
+        public static bool AllPerfectCustomOnly => Current.AllPerfectCustomOnly;
         public static bool UnlockAll => Current.UnlockAll;
         public static bool NoteSway => Current.NoteSway;
         public static float NoteSwayAmplitude => Current.NoteSwayAmplitude;
@@ -76,35 +100,45 @@ namespace STARGAZER_custom_chart
         public static float NoteSpeedChaosMin => Current.NoteSpeedChaosMin;
         public static float NoteSpeedChaosMax => Current.NoteSpeedChaosMax;
         public static bool NoteSpeedChaosPerLane => Current.NoteSpeedChaosPerLane;
+        public static bool VerboseInvocationLogging => Current.VerboseInvocationLogging;
+        public static bool FocusedHarmonyInvocationLogging => Current.FocusedHarmonyInvocationLogging;
+        public static bool RuntimeProbeLogging => Current.RuntimeProbeLogging;
+        public static bool TrackSelectorVerboseLogging => Current.TrackSelectorVerboseLogging;
 
         public static string FolderPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName);
 
         public static string FilePath => Path.Combine(FolderPath, FileName);
 
-        private static Settings Load()
+        internal static Settings LoadFromFolder(string folderPath)
         {
-            // 중간에 예외가 나도 그때까지 읽은 값과 나머지 기본값으로 계속 돈다(예전 동작과 같음).
-            var settings = new Settings();
+            return Load(folderPath, Path.Combine(folderPath, FileName));
+        }
+
+        private static Settings Load(string folderPath, string filePath)
+        {
+            // Entries 기본값으로 초기화된 Settings를 만든 뒤 파일 값으로 덮어쓴다.
+            var settings = CreateDefaultSettings();
 
             try
             {
-                if (!Directory.Exists(FolderPath))
+                if (!Directory.Exists(folderPath))
                 {
-                    Directory.CreateDirectory(FolderPath);
-                    MelonLogger.Msg($"[Config] 설정 폴더를 만들었습니다: {FolderPath}");
+                    Directory.CreateDirectory(folderPath);
+                    LogInfo($"[Config] 설정 폴더를 만들었습니다: {folderPath}");
                 }
 
-                if (!File.Exists(FilePath))
+                if (!File.Exists(filePath))
                 {
-                    File.WriteAllText(FilePath, BuildDefaultContents());
-                    MelonLogger.Msg($"[Config] 기본 설정 파일을 만들었습니다: {FilePath}");
+                    File.WriteAllText(filePath, BuildDefaultContents());
+                    LogInfo($"[Config] 기본 설정 파일을 만들었습니다: {filePath}");
                 }
 
-                Dictionary<string, string> values = ParseFile(FilePath);
-                AppendMissingEntries(values);
+                Dictionary<string, string> values = ParseFile(filePath);
+                AppendMissingEntries(filePath, values);
 
                 settings.AutoPlay = ReadBool(values, "autoplay", settings.AutoPlay);
                 settings.AllPerfect = ReadBool(values, "AllPerfect", settings.AllPerfect);
+                settings.AllPerfectCustomOnly = ReadBool(values, "AllPerfectCustomOnly", settings.AllPerfectCustomOnly);
                 settings.UnlockAll = ReadBool(values, "UnlockAll", settings.UnlockAll);
 
                 settings.NoteSway = ReadBool(values, "NoteSway", settings.NoteSway);
@@ -119,16 +153,55 @@ namespace STARGAZER_custom_chart
                 settings.NoteSpeedChaosPerLane = ReadBool(values, "NoteSpeedChaosPerLane", settings.NoteSpeedChaosPerLane);
                 NormalizeSpeedChaosRange(settings);
 
-                MelonLogger.Msg($"[Config] autoplay={settings.AutoPlay} AllPerfect={settings.AllPerfect} UnlockAll={settings.UnlockAll}");
-                MelonLogger.Msg($"[Config] NoteSway={settings.NoteSway} amplitude={settings.NoteSwayAmplitude} speed={settings.NoteSwaySpeed} damping={settings.NoteSwayDamping}/{settings.NoteSwayDampingTime}s");
-                MelonLogger.Msg($"[Config] NoteSpeedChaos={settings.NoteSpeedChaos} range={settings.NoteSpeedChaosMin}~{settings.NoteSpeedChaosMax} perLane={settings.NoteSpeedChaosPerLane}");
+                settings.VerboseInvocationLogging = ReadBool(values, "VerboseInvocationLogging", settings.VerboseInvocationLogging);
+                settings.FocusedHarmonyInvocationLogging = ReadBool(values, "FocusedHarmonyInvocationLogging", settings.FocusedHarmonyInvocationLogging);
+                settings.RuntimeProbeLogging = ReadBool(values, "RuntimeProbeLogging", settings.RuntimeProbeLogging);
+                settings.TrackSelectorVerboseLogging = ReadBool(values, "TrackSelectorVerboseLogging", settings.TrackSelectorVerboseLogging);
+
+                LogInfo($"[Config] autoplay={settings.AutoPlay} AllPerfect={settings.AllPerfect}(customOnly={settings.AllPerfectCustomOnly}) UnlockAll={settings.UnlockAll}");
+                LogInfo($"[Config] NoteSway={settings.NoteSway} amplitude={settings.NoteSwayAmplitude} speed={settings.NoteSwaySpeed} damping={settings.NoteSwayDamping}/{settings.NoteSwayDampingTime}s");
+                LogInfo($"[Config] NoteSpeedChaos={settings.NoteSpeedChaos} range={settings.NoteSpeedChaosMin}~{settings.NoteSpeedChaosMax} perLane={settings.NoteSpeedChaosPerLane}");
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[Config] 설정을 읽지 못해 기본값을 사용합니다: {ex.GetType().Name}: {ex.Message}");
+                LogWarning($"[Config] 설정을 읽지 못해 기본값을 사용합니다: {ex.GetType().Name}: {ex.Message}");
             }
 
             return settings;
+        }
+
+        private static Settings CreateDefaultSettings()
+        {
+            return new Settings
+            {
+                AutoPlay = GetDefaultBool("autoplay"),
+                AllPerfect = GetDefaultBool("AllPerfect"),
+                AllPerfectCustomOnly = GetDefaultBool("AllPerfectCustomOnly"),
+                UnlockAll = GetDefaultBool("UnlockAll"),
+                NoteSway = GetDefaultBool("NoteSway"),
+                NoteSwayAmplitude = GetDefaultFloat("NoteSwayAmplitude"),
+                NoteSwaySpeed = GetDefaultFloat("NoteSwaySpeed"),
+                NoteSwayDamping = GetDefaultBool("NoteSwayDamping"),
+                NoteSwayDampingTime = GetDefaultFloat("NoteSwayDampingTime"),
+                NoteSpeedChaos = GetDefaultBool("NoteSpeedChaos"),
+                NoteSpeedChaosMin = GetDefaultFloat("NoteSpeedChaosMin"),
+                NoteSpeedChaosMax = GetDefaultFloat("NoteSpeedChaosMax"),
+                NoteSpeedChaosPerLane = GetDefaultBool("NoteSpeedChaosPerLane"),
+                VerboseInvocationLogging = GetDefaultBool("VerboseInvocationLogging"),
+                FocusedHarmonyInvocationLogging = GetDefaultBool("FocusedHarmonyInvocationLogging"),
+                RuntimeProbeLogging = GetDefaultBool("RuntimeProbeLogging"),
+                TrackSelectorVerboseLogging = GetDefaultBool("TrackSelectorVerboseLogging"),
+            };
+        }
+
+        private static bool GetDefaultBool(string key)
+        {
+            return DefaultsByKey.TryGetValue(key, out string? raw) && ParseBool(raw, key, false);
+        }
+
+        private static float GetDefaultFloat(string key)
+        {
+            return DefaultsByKey.TryGetValue(key, out string? raw) ? ParseFloat(raw, key, 0f) : 0f;
         }
 
         // 배율이 0 이하면 노트가 멈추거나 뒤집혀 날아간다. 뒤집힌 범위도 여기서 바로잡는다.
@@ -138,14 +211,14 @@ namespace STARGAZER_custom_chart
 
             if (settings.NoteSpeedChaosMin < MinAllowed || settings.NoteSpeedChaosMax < MinAllowed)
             {
-                MelonLogger.Warning($"[Config] NoteSpeedChaos 배율은 {MinAllowed} 이상이어야 합니다. 값을 올려서 씁니다.");
+                LogWarning($"[Config] NoteSpeedChaos 배율은 {MinAllowed} 이상이어야 합니다. 값을 올려서 씁니다.");
                 settings.NoteSpeedChaosMin = Math.Max(MinAllowed, settings.NoteSpeedChaosMin);
                 settings.NoteSpeedChaosMax = Math.Max(MinAllowed, settings.NoteSpeedChaosMax);
             }
 
             if (settings.NoteSpeedChaosMin > settings.NoteSpeedChaosMax)
             {
-                MelonLogger.Warning("[Config] NoteSpeedChaosMin이 Max보다 큽니다. 두 값을 바꿔서 씁니다.");
+                LogWarning("[Config] NoteSpeedChaosMin이 Max보다 큽니다. 두 값을 바꿔서 씁니다.");
                 (settings.NoteSpeedChaosMin, settings.NoteSpeedChaosMax) = (settings.NoteSpeedChaosMax, settings.NoteSpeedChaosMin);
             }
         }
@@ -158,7 +231,7 @@ namespace STARGAZER_custom_chart
             return builder.ToString();
         }
 
-        // 항목 사이에 빈 줄을 넣되, 앞 항목과 설명을 공유하는 항목(Min/Max 같은 짝)은 붙여 쓴다.
+        // 항목 사이에 빈 줄을 넣되, 앞 항목과 설명을 공유하는 항목(Min/Max 짝)은 붙여 쓴다.
         private static void AppendEntries(StringBuilder builder, IReadOnlyList<ConfigEntry> entries)
         {
             for (int i = 0; i < entries.Count; i++)
@@ -174,7 +247,7 @@ namespace STARGAZER_custom_chart
         }
 
         // 모드를 업데이트해서 설정이 늘어나도 사용자가 파일을 지웠다 다시 만들지 않아도 되게 한다.
-        private static void AppendMissingEntries(Dictionary<string, string> values)
+        private static void AppendMissingEntries(string filePath, Dictionary<string, string> values)
         {
             var missing = new List<ConfigEntry>();
             foreach (ConfigEntry entry in Entries)
@@ -201,18 +274,18 @@ namespace STARGAZER_custom_chart
             try
             {
                 // 기존 파일이 줄바꿈으로 끝나지 않으면 마지막 설정 줄에 붙어 버린다.
-                if (!EndsWithNewLine(FilePath))
+                if (!EndsWithNewLine(filePath))
                 {
-                    File.AppendAllText(FilePath, "\n");
+                    File.AppendAllText(filePath, "\n");
                 }
 
-                File.AppendAllText(FilePath, builder.ToString());
-                MelonLogger.Msg($"[Config] 새로 생긴 설정 {missing.Count}개를 config.txt에 추가했습니다.");
+                File.AppendAllText(filePath, builder.ToString());
+                LogInfo($"[Config] 새로 생긴 설정 {missing.Count}개를 config.txt에 추가했습니다.");
             }
             catch (Exception ex)
             {
                 // 파일에 못 써도 기본값으로 계속 돌아가면 되므로 치명적이지 않다.
-                MelonLogger.Warning($"[Config] 새 설정을 파일에 추가하지 못했습니다: {ex.GetType().Name}: {ex.Message}");
+                LogWarning($"[Config] 새 설정을 파일에 추가하지 못했습니다: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -301,7 +374,7 @@ namespace STARGAZER_custom_chart
                 case "错":
                     return false;
                 default:
-                    MelonLogger.Warning($"[Config] {key} 값을 해석하지 못해 기본값({fallback})을 씁니다: {text}");
+                    LogWarning($"[Config] {key} 값을 해석하지 못해 기본값({fallback})을 씁니다: {text}");
                     return fallback;
             }
         }
@@ -316,25 +389,29 @@ namespace STARGAZER_custom_chart
                 return value;
             }
 
-            MelonLogger.Warning($"[Config] {key} 값을 숫자로 읽지 못해 기본값({fallback})을 씁니다: {text}");
+            LogWarning($"[Config] {key} 값을 숫자로 읽지 못해 기본값({fallback})을 씁니다: {text}");
             return fallback;
         }
 
-        // 기본값은 Entries의 기본값과 같게 유지한다(파일을 못 읽어도 새로 만든 파일과 같은 동작).
-        private sealed class Settings
+        internal sealed class Settings
         {
             public bool AutoPlay;
-            public bool AllPerfect = true;
-            public bool UnlockAll = true;
+            public bool AllPerfect;
+            public bool AllPerfectCustomOnly;
+            public bool UnlockAll;
             public bool NoteSway;
-            public float NoteSwayAmplitude = 20f;
-            public float NoteSwaySpeed = 0.8f;
-            public bool NoteSwayDamping = true;
-            public float NoteSwayDampingTime = 0.4f;
+            public float NoteSwayAmplitude;
+            public float NoteSwaySpeed;
+            public bool NoteSwayDamping;
+            public float NoteSwayDampingTime;
             public bool NoteSpeedChaos;
-            public float NoteSpeedChaosMin = 0.6f;
-            public float NoteSpeedChaosMax = 1.8f;
-            public bool NoteSpeedChaosPerLane = true;
+            public float NoteSpeedChaosMin;
+            public float NoteSpeedChaosMax;
+            public bool NoteSpeedChaosPerLane;
+            public bool VerboseInvocationLogging;
+            public bool FocusedHarmonyInvocationLogging;
+            public bool RuntimeProbeLogging;
+            public bool TrackSelectorVerboseLogging;
         }
 
         private sealed class ConfigEntry

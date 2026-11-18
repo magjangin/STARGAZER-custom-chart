@@ -5,12 +5,13 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private static void HandleTrackSelectorSetTracks(object tracks)
         {
             try
             {
+                ResetPlaySessionState();
                 if (EnableTrackSelectorVerboseLogging)
                 {
                     MelonLogger.Msg("[TrackSelector.Set] TrackSelector의 Set 메서드가 호출되었습니다!");
