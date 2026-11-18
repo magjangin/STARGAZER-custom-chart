@@ -48,8 +48,8 @@
 
 구현 파일: [`JudgeAllPerfectPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/Play/JudgeAllPerfectPatch.cs)
 
-### 3.1 동적 패치 초기화 (`Initialize`)
-게임 내 `JudgementExtension`, `TravelPlayer+INNER_Result`, `JudgementWidget`은 정적 리플렉션을 통해 타입을 획득합니다.
+### 3.1 동적 패치 초기화 (`Initialize`) 및 패치 격리
+대상 타입(`JudgementExtension`, `TravelPlayer`, `JudgementWidget`)은 컴파일 타임 `typeof` 대신 `StargazerCustomChartMod.ResolveGameType`으로 런타임에 해석합니다(네임스페이스 변경 시 짧은 타입명 폴백 포함). 또한 4개 패치가 각각 독립 `try/catch`로 격리되어 있어, 게임 업데이트로 한 타입이나 메서드가 사라지더라도 나머지 패치는 정상적으로 적용됩니다.
 `Initialize`는 아래 세 시점에서 불립니다:
 - `ModEntry.OnInitializeMelon()`: 모드 로드 시 1차 초기화
 - `ModEntry.OnLateInitializeMelon()`: 늦은 초기화 시점 보강
@@ -60,19 +60,22 @@
 `[JudgePatch] 올 퍼펙트 패치가 N/4개만 적용됐습니다` 경고가 남고, 다음 호출에서 재시도합니다.
 (이전에는 성공 개수와 무관하게 첫 호출 뒤 `_initialized`를 켜서, 일부가 실패해도 재시도하지 않았습니다.)
 
-### 3.2 중첩 클래스(Nested Type) 및 메서드 대체 해석 (`ResolveJudgeMethod`)
-- `TravelPlayer+INNER_Result`는 비공개 중첩 클래스이므로 `GetNestedType("INNER_Result", ...)`을 우선 조회하고, 이름이 바뀌었으면 `Result`를 포함하는 중첩 타입으로 폴백합니다.
-- 각 타깃 메서드는 `ResolveJudgeMethod`를 통해 3단계로 안전하게 해석합니다:
-  1. 정확 이름(예: `FromTimeDiffernce` 및 오타 수정 대비 `FromTimeDifference`) + 파라미터 시그니처 일치
+### 3.2 중첩 클래스(Nested Type), 시그니처 대체 해석, 위치 기반 바인딩
+- `TravelPlayer+INNER_Result`는 `ResolveGameType` 또는 `PatchResolutionLogic.ResolveNestedType`으로 조회하며, 이름이 바뀌었을 때는 `Result`를 포함하는 **유일한** 중첩 타입으로만 폴백합니다.
+- 각 타깃 메서드는 `PatchResolutionLogic.ResolveMethodByShortSignature`를 통해 3단계로 안전하게 해석합니다:
+  1. 정확 이름(예: `FromTimeDiffernce` 및 오타 수정 대비 `FromTimeDifference`) + 반환/파라미터 짧은 타입명 및 `ref` 여부 일치
   2. 선호 이름 조각(`TimeDiffer`, `JudgeHead`, `Buffer`, `Watch`) + 반환/파라미터 시그니처가 일치하는 **유일** 후보
   3. 반환/파라미터 시그니처가 일치하는 **유일** 후보 (대체 해석 발생 시 `[JudgePatch][resolve]` 경고 출력)
+- 4개 훅 핸들러는 파라미터 이름(`judgeTiming`, `result`, `te`, `t`) 대신 Harmony **위치 기반 바인딩(`__0`, `__2`)**을 사용하여 파라미터 이름 변경이나 메타데이터 스트립에 영향을 받지 않습니다.
 
 ---
 
 ## 4. 모드 설정 연동 (`CustomConfig`) 및 무(無)패치 최적화
 
 - **설정 파일 경로**: `savecustomkey/config.txt`
-- **설정 키**: `AllPerfect` (기본값: `true`)
+- **설정 키**:
+  - `AllPerfect` (기본값: `false`)
+  - `AllPerfectCustomOnly` (기본값: `true` — 커스텀 곡에서만 적용. `false`로 공식 곡에도 적용할 경우 `TrackRecordSaveGuardPatch`가 공식 기록 저장을 차단해 랭킹 오염을 방지합니다.)
 - **지원 형식**: `true/false`, `1/0`, `on/off`, `yes/no`, `켜기/끄기`, `사용/사용안함`, `是/否`, `开/关`
 
 `FromTimeDiffernce`, `TryJudgeHead`, `BufferProcess`, `Watch` 4개 메서드는 노트 판정마다 호출되는 핫패스입니다.

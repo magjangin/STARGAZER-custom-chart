@@ -7,7 +7,7 @@ using System.Linq;
 namespace STARGAZER_custom_chart
 {
     // BMS 텍스트 파서. 게임/Harmony/Unity 객체는 건드리지 않는다.
-    // 범위: 고정 BPM(#BPM 헤더 하나), 고정 4/4 마디 길이(채널 02 미지원).
+    // 범위: 고정 BPM(#BPM 헤더 하나), 마디 길이 변경(채널 02, 기본 4/4).
     // 롱노트는 #WAV 파일명으로 구분한다(아래 BmsNoteKind 참고).
     internal enum BmsNoteKind
     {
@@ -49,7 +49,7 @@ namespace STARGAZER_custom_chart
 
     internal sealed class BmsChart
     {
-        // 마디 길이 변경(채널 02)을 아직 안 읽으므로 모든 마디를 4/4(4비트)로 고정한다.
+        // 기본 마디 길이(4/4 = 4비트). 채널 02(#mmm02)가 있는 마디는 LengthRatio 배율로 스케일한다.
         private const int MeasureBeats = 4;
 
         private static readonly object CacheLock = new object();

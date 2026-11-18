@@ -394,7 +394,7 @@ namespace STARGAZER_custom_chart
                         : __originalMethod.Name.IndexOf("Preview", StringComparison.OrdinalIgnoreCase) >= 0;
                     string? path = isPreview ? album.PreviewPath : album.MusicPath;
 
-                    // 곡 선택 커서를 옮길 때마다 프리뷰가 요청되므로, 캐시 적중이면 디스크(File.Exists)를 보지 않는다.
+                    // 캐시 적중 시에는 수정 시각(핫리로드)만 확인하고 즉시 서빙한다.
                     if (path is not null && TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
                     {
                         if (LogOnce($"CustomBgm.Serve.{__originalMethod.Name}.{path}"))

@@ -47,6 +47,7 @@ namespace STARGAZER_custom_chart
                 Type? type = ResolveGameType("Il2CppStargazer.Travel.FocusedTrackViewer");
                 if (type is null)
                 {
+                    HookHealth.Report("선택 화면 난이도(FocusedTrackViewer)", 0, FocusedTrackViewerHookMethodNames.Count, "타입 미발견");
                     if (LogOnce("FocusedTrackViewerProbe.TypeMissing"))
                     {
                         LoggerInstance.Warning("[FocusedTrackViewerProbe] 로드된 어셈블리에서 Il2CppStargazer.Travel.FocusedTrackViewer 타입을 찾지 못했습니다.");

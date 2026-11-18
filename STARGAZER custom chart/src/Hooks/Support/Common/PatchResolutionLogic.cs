@@ -184,5 +184,128 @@ namespace STARGAZER_custom_chart
             string parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
             return $"{method.DeclaringType?.FullName}.{method.Name}({parameters})";
         }
+
+        internal static (Type? NestedType, bool UsedFallback) ResolveNestedType(
+            Type outerType,
+            string exactName,
+            string fallbackFragment)
+        {
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic;
+            Type? exact = outerType.GetNestedType(exactName, flags);
+            if (exact is not null)
+            {
+                return (exact, false);
+            }
+
+            if (string.IsNullOrEmpty(fallbackFragment))
+            {
+                return (null, false);
+            }
+
+            var matches = new List<Type>();
+            foreach (Type candidate in outerType.GetNestedTypes(flags))
+            {
+                if (candidate.Name.IndexOf(fallbackFragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    matches.Add(candidate);
+                }
+            }
+
+            return matches.Count == 1 ? (matches[0], true) : (null, false);
+        }
+
+        internal static bool MatchesTypeShortName(Type type, string expectedShortName, bool expectByRef)
+        {
+            if (type.IsByRef != expectByRef)
+            {
+                return false;
+            }
+
+            Type unwrapped = type.IsByRef ? (type.GetElementType() ?? type) : type;
+            return string.Equals(StripGenericArity(unwrapped.Name), expectedShortName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static (MethodInfo? Method, string? FallbackReason) ResolveMethodByShortSignature(
+            Type targetType,
+            BindingFlags flags,
+            string[] exactNames,
+            string preferredNameFragment,
+            string expectedReturnTypeName,
+            (string TypeName, bool IsByRef)[] expectedParams)
+        {
+            var signatureMatches = new List<MethodInfo>();
+            var fragmentMatches = new List<MethodInfo>();
+
+            foreach (MethodInfo method in targetType.GetMethods(flags))
+            {
+                if (method.DeclaringType != targetType || method.IsGenericMethod)
+                {
+                    continue;
+                }
+
+                if (!MatchesTypeShortName(method.ReturnType, expectedReturnTypeName, expectByRef: false))
+                {
+                    continue;
+                }
+
+                ParameterInfo[] parameters;
+                try
+                {
+                    parameters = method.GetParameters();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (parameters.Length != expectedParams.Length)
+                {
+                    continue;
+                }
+
+                bool paramsMatch = true;
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    if (!MatchesTypeShortName(parameters[i].ParameterType, expectedParams[i].TypeName, expectedParams[i].IsByRef))
+                    {
+                        paramsMatch = false;
+                        break;
+                    }
+                }
+
+                if (!paramsMatch)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < exactNames.Length; i++)
+                {
+                    if (string.Equals(method.Name, exactNames[i], StringComparison.Ordinal))
+                    {
+                        string? reason = i > 0 ? $"대체 이름({method.Name})" : null;
+                        return (method, reason);
+                    }
+                }
+
+                signatureMatches.Add(method);
+                if (!string.IsNullOrEmpty(preferredNameFragment)
+                    && method.Name.IndexOf(preferredNameFragment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    fragmentMatches.Add(method);
+                }
+            }
+
+            if (fragmentMatches.Count == 1)
+            {
+                return (fragmentMatches[0], "이름 조각+시그니처 유일");
+            }
+
+            if (signatureMatches.Count == 1)
+            {
+                return (signatureMatches[0], "시그니처 유일");
+            }
+
+            return (null, null);
+        }
     }
 }

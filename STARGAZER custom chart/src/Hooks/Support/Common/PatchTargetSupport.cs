@@ -83,6 +83,7 @@ namespace STARGAZER_custom_chart
         private static readonly object TypeLookupLock = new object();
         private static readonly Dictionary<string, Type> TypeLookupCache = new Dictionary<string, Type>(StringComparer.Ordinal);
         private static Dictionary<string, List<Type>>? _shortTypeNameIndex;
+        private static int _shortTypeNameIndexAssemblyCount = -1;
 
         private static readonly string[] NonGameAssemblyPrefixes =
         {
@@ -94,7 +95,7 @@ namespace STARGAZER_custom_chart
         // 정확한 FullName으로 먼저 찾고, 없으면 "외부타입+중첩타입" 꼴의 짧은 이름이 게임 어셈블리 안에서
         // 유일할 때만 그 타입을 쓴다(인터롭 재생성으로 네임스페이스 접두사가 바뀌는 업데이트 대비).
         // 찾은 결과만 캐시한다 — 못 찾은 이름을 캐시하면 늦게 로드되는 어셈블리를 영영 못 본다.
-        private static Type? ResolveGameType(string fullName)
+        internal static Type? ResolveGameType(string fullName)
         {
             lock (TypeLookupLock)
             {
@@ -148,10 +149,17 @@ namespace STARGAZER_custom_chart
         private static Type? ResolveGameTypeByShortName(string fullName)
         {
             string shortKey = GetShortTypeKey(fullName);
+            Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
             Dictionary<string, List<Type>> index;
             lock (TypeLookupLock)
             {
-                index = _shortTypeNameIndex ??= BuildShortTypeNameIndex();
+                if (_shortTypeNameIndex is null || _shortTypeNameIndexAssemblyCount != loadedAssemblies.Length)
+                {
+                    _shortTypeNameIndex = BuildShortTypeNameIndex(loadedAssemblies);
+                    _shortTypeNameIndexAssemblyCount = loadedAssemblies.Length;
+                }
+
+                index = _shortTypeNameIndex;
             }
 
             if (!index.TryGetValue(shortKey, out List<Type>? matches) || matches.Count == 0)
@@ -173,10 +181,10 @@ namespace STARGAZER_custom_chart
             return matches[0];
         }
 
-        private static Dictionary<string, List<Type>> BuildShortTypeNameIndex()
+        private static Dictionary<string, List<Type>> BuildShortTypeNameIndex(Assembly[] assemblies)
         {
             var index = new Dictionary<string, List<Type>>(StringComparer.Ordinal);
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (Assembly assembly in assemblies)
             {
                 if (assembly.IsDynamic || IsNonGameAssembly(assembly))
                 {

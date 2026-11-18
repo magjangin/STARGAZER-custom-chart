@@ -39,11 +39,12 @@ INNER_PatternLoader._Load_b__5_0(Pattern)   Layer.Areas를 BMS 차트로 교체
 그 포인터를 가진 객체만 커스텀으로 판정합니다.
 
 ```
-Dictionary<IntPtr, CustomAlbum> InjectedCustomTrackAlbums
+Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbums
 ```
 
 포인터가 곧 "어느 앨범인가"까지 알려주므로, 자켓·음원·차트·난이도가 모두 이 한 번의 조회로 자기 폴더를 찾습니다.
-주입할 때마다 이전 목록을 비웁니다(해제된 주소가 재사용되어 생기는 오탐 방지).
+관리 래퍼 참조(`TrackRef`)도 함께 보관해 GC 수거로 인한 네이티브 주소 재사용을 막으며,
+주입할 때마다 이전 목록을 비웁니다.
 
 관련 함수: `IsCustomChartTrack`, `TryGetAlbumForTrack`, `RegisterInjectedCustomTrack`
 (`src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs`)

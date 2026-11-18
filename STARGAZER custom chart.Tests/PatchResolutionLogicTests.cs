@@ -93,5 +93,74 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal("StargazerPlayer+INNER_PatternLoader",
                 PatchResolutionLogic.GetShortTypeKey("Il2CppStargazer.Play.StargazerPlayer+INNER_PatternLoader"));
         }
+
+        private enum FakeJudgement { BLUE = 0 }
+
+        private sealed class FakeOuterWithUniqueFallback
+        {
+            private sealed class PlayResultBuffer { }
+        }
+
+        private sealed class FakeOuterWithAmbiguousFallback
+        {
+            private sealed class PlayResultA { }
+            private sealed class PlayResultB { }
+        }
+
+        private sealed class FakeJudgeExtensions
+        {
+            public static FakeJudgement FromTimeDifference(float a, float b, ref float timing) => FakeJudgement.BLUE;
+            public static FakeJudgement RenamedMethod(float a, float b, float nonRef) => FakeJudgement.BLUE;
+            public static void ProcessBufferRenamed(OtherArg arg) { }
+        }
+
+        [Fact]
+        public void ResolveNestedType_FallsBackOnlyWhenUnique()
+        {
+            var (unique, usedFallback) = PatchResolutionLogic.ResolveNestedType(
+                typeof(FakeOuterWithUniqueFallback), "INNER_Result", "Result");
+            Assert.NotNull(unique);
+            Assert.True(usedFallback);
+            Assert.Equal("PlayResultBuffer", unique!.Name);
+
+            var (ambiguous, usedFallback2) = PatchResolutionLogic.ResolveNestedType(
+                typeof(FakeOuterWithAmbiguousFallback), "INNER_Result", "Result");
+            Assert.Null(ambiguous);
+            Assert.False(usedFallback2);
+        }
+
+        [Fact]
+        public void ResolveMethodByShortSignature_MatchesAlternateNameAndByRefDistinction()
+        {
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+            var (method, reason) = PatchResolutionLogic.ResolveMethodByShortSignature(
+                typeof(FakeJudgeExtensions),
+                flags,
+                new[] { "FromTimeDiffernce", "FromTimeDifference" },
+                "TimeDiffer",
+                "FakeJudgement",
+                new[] { ("Single", false), ("Single", false), ("Single", true) });
+
+            Assert.NotNull(method);
+            Assert.Equal("FromTimeDifference", method!.Name);
+            Assert.NotNull(reason);
+        }
+
+        [Fact]
+        public void ResolveMethodByShortSignature_FallsBackByUniqueFragmentAndSignature()
+        {
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+            var (method, reason) = PatchResolutionLogic.ResolveMethodByShortSignature(
+                typeof(FakeJudgeExtensions),
+                flags,
+                new[] { "BufferProcess" },
+                "Buffer",
+                "Void",
+                new[] { ("OtherArg", false) });
+
+            Assert.NotNull(method);
+            Assert.Equal("ProcessBufferRenamed", method!.Name);
+            Assert.Equal("이름 조각+시그니처 유일", reason);
+        }
     }
 }
