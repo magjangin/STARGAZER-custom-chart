@@ -18,20 +18,26 @@ namespace STARGAZER_custom_chart
         // 같은 역할의 철자 변형을 하나로 취급한다(키 = 기대 이름, 값 = 허용하는 대체 이름).
         private static readonly Dictionary<string, string[]> FocusedTrackViewerAlternateNames = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["FetchJacketImage"] = new[] { "FetchJacektImage" },
+            ["SetTrack"] = new[] { "SetFocusedTrack", "BindTrack" },
+            ["Refresh"] = new[] { "UpdateView", "RefreshView" },
+            ["FetchJacketImage"] = new[] { "FetchJacektImage", "SetJacketImage", "UpdateJacketImage" },
+            ["LoadPreviewBGM"] = new[] { "LoadPreviewClip", "LoadPreviewBgm", "PlayPreviewBGM" },
         };
 
         private static readonly MethodInfo? FocusedTrackViewerPostfixMethod =
             typeof(GameTypeEnumeratorMod).GetMethod(nameof(FocusedTrackViewerPostfix), BindingFlags.Static | BindingFlags.NonPublic);
 
-        private static bool _focusedTrackViewerPatched;
+        // 이미 패치된 메서드와 충족된 논리 역할 이름. 일부만 걸렸을 때 다음 씬 로드에서 빠진 역할만 다시 시도하되,
+        // 같은 메서드를 중복 패치하지 않는다(JudgeAllPerfectPatch / TrackUnlockAllPatch와 동일한 방식).
+        private static readonly HashSet<MethodBase> PatchedFocusedTrackViewerMethods = new HashSet<MethodBase>();
+        private static readonly HashSet<string> PatchedFocusedTrackViewerRoles = new HashSet<string>(StringComparer.Ordinal);
 
         [ThreadStatic]
         private static bool _isProbingFocusedTrackViewer;
 
         private void TryApplyFocusedTrackViewerPatches()
         {
-            if (_focusedTrackViewerPatched)
+            if (PatchedFocusedTrackViewerRoles.Count >= FocusedTrackViewerHookMethodNames.Count)
             {
                 return;
             }
@@ -48,74 +54,80 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                // 예전에는 getter/setter를 뺀 "모든" 선언 메서드를 걸었다. 그러면 업데이트로 Update/LateUpdate 같은
-                // 매 프레임 메서드가 생기는 순간 매 프레임 리플렉션 열거가 돌게 된다. 실측상 필요한 4개만 명시적으로 건다.
-                MethodInfo[] methods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
-                    .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
-                    .Where(m => IsFocusedTrackViewerHookName(m.Name))
-                    .ToArray();
-
-                foreach (string expected in FocusedTrackViewerHookMethodNames)
-                {
-                    if (!methods.Any(m => MatchesExpectedHookName(m.Name, expected))
-                        && LogOnce($"FocusedTrackViewerProbe.Missing.{expected}"))
-                    {
-                        LoggerInstance.Warning($"[FocusedTrackViewerProbe] {expected} 메서드를 찾지 못했습니다(게임 업데이트로 이름이 바뀌었을 수 있음).");
-                    }
-                }
-
                 if (FocusedTrackViewerPostfixMethod is null)
                 {
                     return;
                 }
 
-                int successCount = 0;
+                // 예전에는 getter/setter를 뺀 "모든" 선언 메서드를 걸었다. 그러면 업데이트로 Update/LateUpdate 같은
+                // 매 프레임 메서드가 생기는 순간 매 프레임 리플렉션 열거가 돌게 된다. 실측상 필요한 4개만 명시적으로 건다.
+                MethodInfo[] declaredMethods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                    .Where(m => !m.IsGenericMethod && !m.IsAbstract && m.DeclaringType == type)
+                    .ToArray();
+
+                int newlyPatched = 0;
                 var postfixHarmony = new HarmonyMethod(FocusedTrackViewerPostfixMethod);
-                foreach (MethodInfo method in methods)
+
+                foreach (string expectedRole in FocusedTrackViewerHookMethodNames)
                 {
-                    try
+                    MethodInfo[] roleMatches = declaredMethods
+                        .Where(m => MatchesExpectedHookName(m.Name, expectedRole))
+                        .ToArray();
+
+                    if (roleMatches.Length == 0)
                     {
-                        RuntimeHarmonyInstance.Patch(method, postfix: postfixHarmony);
-                        successCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        if (LogOnce($"FocusedTrackViewerProbe.PatchFail.{method.Name}"))
+                        if (LogOnce($"FocusedTrackViewerProbe.Missing.{expectedRole}"))
                         {
-                            LoggerInstance.Warning($"[FocusedTrackViewerProbe] {method.Name} 패치 실패: {ex.GetType().Name}: {ex.Message}");
+                            LoggerInstance.Warning($"[FocusedTrackViewerProbe] {expectedRole} 메서드를 찾지 못했습니다(게임 업데이트로 이름이 바뀌었을 수 있음).");
+                        }
+                        continue;
+                    }
+
+                    foreach (MethodInfo method in roleMatches)
+                    {
+                        if (PatchedFocusedTrackViewerMethods.Contains(method))
+                        {
+                            PatchedFocusedTrackViewerRoles.Add(expectedRole);
+                            continue;
+                        }
+
+                        if (!string.Equals(method.Name, expectedRole, StringComparison.Ordinal)
+                            && LogOnce($"FocusedTrackViewerProbe.Resolve.{expectedRole}.{method.Name}"))
+                        {
+                            LoggerInstance.Warning($"[HookPatch][resolve] FocusedTrackViewer.{expectedRole} 대신 대체 이름 '{method.Name}' 으로 연결합니다.");
+                        }
+
+                        try
+                        {
+                            RuntimeHarmonyInstance.Patch(method, postfix: postfixHarmony);
+                            PatchedFocusedTrackViewerMethods.Add(method);
+                            PatchedFocusedTrackViewerRoles.Add(expectedRole);
+                            newlyPatched++;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (LogOnce($"FocusedTrackViewerProbe.PatchFail.{method.Name}"))
+                            {
+                                LoggerInstance.Warning($"[FocusedTrackViewerProbe] {method.Name} 패치 실패: {ex.GetType().Name}: {ex.Message}");
+                            }
                         }
                     }
                 }
 
-                if (successCount > 0)
+                HookHealth.Report("선택 화면 난이도(FocusedTrackViewer)", PatchedFocusedTrackViewerRoles.Count, FocusedTrackViewerHookMethodNames.Count);
+                if (newlyPatched > 0)
                 {
-                    // 일부만 걸려도 기록은 남기되, 다 걸릴 때까지 다음 씬 로드에서 빠진 것을 다시 시도하지는 않는다(중복 패치 방지).
-                    _focusedTrackViewerPatched = true;
-                    HookHealth.Report("선택 화면 난이도(FocusedTrackViewer)", successCount, FocusedTrackViewerHookMethodNames.Count);
-                    LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {successCount}/{methods.Length} methods of FocusedTrackViewer (postfix only).");
+                    LoggerInstance.Msg($"[FocusedTrackViewerProbe] Successfully patched {PatchedFocusedTrackViewerRoles.Count}/{FocusedTrackViewerHookMethodNames.Count} roles ({PatchedFocusedTrackViewerMethods.Count} methods, postfix only).");
                 }
-                else if (LogOnce("FocusedTrackViewerProbe.NoneApplied"))
+                else if (PatchedFocusedTrackViewerRoles.Count == 0 && LogOnce("FocusedTrackViewerProbe.NoneApplied"))
                 {
-                    LoggerInstance.Warning($"[FocusedTrackViewerProbe] 패치된 메서드가 없습니다(후보 {methods.Length}개). 다음 씬 로드에서 다시 시도합니다.");
+                    LoggerInstance.Warning("[FocusedTrackViewerProbe] 패치된 메서드가 없습니다. 다음 씬 로드에서 다시 시도합니다.");
                 }
             }
             catch (Exception ex)
             {
                 LoggerInstance.Warning($"[FocusedTrackViewerProbe] 패치를 적용하지 못했습니다: {ex.GetType().Name}: {ex.Message}");
             }
-        }
-
-        private static bool IsFocusedTrackViewerHookName(string methodName)
-        {
-            foreach (string expected in FocusedTrackViewerHookMethodNames)
-            {
-                if (MatchesExpectedHookName(methodName, expected))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         private static bool MatchesExpectedHookName(string actual, string expected)

@@ -70,8 +70,14 @@
   - 대체 해석이 일어나면 `[HookPatch][resolve]` 경고가 로그에 남는다 → 업데이트 후 로그에서 이 태그부터 확인할 것.
 - **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시.
 - **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다/오타 수정 메서드 등)도 같은 핸들러에 연결된다.
-- **타입 기반 멤버 폴백 (`ReflectionSupport.TryGetMemberByType`)**: 기대 이름(예: `currentTrack`, `beatInfo`, `property`, `notes`, `PlayData`, `PlayTrack`)을 먼저 조회하고 모두 없으면 기대 타입 짧은 이름의 **유일** 멤버(`k__BackingField`/`<*>` 후순위)로 자동 대체 해석해 `TypeFallbackAccessorCache`에 캐시하고 `[HookPatch][resolve]` 경고를 남김.
-- **패치별 안전 해석**: `JudgeAllPerfectPatch.ResolveJudgeMethod`는 정확 이름 → 이름 조각+시그니처 일치 → 유일 시그니처 일치 순으로 해석하며, `TrackUnlockAllPatch`는 `AmbiguousMatchException`을 피하기 위해 이름·인자 수 기반 안전 조회를 사용.
+- **타입 기반 멤버 폴백 (`ReflectionSupport.TryGetMemberByType`)**: 기대 이름(예: `currentTrack`, `beatInfo`, `property`, `notes`, `PlayData`, `PlayTrack`)을 먼저 조회하고 모두 없으면 기대 타입 짧은 이름의 **유일** 멤버(`k__BackingField`/`<*>` 후순위)로 자동 대체 해석해 `TypeFallbackAccessorCache`에 캐시하고 `[HookPatch][resolve]` 경고를 남김. 기대 타입이 `"List<T>"` 형태일 때 정확 일치 후보가 없으면 원소 타입 `T`가 같은 배열/컬렉션(`T[]`, `Il2CppReferenceArray<T>`, `IList<T>` 등) 유일 후보로 한 단계 더 폴백함.
+- **패치별 안전 해석**: `JudgeAllPerfectPatch.ResolveJudgeMethod`는 정확 이름 → 이름 조각+시그니처 일치 → 유일 시그니처 일치 순으로 해석하며, `TrackUnlockAllPatch`는 반환 타입(`typeof(T)`) 검증 + 대체 프로퍼티/메서드명 + 고유 enum(`ELockType`) 유일 getter 폴백을 사용.
+- **UI 세터 & 플레이 상태 진입부 내성 강화 (2026-11-18)**:
+  - `CustomBgmSupport.UpdateCustomChartPlayState`(`PlayerBase.Play` 진입부)가 `TravelArgs`에서 `PlayLevel`/`PlayTrack`을 추출할 때 `TryGetMemberByType`(`ELevels`/`ITrackData`)을 사용하여 프로퍼티 이름 변경 시에도 커스텀 곡 판정(`IsCustomChartPlayActive`)이 끊기지 않도록 통일.
+  - `CustomBgmLoaderPatch.Prefix`가 런타임 메서드명 대신 `TryGetResolvedTargetLogicalName(__originalMethod)`를 우선 참조하여 `LoadPreviewClip`이 대체 이름(예: `LoadPreviewBGM`)으로 연결돼도 프리뷰 음원을 정확히 서빙.
+  - `LevelSelectorDisplaySupport`의 `levels`/`item`/`levelItems`/`targetLevel` 조회를 모두 `TryGetMemberByType`으로 전환하고, `LevelUnit.Set`·`LevelItem.FetchLevelText`·`TextProvider.DoTextSetter`에 대체 세터 이름(`SetLevel`, `SetLevelText`, `SetText` 등) 해석을 추가.
+  - `TrackSelectorCloningSupport.CloneTrackData`가 수동 4개 이름 조회 대신 `GetTrackMetaDataObject`(`INNER_TrackMetaData` 타입 폴백 포함)를 공유하고, `IsStartingPointTrack`도 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 `trackid`로 폴백.
+  - `FocusedTrackViewerProbe`가 단일 불리언 대신 역할(`PatchedFocusedTrackViewerRoles`)·메서드(`PatchedFocusedTrackViewerMethods`) 집합으로 추적하여 일부만 패치됐을 때 중복 패치 없이 빠진 역할만 재시도하고 대체 이름 연결 시 `[HookPatch][resolve]` 경고를 남김.
 - **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 이름 탐색 실패 시 `Action<Pattern>` 타입 폴백)를 래퍼로 교체. `로더 포인터 → 래퍼 델리게이트 포인터`를 기록해, 현재 onCompleted가 우리 래퍼면 재설치하지 않고 게임이 교체했으면 다시 감싼다. `PlayerBase.Play`마다 초기화.
 - **중복 주입 가드**: 람다 본문이 `onCompleted(=래퍼)`를 먼저 부르고 그 뒤 람다 Postfix가 불리므로 같은 Pattern이 두 번 들어온다. `ProbeNoteArrayMembers`가 **Pattern의 IL2CPP 네이티브 포인터**(`LastProbedPatternPtr`)로 거른다(공식곡 포함 — 같은 패턴 이중 순회 방지).
 
@@ -189,6 +195,7 @@
   5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
 - **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`는 `Il2CppStargazer.*` 타입을 컴파일 타임 참조(`typeof`)한다. 인터롭에서 타입이 이동·삭제되면 런타임 해석 폴백이 아니라 **빌드 오류**로 드러난다(런타임 조용한 실패보다 낫다고 판단). 이름 기반 `ResolveGameType`으로 완전 전환하는 것은 `ELockType`/`EJudgements` 같은 enum 형 `__result` 때문에 보류.
 - **검증 이력**:
+  - 2026-11-18 (업데이트 내성 전방위 보강·문서 동기화·MSB3270 경고 제거): `UpdateCustomChartPlayState`/`LevelSelectorDisplaySupport`/`CloneTrackData` 타입 기반 폴백 통일, `TryGetMemberByType` 컬렉션 원소 폴백 추가, `CustomBgmLoaderPatch` 논리 이름 기반 프리뷰 분기, `FocusedTrackViewerProbe` 역할별 재시도 추적, `TrackUnlockAllPatch` 반환 타입 검증 및 enum getter 폴백, `.csproj` `$(GamePath)` 일원화 및 `MSB3270` 경고 제거, `README.md`·`docs/` 5종 문서 최신화. MSBuild `Debug /t:Rebuild` 성공(오류 0, 경고 0) 및 `Mods\` 배포 완료.
   - 2026-11-16 (HookHealth·업데이트 감지·철자 변형 대응): MSBuild `Debug /t:Rebuild` 성공 및 `Mods\` 배포. **실기 기동·`[Health]` 로그 출력은 아직 미확인** — 다음 실행에서 `[Health]` 블록과 `.game-fingerprint` 생성부터 확인할 것.
   - 2026-11-14 (리팩토링 전 실기): 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치.
   - 2026-11-15 (훅 단계 분리·설정 기반 무패치·서빙 경로 경량화·죽은 코드 정리): MSBuild `Debug /t:Rebuild` 성공(오류 0, C# 경고 0, IDE0005 미사용 using 0, 기존 `MSB3270` 1건) 및 `Mods\` 배포. **실기 기동 확인**: 공용 훅 8개(Prefix 2 + Postfix 6) 전부 1단계 정확 일치, `[resolve]`·예외 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, 3개 앨범 `TrackSelector.Set` 주입 성공(정확 일치 세터로 `actual=` 제목 일치). **커스텀 곡 실제 플레이(BMS 주입·Save Guard·결과 화면 난이도)는 이번에도 미확인** — 다음 실기 때 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 로그부터 볼 것.

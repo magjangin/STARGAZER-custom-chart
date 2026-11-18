@@ -60,20 +60,20 @@
 `[JudgePatch] 올 퍼펙트 패치가 N/4개만 적용됐습니다` 경고가 남고, 다음 호출에서 재시도합니다.
 (이전에는 성공 개수와 무관하게 첫 호출 뒤 `_initialized`를 켜서, 일부가 실패해도 재시도하지 않았습니다.)
 
-### 3.2 중첩 클래스(Nested Type) 처리
-`TravelPlayer+INNER_Result`는 컴파일러가 생성한 비공개 내부 클래스이므로:
-```csharp
-var innerResultType = typeof(TravelPlayer).GetNestedType("INNER_Result", BindingFlags.NonPublic | BindingFlags.Public);
-var bufferProcessMethod = AccessTools.Method(innerResultType, "BufferProcess", new[] { typeof(TickEventData) });
-```
-형태로 안전하게 리플렉션 탐색 후 Prefix를 연결합니다.
+### 3.2 중첩 클래스(Nested Type) 및 메서드 대체 해석 (`ResolveJudgeMethod`)
+- `TravelPlayer+INNER_Result`는 비공개 중첩 클래스이므로 `GetNestedType("INNER_Result", ...)`을 우선 조회하고, 이름이 바뀌었으면 `Result`를 포함하는 중첩 타입으로 폴백합니다.
+- 각 타깃 메서드는 `ResolveJudgeMethod`를 통해 3단계로 안전하게 해석합니다:
+  1. 정확 이름(예: `FromTimeDiffernce` 및 오타 수정 대비 `FromTimeDifference`) + 파라미터 시그니처 일치
+  2. 선호 이름 조각(`TimeDiffer`, `JudgeHead`, `Buffer`, `Watch`) + 반환/파라미터 시그니처가 일치하는 **유일** 후보
+  3. 반환/파라미터 시그니처가 일치하는 **유일** 후보 (대체 해석 발생 시 `[JudgePatch][resolve]` 경고 출력)
 
 ---
 
-## 4. 모드 설정 연동 (`CustomConfig`)
+## 4. 모드 설정 연동 (`CustomConfig`) 및 무(無)패치 최적화
 
 - **설정 파일 경로**: `savecustomkey/config.txt`
 - **설정 키**: `AllPerfect` (기본값: `true`)
-- **지원 형식**: `true/false`, `1/0`, `on/off`, `yes/no`, `켜기/끄기`
+- **지원 형식**: `true/false`, `1/0`, `on/off`, `yes/no`, `켜기/끄기`, `사용/사용안함`, `是/否`, `开/关`
 
-모든 후크는 Prefix/Postfix 최상단에서 `CustomConfig.AllPerfect` 조건을 확인하므로, 옵션을 끄면(`AllPerfect=false`) 원본 게임의 판정 로직이 그대로 동작합니다.
+`FromTimeDiffernce`, `TryJudgeHead`, `BufferProcess`, `Watch` 4개 메서드는 노트 판정마다 호출되는 핫패스입니다.
+설정은 게임 시작 시 1회만 읽으므로, `AllPerfect=false`이면 `Initialize`에서 **아예 Harmony 패치를 걸지 않고** `HookHealth.ReportDisabled("올 퍼펙트 판정", "설정으로 꺼짐")`만 기록하여 런타임 트램펄린 오버헤드를 0으로 유지합니다.

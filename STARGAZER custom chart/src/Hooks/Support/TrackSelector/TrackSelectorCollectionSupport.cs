@@ -19,13 +19,17 @@ namespace STARGAZER_custom_chart
                 return false;
             }
 
-            Type type = track.GetType();
-            string? trackId = TryGetMemberValue(track, type, "TrackID")?.ToString()
-                ?? TryGetMemberValue(track, type, "TrackId")?.ToString()
-                ?? TryGetMemberValue(track, type, "trackId")?.ToString();
-            if (trackId is null) return false;
+            string? trackId = TryGetMemberValue(track, "TrackID", "TrackId", "trackId", "trackid")?.ToString();
+            if (trackId is null)
+            {
+                object? meta = GetTrackMetaDataObject(track);
+                if (meta is not null)
+                {
+                    trackId = TryGetMemberValue(meta, "trackid", "trackId", "TrackID", "TrackId")?.ToString();
+                }
+            }
 
-            return trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
+            return trackId is not null && trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
         }
 
         // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 -> 그 트랙이 어느 앨범(hwa 하위 폴더)에서 왔는지.

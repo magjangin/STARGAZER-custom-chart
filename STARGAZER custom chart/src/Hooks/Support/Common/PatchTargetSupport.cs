@@ -35,9 +35,13 @@ namespace STARGAZER_custom_chart
         {
             // ── Prefix ──
             // 곡 시작: 커스텀 플레이 상태 확정 + 오토플레이 강제(원본 Play 전에 해야 함).
-            new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs").InPhase(HookPhase.Prefix),
+            new PatchSpec("Il2CppStargazer.Play.PlayerBase", "Play", 1, "TravelArgs")
+                .WithAlternates("StartPlay", "BeginPlay")
+                .InPhase(HookPhase.Prefix),
             // 2차 경로(Dual-Wrapper): 원본 Load가 onCompleted를 쓰기 전에 래퍼로 감싼다.
-            new PatchSpec(PatternLoaderTypeName, "Load", 1, "TravelArgs").InPhase(HookPhase.Prefix),
+            new PatchSpec(PatternLoaderTypeName, "Load", 1, "TravelArgs")
+                .WithAlternates("LoadPattern", "BeginLoad")
+                .InPhase(HookPhase.Prefix),
 
             // ── Postfix ──
             // 컴파일러 생성 람다. 이름이 바뀌어도 ResolveLambdaMethod가 같은 소유 메서드(Load)의
@@ -45,18 +49,26 @@ namespace STARGAZER_custom_chart
             // INNER_PatternLoader.Load 훅이 onCompleted 델리게이트를 감싸는 2차 경로(Dual-Wrapper)가 받는다.
             // BGMPlayChecker / Play는 매 프레임 호출되므로 성능상 후킹하지 않는다.
             new PatchSpec(PatternLoaderTypeName, PatternLoaderLambdaName, 1, "Pattern").InPhase(HookPhase.Postfix),
-            new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1).InPhase(HookPhase.Postfix),
-            new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List").InPhase(HookPhase.Postfix),
-            new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData").InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Play.Widgets.CurrentTrackViewer", "Listen", 1)
+                .WithAlternates("Initialize", "Setup", "Bind", "SetTrack")
+                .InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Travel.TrackSelector.TrackSelector", "Set", 1, "List")
+                .WithAlternates("SetTracks", "SetTrackList", "Bind")
+                .InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Travel.Result.PlayInfoViewer", "ShowPlayInfo", 1, "ITravelResultData")
+                .WithAlternates("SetPlayInfo", "RefreshPlayInfo", "Bind")
+                .InPhase(HookPhase.Postfix),
             // Refresh는 패치하지 않는다: 호출 빈도가 매우 높고, 패치하면 LevelSelector::Refresh에서
             // NullReferenceException이 계속 발생했다(2026-08-08). 재적용은 이 두 훅에서 처리한다.
             // LevelSelector.SetTrack은 실측상 호출되지 않아(2026-08-08) 훅에서 뺐다 — 커스텀 트랙 판별은
             // FocusedTrackViewer 쪽(ApplyCustomLevelDisplayToFocusedViewer)이 맡는다.
-            new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord").InPhase(HookPhase.Postfix),
+            new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchTrackRecord", 1, "ITrackRecord")
+                .WithAlternates("SetTrackRecord", "UpdateTrackRecord", "RefreshTrackRecord")
+                .InPhase(HookPhase.Postfix),
             // 게임 원본 메서드의 오타(FetchJacektImage)가 향후 업데이트에서 FetchJacketImage로 수정돼도
             // 같은 논리 이름(HookKind.LevelSelectorFetchJacektImage)으로 연결되도록 대체 이름을 둔다.
             new PatchSpec("Il2CppStargazer.Travel.LevelSelector.LevelSelector", "FetchJacektImage", 1, "Sprite")
-                .WithAlternates("FetchJacketImage")
+                .WithAlternates("FetchJacketImage", "SetJacketImage", "UpdateJacketImage")
                 .InPhase(HookPhase.Postfix),
         };
 

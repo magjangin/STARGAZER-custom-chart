@@ -19,10 +19,7 @@ namespace STARGAZER_custom_chart
                     sourceTrack = concreteSourceTrack;
                 }
 
-                object? sourceMeta = TryGetMemberValue(sourceTrack, trackType, "_metaData")
-                                     ?? TryGetMemberValue(sourceTrack, trackType, "metaData")
-                                     ?? TryGetMemberValue(sourceTrack, trackType, "m_metaData")
-                                     ?? TryGetMemberValue(sourceTrack, trackType, "MetaData");
+                object? sourceMeta = GetTrackMetaDataObject(sourceTrack);
 
                 if (sourceMeta is null)
                 {
@@ -45,10 +42,7 @@ namespace STARGAZER_custom_chart
 
                 CopyFieldsAndProperties(sourceTrack, newTrack, skipMetaDataMembers: true);
 
-                object? assignedMeta = TryGetMemberValue(newTrack, trackType, "_metaData")
-                                       ?? TryGetMemberValue(newTrack, trackType, "metaData")
-                                       ?? TryGetMemberValue(newTrack, trackType, "m_metaData")
-                                       ?? TryGetMemberValue(newTrack, trackType, "MetaData");
+                object? assignedMeta = GetTrackMetaDataObject(newTrack);
                 if (assignedMeta is null
                     || HaveSameIl2CppIdentity(assignedMeta, sourceMeta)
                     || !HaveSameIl2CppIdentity(assignedMeta, newMeta))
