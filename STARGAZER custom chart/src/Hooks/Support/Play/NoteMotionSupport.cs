@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 노트 연출(눈송이 흔들림 / 낙하 속도 카오스)은 "그려지는 위치"만 건드린다.
         //

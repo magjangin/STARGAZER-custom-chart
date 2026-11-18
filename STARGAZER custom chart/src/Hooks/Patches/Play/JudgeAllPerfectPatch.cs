@@ -255,9 +255,15 @@ namespace STARGAZER_custom_chart
             return null;
         }
 
+        private static bool ShouldApplyAllPerfect()
+        {
+            return CustomConfig.AllPerfect
+                && (!CustomConfig.AllPerfectCustomOnly || StargazerCustomChartMod.IsCustomChartPlayActive);
+        }
+
         private static void FromTimeDiffernce_Postfix(ref EJudgements __result, ref float judgeTiming)
         {
-            if (CustomConfig.AllPerfect)
+            if (ShouldApplyAllPerfect())
             {
                 __result = EJudgements.BLUE; // 무조건 최고 판정 (BLUESTAR = 0)
                 judgeTiming = 0.0f; // 오차 0ms (FAST/SLOW 오프셋 제거)
@@ -266,7 +272,7 @@ namespace STARGAZER_custom_chart
 
         private static void TryJudgeHead_Postfix(bool __result, ref EJudgements result)
         {
-            if (CustomConfig.AllPerfect && __result)
+            if (ShouldApplyAllPerfect() && __result)
             {
                 result = EJudgements.BLUE;
             }
@@ -274,7 +280,7 @@ namespace STARGAZER_custom_chart
 
         private static void BufferProcess_Prefix(TickEventData te)
         {
-            if (CustomConfig.AllPerfect && te != null)
+            if (ShouldApplyAllPerfect() && te != null)
             {
                 te.judge = EJudgements.BLUE;
             }
@@ -282,7 +288,7 @@ namespace STARGAZER_custom_chart
 
         private static void JudgementWidget_Watch_Prefix(TickEventData t)
         {
-            if (CustomConfig.AllPerfect && t != null)
+            if (ShouldApplyAllPerfect() && t != null)
             {
                 t.judge = EJudgements.BLUE;
             }

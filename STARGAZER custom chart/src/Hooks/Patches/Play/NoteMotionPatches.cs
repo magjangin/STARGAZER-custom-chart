@@ -5,7 +5,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 노트 연출용 훅. 다른 훅과 달리 매 프레임 노트마다 불리는 초고빈도 지점이라
         // 공용 HookPrefix/HookPostfix(로깅 포함)를 쓰지 않고 전용 얇은 패치를 붙인다.

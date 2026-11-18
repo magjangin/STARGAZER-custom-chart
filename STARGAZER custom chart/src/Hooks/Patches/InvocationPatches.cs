@@ -4,7 +4,7 @@ using HarmonyLib;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 공용 디스패처(HookInvocationSupport.HookPrefix/HookPostfix)에 연결되는 훅.
         //

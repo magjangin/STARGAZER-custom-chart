@@ -7,7 +7,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private static readonly HashSet<string> FocusedTrackViewerHookMethodNames = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -25,7 +25,7 @@ namespace STARGAZER_custom_chart
         };
 
         private static readonly MethodInfo? FocusedTrackViewerPostfixMethod =
-            typeof(GameTypeEnumeratorMod).GetMethod(nameof(FocusedTrackViewerPostfix), BindingFlags.Static | BindingFlags.NonPublic);
+            typeof(StargazerCustomChartMod).GetMethod(nameof(FocusedTrackViewerPostfix), BindingFlags.Static | BindingFlags.NonPublic);
 
         // 이미 패치된 메서드와 충족된 논리 역할 이름. 일부만 걸렸을 때 다음 씬 로드에서 빠진 역할만 다시 시도하되,
         // 같은 메서드를 중복 패치하지 않는다(JudgeAllPerfectPatch / TrackUnlockAllPatch와 동일한 방식).

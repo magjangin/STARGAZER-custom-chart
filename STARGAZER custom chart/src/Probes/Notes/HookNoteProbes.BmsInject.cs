@@ -8,7 +8,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // BMS 채널 -> 레인 순번 매핑. Layer.Lanes[0..3]는 실측으로 확인된 (위, 아래, 왼쪽, 오른쪽) 물리 배치다.
         // 16=위(고정), 나머지는 16 기준 시계방향(위->오른쪽->아래->왼쪽)으로 11,12,13을 오름차순 배정한다.
@@ -129,10 +129,10 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                string? bmsPath = album.BmsPath;
+                string? bmsPath = album.GetBmsPath(CustomChartPlayLevelKey);
                 if (bmsPath is null)
                 {
-                    MelonLogger.Msg($"[BmsInject] .bms 파일이 없어 건너뜁니다: {album.Name}");
+                    MelonLogger.Msg($"[BmsInject] .bms 파일이 없어 건너뜁니다: {album.Name} (level={CustomChartPlayLevelKey ?? "<none>"})");
                     return;
                 }
 
@@ -141,6 +141,14 @@ namespace STARGAZER_custom_chart
                 {
                     MelonLogger.Warning($"[BmsInject] BMS 파싱 실패 또는 노트 없음: {bmsPath}");
                     return;
+                }
+
+                foreach (string warning in chart.Warnings)
+                {
+                    if (LogOnce($"Bms.Warn.{bmsPath}.{warning}"))
+                    {
+                        MelonLogger.Warning($"[Bms] ({Path.GetFileName(bmsPath)}) {warning}");
+                    }
                 }
 
                 object? templateLength = TryGetMemberByType(templateArea, "BeatInfo", "length", "Length");
@@ -154,13 +162,14 @@ namespace STARGAZER_custom_chart
                 }
 
                 CollectionAccessor areasAccessor = GetCollectionAccessor(areasValue.GetType());
-                if (!TryClearCollection(areasValue, areasAccessor))
+                MethodInfo? areasAddMethod = areasAccessor.AddMethod;
+                if (areasAccessor.ClearMethod is null || areasAddMethod is null)
                 {
-                    MelonLogger.Warning("[BmsInject] 기존 Areas를 비우지 못했습니다.");
+                    MelonLogger.Warning("[BmsInject] Layer.Areas의 Clear/Add 메서드를 찾지 못해 원본 차트를 유지합니다.");
                     return;
                 }
 
-                int areasCreated = 0, notesCreated = 0, notesSkippedChannel = 0;
+                int notesCreated = 0, notesSkippedChannel = 0;
                 int holdStarts = 0, holdEnds = 0;
                 var skippedChannels = new HashSet<int>();
 
@@ -189,8 +198,10 @@ namespace STARGAZER_custom_chart
                     ? null
                     : TryGetMemberValue(templateProp, "expressionHolder", "expressionholder", "ExpressionHolder");
 
-                MethodInfo? areasAddMethod = areasAccessor.AddMethod;
                 MethodInfo? notesAddMethod = areaMeta.NotesAddMethod;
+
+                // 먼저 임시 리스트에 새 Area를 모두 조립한다. 1개도 못 만들면 원본 Areas를 지우지 않고 보존한다.
+                var builtAreas = new List<object>(chart.Measures.Count);
 
                 foreach (BmsMeasure measure in chart.Measures)
                 {
@@ -204,14 +215,6 @@ namespace STARGAZER_custom_chart
                     TrySetValueByNameCandidates(newArea, AreaBpmNames, chart.Bpm);
                     TrySetValueByNameCandidates(newArea, LengthNames, templateLength);
                     TrySetValueByNameCandidates(newArea, TargetLayerNames, layer);
-
-                    if (!InvokeAdd(areasAddMethod, areasValue, newArea))
-                    {
-                        MelonLogger.Warning($"[BmsInject] 마디 {measure.Index} Area를 Layer.Areas에 추가하지 못했습니다.");
-                        continue;
-                    }
-
-                    areasCreated++;
 
                     object? notesValue = TryGetMemberByType(newArea, "List<Note>", "notes", "Notes");
                     if (notesValue is null)
@@ -267,12 +270,34 @@ namespace STARGAZER_custom_chart
                             else if (noteEvent.Kind == BmsNoteKind.HoldEnd) holdEnds++;
                         }
                     }
+
+                    builtAreas.Add(newArea);
+                }
+
+                if (builtAreas.Count == 0)
+                {
+                    MelonLogger.Warning($"[BmsInject] 생성된 Area가 없어 원본 차트를 보존합니다: {Path.GetFileName(bmsPath)}");
+                    return;
+                }
+
+                if (!TryClearCollection(areasValue, areasAccessor))
+                {
+                    MelonLogger.Warning("[BmsInject] 기존 Areas를 비우지 못했습니다.");
+                    return;
+                }
+
+                int areasCreated = 0;
+                for (int i = 0; i < builtAreas.Count; i++)
+                {
+                    if (InvokeAdd(areasAddMethod, areasValue, builtAreas[i]))
+                    {
+                        areasCreated++;
+                    }
                 }
 
                 string skippedChannelsText = skippedChannels.Count == 0 ? "<none>" : string.Join(",", skippedChannels.OrderBy(c => c));
-                string noiseText = chart.SuppressedNoiseCount > 0 ? $" suppressedNoise={chart.SuppressedNoiseCount}" : string.Empty;
-                MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} bpm={chart.Bpm} areasCreated={areasCreated} "
-                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝){noiseText} skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
+                MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} level={CustomChartPlayLevelKey ?? "<default>"} bpm={chart.Bpm} areasCreated={areasCreated} "
+                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝) skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
 
                 if (holdStarts != holdEnds)
                 {
@@ -388,8 +413,12 @@ namespace STARGAZER_custom_chart
                         linkedStart = Enum.Parse(linkedEnumType, "StartPoint");
                         linkedEnd = Enum.Parse(linkedEnumType, "EndPoint");
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        if (LogOnce($"BmsInject.LinkedEnum.{linkedEnumType.FullName}"))
+                        {
+                            MelonLogger.Warning($"[BmsInject] Linked enum 파싱 실패({linkedEnumType.FullName}): {ex.Message}");
+                        }
                     }
                 }
 
@@ -419,8 +448,12 @@ namespace STARGAZER_custom_chart
                         return created;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    if (LogOnce($"BmsInject.AreaCtor.{areaType.FullName}"))
+                    {
+                        MelonLogger.Warning($"[BmsInject] Area(Layer) 생성자 호출 실패, 폴백 생성으로 전환합니다: {ex.Message}");
+                    }
                 }
             }
 
@@ -516,8 +549,12 @@ namespace STARGAZER_custom_chart
                     meta.WriteDirect(beatInfo, beatDenominator, beatNumerator);
                     return true;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    if (LogOnce($"BmsInject.WriteBeatInfo.{beatInfo.GetType().FullName}"))
+                    {
+                        MelonLogger.Warning($"[BmsInject] BeatInfo 직접 쓰기 실패, 이름 기반 폴백으로 전환합니다: {ex.Message}");
+                    }
                 }
             }
 
@@ -600,8 +637,12 @@ namespace STARGAZER_custom_chart
                     noteMeta.SetProperty(newNote, propObj);
                     return;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    if (LogOnce($"BmsInject.NoteProp.{newNote.GetType().FullName}"))
+                    {
+                        MelonLogger.Warning($"[BmsInject] NoteProperty 직접 생성 실패, 폴백으로 전환합니다: {ex.Message}");
+                    }
                 }
             }
 

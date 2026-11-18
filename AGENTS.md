@@ -172,31 +172,24 @@
 ## 6. 빌드 및 배포 워크플로
 
 - **솔루션 / 프로젝트**: `STARGAZER custom chart.slnx` / `STARGAZER custom chart/STARGAZER custom chart.csproj`
-- **타깃 프레임워크**: `.NET 6.0` (`net6.0`)
-- **빌드 명령**:
+- **테스트 프로젝트**: `STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj` (`net8.0` xUnit, 게임 DLL 불필요)
+- **타깃 프레임워크**: `.NET 6.0` (`net6.0`, 모드 본체) / `.NET 8.0` (`net8.0`, 단위 테스트)
+- **빌드 및 테스트 명령**:
   ```powershell
-  # Visual Studio MSBuild 사용 시 (이 PC에는 VS "18" Community가 설치돼 있음 — 2022 경로는 없음)
-  & "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" "STARGAZER custom chart\STARGAZER custom chart.csproj" /p:Configuration=Debug
-
-  # 또는 루트 빌드 스크립트 실행
-  .\build.bat
+  .\build.bat Release
+  dotnet test "STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj" -c Release
   ```
 - **배포 산출물 위치**:
-  - `STARGAZER custom chart\bin\Debug\net6.0\STARGAZER custom chart.dll`
+  - `STARGAZER custom chart\bin\Release\net6.0\STARGAZER custom chart.dll`
   - 배포 경로: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\Mods\STARGAZER custom chart.dll`
 - **로그 확인**:
   - `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Latest.log`
-  - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]`.
+  - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]`.
 - **게임 업데이트 대응 체크리스트** (순서대로):
   1. Steam 자동 업데이트가 걸렸다면 `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` 경고가 뜬다. 고정 빌드(Build ID `21205351`)라면 뜨지 않아야 정상.
   2. 로그에서 `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]` 요약 순으로 본다.
   3. `[Health]` 가 "일부/실패"면 해당 기능의 `PatchSpec`(PatchTargetSupport.cs) 또는 수동 패치 대상 이름을 `dump_game_reference` 등으로 재확인.
   4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
   5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
-- **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`는 `Il2CppStargazer.*` 타입을 컴파일 타임 참조(`typeof`)한다. 인터롭에서 타입이 이동·삭제되면 런타임 해석 폴백이 아니라 **빌드 오류**로 드러난다(런타임 조용한 실패보다 낫다고 판단). 이름 기반 `ResolveGameType`으로 완전 전환하는 것은 `ELockType`/`EJudgements` 같은 enum 형 `__result` 때문에 보류.
-- **검증 이력**:
-  - 2026-11-18 (업데이트 내성 전방위 보강·문서 동기화·MSB3270 경고 제거): `UpdateCustomChartPlayState`/`LevelSelectorDisplaySupport`/`CloneTrackData` 타입 기반 폴백 통일, `TryGetMemberByType` 컬렉션 원소 폴백 추가, `CustomBgmLoaderPatch` 논리 이름 기반 프리뷰 분기, `FocusedTrackViewerProbe` 역할별 재시도 추적, `TrackUnlockAllPatch` 반환 타입 검증 및 enum getter 폴백, `.csproj` `$(GamePath)` 일원화 및 `MSB3270` 경고 제거, `README.md`·`docs/` 5종 문서 최신화. MSBuild `Debug /t:Rebuild` 성공(오류 0, 경고 0) 및 `Mods\` 배포 완료.
-  - 2026-11-16 (HookHealth·업데이트 감지·철자 변형 대응): MSBuild `Debug /t:Rebuild` 성공 및 `Mods\` 배포. **실기 기동·`[Health]` 로그 출력은 아직 미확인** — 다음 실행에서 `[Health]` 블록과 `.game-fingerprint` 생성부터 확인할 것.
-  - 2026-11-14 (리팩토링 전 실기): 탐색기/디스패처 리팩토링 후 실기 기동 확인 — 공용 훅 22개 전부 1단계(정확 일치)로 해석, `[resolve]` 경고 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, PlayBGM/StopBGM 핸들러 정상 디스패치.
-  - 2026-11-15 (훅 단계 분리·설정 기반 무패치·서빙 경로 경량화·죽은 코드 정리): MSBuild `Debug /t:Rebuild` 성공(오류 0, C# 경고 0, IDE0005 미사용 using 0, 기존 `MSB3270` 1건) 및 `Mods\` 배포. **실기 기동 확인**: 공용 훅 8개(Prefix 2 + Postfix 6) 전부 1단계 정확 일치, `[resolve]`·예외 0건, FocusedTrackViewer 4/4, JudgePatch 4/4, UnlockAll 7/7, 3개 앨범 `TrackSelector.Set` 주입 성공(정확 일치 세터로 `actual=` 제목 일치). **커스텀 곡 실제 플레이(BMS 주입·Save Guard·결과 화면 난이도)는 이번에도 미확인** — 다음 실기 때 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 로그부터 볼 것.
-  - 2026-11-14 (전체 감사/성능/내성 리팩토링): 16개 죽은 파일 제거·공용 캐싱·타입 기반 폴백·하드닝 리팩토링 후 MSBuild `Debug /t:Rebuild` 성공(오류 0개, C# 경고 0개, 기존 `.csproj` MSIL/AMD64 `MSB3270` 1건) 및 `Mods\STARGAZER custom chart.dll` 배포 확인. **리팩토링 후 인게임 실기 플레이(커스텀 곡 BMS 주입·Save Guard·난이도 UI)는 아직 미확인.**
+- **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`는 `Il2CppStargazer.*` 타입을 컴파일 타임 참조(`typeof`)한다. 인터롭에서 타입이 이동·삭제되면 런타임 해석 폴백이 아니라 **빌드 오류**로 드러난다.
+- **변경 이력**: [CHANGELOG.md](CHANGELOG.md) 참고 (과거 작업 일지는 `docs/archive/` 보관).

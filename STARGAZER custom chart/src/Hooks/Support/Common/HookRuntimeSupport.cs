@@ -3,12 +3,12 @@ using System.Collections.Generic;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
-        private static bool EnableVerboseInvocationLogging = false;
-        private static bool EnableFocusedHarmonyInvocationLogging = true;
-        private static bool EnableRuntimeProbeLogging = false;
-        private static bool EnableTrackSelectorVerboseLogging = false;
+        private static bool EnableVerboseInvocationLogging => CustomConfig.VerboseInvocationLogging;
+        private static bool EnableFocusedHarmonyInvocationLogging => CustomConfig.FocusedHarmonyInvocationLogging;
+        private static bool EnableRuntimeProbeLogging => CustomConfig.RuntimeProbeLogging;
+        private static bool EnableTrackSelectorVerboseLogging => CustomConfig.TrackSelectorVerboseLogging;
 
         private static readonly HashSet<string> LoggedOnceCache = new HashSet<string>(StringComparer.Ordinal);
         private static readonly object LoggedOnceLock = new object();
@@ -37,6 +37,6 @@ namespace STARGAZER_custom_chart
 
         // savecustomkey/config.txt의 autoplay 값으로 제어한다. 파일이 없으면 autoplay=false로 새로 만든다.
         private static bool EnableForceAutoPlayAtPlayerBasePlay => CustomConfig.AutoPlay;
-        private static bool IsCustomChartPlayActive;
+        internal static bool IsCustomChartPlayActive;
     }
 }

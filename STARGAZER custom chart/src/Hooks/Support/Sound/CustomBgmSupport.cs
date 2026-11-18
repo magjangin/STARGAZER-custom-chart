@@ -10,7 +10,7 @@ using UnityEngine.Networking;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private static void LogBgmDebugFileInfo()
         {
@@ -27,35 +27,38 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static readonly Dictionary<string, AudioClip> CustomBgmClipCache = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, (AudioClip Clip, DateTime LastWriteUtc)> CustomBgmClipCache =
+            new Dictionary<string, (AudioClip, DateTime)>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, DownloadHandlerAudioClip> CustomBgmDownloadHandlerCache = new Dictionary<string, DownloadHandlerAudioClip>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> CustomBgmLoadsInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, List<object>> PendingCustomBgmCallbacks = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
 
-        // 앨범마다 음원/프리뷰를 미리 디코딩해 둔다. 곡 선택에서 커서를 옮기는 즉시 프리뷰가
-        // 나와야 하는데, 그때 로드를 시작하면 한 박자 늦기 때문이다.
+        // 앨범마다 전용 프리뷰 파일만 미리 디코딩해 둔다. 본 음원은 플레이 진입 시 지연 로딩하여
+        // 커스텀 곡이 많아져도 시작 시간과 메모리 사용량이 급증하지 않게 한다.
         private static void StartCustomBgmPreload()
         {
             foreach (CustomAlbum album in CustomAlbumRegistry.GetAlbums())
             {
-                if (album.MusicPath is not null)
-                {
-                    StartCustomAudioClipLoad(album.MusicPath);
-                }
-
-                if (album.PreviewPath is not null && !string.Equals(album.PreviewPath, album.MusicPath, StringComparison.OrdinalIgnoreCase))
+                if (album.PreviewPath is not null
+                    && !string.Equals(album.PreviewPath, album.MusicPath, StringComparison.OrdinalIgnoreCase))
                 {
                     StartCustomAudioClipLoad(album.PreviewPath);
                 }
             }
         }
 
-        private static void UpdateCustomChartPlayState(object? travelArgs)
+        private static void ResetPlaySessionState()
         {
             IsCustomChartPlayActive = false;
             CurrentPlayAlbum = null;
+            CustomChartPlayLevelKey = null;
             LastProbedPatternPtr = IntPtr.Zero;
             WrappedPatternLoaders.Clear();
+        }
+
+        private static void UpdateCustomChartPlayState(object? travelArgs)
+        {
+            ResetPlaySessionState();
             if (travelArgs is null)
             {
                 MelonLogger.Msg("[BgmDebug] play state travelArgs=<null>");
@@ -109,9 +112,16 @@ namespace STARGAZER_custom_chart
         private static void StartCustomAudioClipLoad(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
-            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached))
+            if (!File.Exists(fullPath))
             {
-                if (cached != null)
+                CustomBgmClipCache.Remove(fullPath);
+                return;
+            }
+
+            DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
+            if (CustomBgmClipCache.TryGetValue(fullPath, out var cached))
+            {
+                if (cached.Clip != null && cached.LastWriteUtc == lastWriteUtc)
                 {
                     return;
                 }
@@ -119,13 +129,12 @@ namespace STARGAZER_custom_chart
                 CustomBgmClipCache.Remove(fullPath);
             }
 
-            if (!File.Exists(fullPath)
-                || !CustomBgmLoadsInProgress.Add(fullPath))
+            if (!CustomBgmLoadsInProgress.Add(fullPath))
             {
                 return;
             }
 
-            MelonCoroutines.Start(LoadCustomAudioClipCoroutine(fullPath));
+            MelonCoroutines.Start(LoadCustomAudioClipCoroutine(fullPath, lastWriteUtc));
         }
 
         private static AudioType ResolveAudioType(string path)
@@ -141,7 +150,7 @@ namespace STARGAZER_custom_chart
             };
         }
 
-        private static IEnumerator LoadCustomAudioClipCoroutine(string filePath)
+        private static IEnumerator LoadCustomAudioClipCoroutine(string filePath, DateTime lastWriteUtc)
         {
             string uri = new Uri(filePath).AbsoluteUri;
             AudioType audioType = ResolveAudioType(filePath);
@@ -171,9 +180,14 @@ namespace STARGAZER_custom_chart
                     {
                         clip.name = "CustomBGM_" + Path.GetFileNameWithoutExtension(filePath);
                         clip.hideFlags |= HideFlags.DontUnloadUnusedAsset;
-                        CustomBgmClipCache[filePath] = clip;
+                        CustomBgmClipCache[filePath] = (clip, lastWriteUtc);
                         if (downloadHandler is not null)
                         {
+                            if (CustomBgmDownloadHandlerCache.TryGetValue(filePath, out DownloadHandlerAudioClip? oldHandler)
+                                && oldHandler != downloadHandler)
+                            {
+                                oldHandler.Dispose();
+                            }
                             CustomBgmDownloadHandlerCache[filePath] = downloadHandler;
                             cachedHandler = true;
                         }
@@ -227,19 +241,19 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[CustomBgm] Completed pending callbacks: {path} count={callbacks.Count} clipReady={clip != null}");
         }
 
-        // 캐시 조회 전용. 미스일 때 로드를 시작하는 일은 QueueCustomBgmCallback이 맡는다.
+        // 캐시 조회 전용. 파일 수정 시각이 바뀌었으면 캐시를 무효화해 핫리로드를 지원한다.
         private static bool TryGetCachedCustomBgm(string path, out AudioClip? clip)
         {
             string fullPath = Path.GetFullPath(path);
-            if (CustomBgmClipCache.TryGetValue(fullPath, out AudioClip? cached))
+            if (CustomBgmClipCache.TryGetValue(fullPath, out var cached))
             {
-                if (cached != null)
+                if (cached.Clip != null && File.GetLastWriteTimeUtc(fullPath) == cached.LastWriteUtc)
                 {
-                    clip = cached;
+                    clip = cached.Clip;
                     return true;
                 }
 
-                // Unity 쪽에서 파괴된 클립. 다음 로드에서 다시 채운다.
+                // Unity 쪽에서 파괴됐거나 디스크 파일이 수정된 경우. 다음 로드에서 다시 채운다.
                 CustomBgmClipCache.Remove(fullPath);
             }
 

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>STARGAZER_custom_chart.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\STARGAZER custom chart\src\Bms\BmsChart.cs" Link="Source\BmsChart.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Custom\CustomAlbum.cs" Link="Source\CustomAlbum.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Custom\CustomConfig.cs" Link="Source\CustomConfig.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Custom\CustomTrackInfo.cs" Link="Source\CustomTrackInfo.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\Common\SafeTextReader.cs" Link="Source\SafeTextReader.cs" />
+  </ItemGroup>
+</Project>

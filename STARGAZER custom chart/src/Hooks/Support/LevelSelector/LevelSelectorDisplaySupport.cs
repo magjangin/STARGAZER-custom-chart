@@ -6,7 +6,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 난이도 표시는 메타데이터(levelString)가 아니라 UI에만 덮어쓴다.
         // levelString을 바꾸면 패턴 에셋 로딩이 멈추기 때문이다

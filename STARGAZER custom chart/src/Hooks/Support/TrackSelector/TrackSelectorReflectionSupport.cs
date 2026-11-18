@@ -5,7 +5,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // csproj는 게임의 IL2CPP 인터롭 어셈블리(Il2CppStargazer 네임스페이스가 든 Assembly-CSharp.dll,
         // Il2CppMikazuki.dll 등)를 참조하고, JudgeAllPerfectPatch·NoteMotionSupport는 강타입을 쓴다.

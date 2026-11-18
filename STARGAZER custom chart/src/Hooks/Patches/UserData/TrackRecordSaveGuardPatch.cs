@@ -6,7 +6,7 @@ using MelonLoader;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         // 커스텀 트랙은 공식 "Starting Point"의 복제본이라 TrackID가 똑같다
         // (TrackSelectorCollectionSupport.IsStartingPointTrack 주석 참고).
@@ -59,6 +59,11 @@ namespace STARGAZER_custom_chart
                     CustomAlbum? album = TryGetAlbumForTrack(playTrack);
                     if (album is null)
                     {
+                        if (CustomConfig.AllPerfect && !CustomConfig.AllPerfectCustomOnly)
+                        {
+                            MelonLogger.Msg("[SaveGuard] AllPerfect가 공식 곡에도 활성화되어 있으므로 공식 기록 저장을 차단합니다.");
+                            return false;
+                        }
                         return true;
                     }
 

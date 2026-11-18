@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace STARGAZER_custom_chart
 {
-    public sealed partial class GameTypeEnumeratorMod
+    public sealed partial class StargazerCustomChartMod
     {
         private sealed class CollectionAccessor
         {
