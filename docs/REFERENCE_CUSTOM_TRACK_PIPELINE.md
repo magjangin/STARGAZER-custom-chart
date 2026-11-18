@@ -179,23 +179,19 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
 
 곡마다 한 번 `[NoteMotion] 진행 방향 측정: ...` 로그로 실제 측정값을 남깁니다.
 
-## 차트 주입
+## 차트 주입 (2계층: 람다 Postfix + onCompleted 이중래퍼)
 
-`INNER_PatternLoader._Load_b__5_0(Pattern)` Postfix에서 `Layer.Areas`를 통째로 교체합니다.
-자세한 규칙은 [REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md)를 보세요.
+1차 경로인 `INNER_PatternLoader._Load_b__5_0(Pattern)` Postfix와 2차 백업 경로인 `INNER_PatternLoader.Load(TravelArgs)` Prefix의 `onCompleted` 이중래퍼(Dual-Wrapper)에서 `Layer.Areas`를 통째로 교체합니다.
+자세한 변환 규칙은 [REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md)를 보세요.
 
-주의할 점 두 가지:
-
-- 이 콜백은 **공식 곡이든 커스텀 곡이든 패턴이 로드될 때마다** 불립니다.
-  커스텀 트랙일 때만 개입하도록 반드시 막아야 합니다(`IsCustomChartPlayActive`).
-  파괴적 작업이라 주입 함수 안에서도 한 번 더 확인합니다.
-- 곡 재시작마다 패턴이 새로 로드되므로 **매번 다시 주입해야 합니다.**
-  "한 번만 실행" 가드에 묶으면 재시작 시 원본 차트가 나옵니다.
-- 주입은 노트 프로브(`ProbeNoteArrayMembers`) 안에서 일어나지만 **로그 설정과 무관하게** 돕니다.
-  `EnableRuntimeProbeLogging`이 꺼져 있어도 커스텀 곡(`IsCustomChartPlayActive`)이면 프로브를 부릅니다.
+- **1차 경로**: 컴파일러 생성 람다(`_Load_b__5_0`). 게임 업데이트로 람다 번호나 클로저 위치(`__c`, `__c__DisplayClassN_M`)가 바뀌어도 `ResolveLambdaMethod`가 소유 메서드(`Load`)와 정확한 시그니처(`Pattern`) 및 유일성 조건으로 추적합니다.
+- **2차 경로 (Dual-Wrapper)**: 1차 람다 훅이 모호하거나 사라진 경우를 대비해, `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 이름 변경 시 타입 기반 유일 멤버 폴백)를 래퍼로 감쌉니다.
+- **중복 주입 가드**: 두 경로가 모두 살아 있으면 람다 본문 안의 `onCompleted(=래퍼)`가 먼저 불리고 직후에 람다 Postfix가 불립니다. `ProbeNoteArrayMembers`가 `Pattern`의 IL2CPP 네이티브 포인터(`LastProbedPatternPtr`)를 비교하여 같은 패턴에 대해 차트가 두 번 주입되지 않도록 막습니다(관리 래퍼는 호출마다 새 인스턴스일 수 있어 `ReferenceEquals`는 쓰지 않음).
+- **공식 곡 보호**: 이 콜백은 공식 곡이든 커스텀 곡이든 패턴이 로드될 때마다 불립니다. 커스텀 트랙일 때만 개입하도록 호출부와 주입 함수(`TryInjectBmsChart`) 양쪽에서 `IsCustomChartPlayActive && CurrentPlayAlbum is not null`을 이중 확인합니다.
+- **곡 재시작 대응**: 곡 재시작(`PlayerBase.Play`)마다 `LastProbedPatternPtr`과 `WrappedPatternLoaders`를 비우므로, 재시작 시 새로 로드된 패턴에도 정상적으로 다시 주입됩니다.
 - 앨범에 `.bms`가 없으면 주입을 건너뛰어 **Starting Point 원본 차트**가 그대로 나옵니다.
 
-## 기록 저장 차단
+## 기록 저장 차단 (Save Guard)
 
 커스텀 트랙은 `TrackID`가 Starting Point와 같아서, 결과를 그대로 저장하면 **공식 Starting Point 기록을 덮어씁니다.**
 
@@ -203,29 +199,30 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
 | --- | --- |
 | `UserDataLoader+INNER_TrackRecordModule.SaveTrackRecord(ITravelResultData)` | Prefix에서 `PlayData.PlayTrack`이 우리가 주입한 객체면 `return false`로 저장을 건너뜀 |
 
-판정 중 예외가 나면 `return true`로 원본 저장을 그대로 둡니다. 공식 곡 저장까지 막는 쪽이 더 위험하기 때문입니다.
-구현: [`src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs)
+- `result`에서 `PlayData`(`TravelArgs`) → `PlayTrack`(`ITrackData`) 추출은 `TryGetMemberByType`을 사용해 프로퍼티 이름이 바뀌어도 동작합니다.
+- 만약 게임 업데이트로 `result` 또는 `PlayTrack` 추출 자체가 실패하더라도, 현재 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태라면 **방어적으로 저장을 차단(`return false`)**하여 공식 Starting Point 기록이 오염되는 것을 막습니다.
+- 구현: [`src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs)
 
 > **확인 필요.** 막는 것은 `SaveTrackRecord` 하나뿐입니다. 결과 화면의 `ResultViewer.UpdateStatistics(ITravelResultData)`,
 > `ResultViewer.CheckAchievement()`는 건드리지 않으므로, 커스텀 곡 플레이가 Starting Point 통계나 도전과제로
 > 집계되는지는 아직 확인하지 않았습니다.
 
-## 패치 대상 해석
+## 패치 대상 해석 & 훅 상태 요약 (`HookHealth`)
 
-모든 `[HarmonyPatch]` 클래스는 대상 메서드를 `Prepare()`에서 찾습니다
-([`PatchTargetSupport.PrepareTargets`](../STARGAZER%20custom%20chart/src/Hooks/Support/Common/PatchTargetSupport.cs)).
+모든 `[HarmonyPatch]` 클래스는 대상 메서드를 `Prepare()`에서 찾고 기능별 적용 수를 `HookHealth`에 보고합니다
+([`PatchTargetSupport.PrepareTargets`](../STARGAZER%20custom%20chart/src/Hooks/Support/Common/PatchTargetSupport.cs),
+[`HookHealth.cs`](../STARGAZER%20custom%20chart/src/Core/HookHealth.cs)).
 
 ```csharp
 private static readonly List<MethodBase> Targets = new List<MethodBase>();
-private static bool Prepare() => PrepareTargets(Targets, specs);
+private static bool Prepare() => PrepareTargets(Targets, specs, "기능명");
 private static IEnumerable<MethodBase> TargetMethods() => Targets;
 ```
 
-- 대상을 하나도 못 찾으면 `Prepare()`가 `false`를 돌려줘 **그 클래스만** 건너뜁니다(로그에 `target not found`).
-- `TargetMethods()`가 빈 목록을 돌려주는 방식은 안 됩니다. Harmony가 `"Undefined target method"`로 던지고,
-  MelonLoader의 `PatchAll`이 그 자리에서 멈춰 **나머지 훅이 전부 안 걸립니다.**
-  게임 업데이트로 로그용 훅 하나만 사라져도 세이브 보호·음원·자켓 훅까지 같이 죽는다는 뜻입니다.
-- `Prepare()`는 클래스 단위로 한 번, 대상마다 한 번씩 더 불리므로 찾은 결과를 `Targets`에 담아 재사용합니다.
+- **단계 분리(`HookPhase`)**: 공용 디스패처(`InvocationPatches.cs`)는 `InvocationPrefixPatches`와 `InvocationPostfixPatches`로 나뉘어 각 대상에 실제로 필요한 쪽(Prefix 또는 Postfix) 하나만 붙입니다. 핸들러 없는 빈 반대쪽 트램펄린과 `object[]` 박싱 비용을 제거하기 위함입니다.
+- **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`을 등록하고, `HookPrefix`/`HookPostfix`는 런타임 메서드명이 아니라 논리 이름으로 `HookKind`를 결정합니다. 따라서 대체 이름(`WithAlternates`, 예: `FetchJacektImage` → `FetchJacketImage`)이나 람다 대체 해석으로 연결된 메서드도 원래 핸들러로 정확히 라우팅됩니다.
+- **안전한 건너뛰기**: 대상을 하나도 못 찾으면 `Prepare()`가 `false`를 돌려줘 **그 클래스만** 건너뜁니다. `TargetMethods()`가 빈 목록을 돌려주면 Harmony가 `"Undefined target method"` 예외를 던져 `PatchAll` 전체가 중단되므로 절대 빈 목록을 반환하면 안 됩니다.
+- **상태 요약 및 업데이트 감지**: 모든 패치(지연 패치 포함) 시도가 끝난 뒤 `HookHealth.LogSummary()`가 `[Health]` 블록으로 전체 기능의 `(적용 수 / 기대 수)`를 한 번 출력하며, `GameAssembly.dll`의 크기·수정시각(`savecustomkey/.game-fingerprint`)이 이전 실행과 다르면 게임 업데이트 경고와 확인 순서를 안내합니다.
 
 ## 기타 실측 메모
 

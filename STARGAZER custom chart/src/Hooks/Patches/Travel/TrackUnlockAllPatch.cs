@@ -43,25 +43,25 @@ namespace STARGAZER_custom_chart
             try
             {
                 // 1. INNER_TrackData.get_IsUnlocked
-                PatchGetter<bool>(harmony, typeof(TrackLoader.INNER_TrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix));
+                PatchGetter<bool>(harmony, typeof(TrackLoader.INNER_TrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
 
                 // 2. INNER_TrackData.get_LockType
-                PatchGetter<ELockType>(harmony, typeof(TrackLoader.INNER_TrackData), "LockType", nameof(Get_LockType_Prefix));
+                PatchGetter<ELockType>(harmony, typeof(TrackLoader.INNER_TrackData), "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
 
                 // 3. INNER_TrackData.get_UnlockCost
-                PatchGetter<int>(harmony, typeof(TrackLoader.INNER_TrackData), "UnlockCost", nameof(Get_UnlockCost_Prefix));
+                PatchGetter<int>(harmony, typeof(TrackLoader.INNER_TrackData), "UnlockCost", nameof(Get_UnlockCost_Prefix), "Cost", "Price");
 
                 // 4. ITrackData.get_IsUnlocked
-                PatchGetter<bool>(harmony, typeof(ITrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix));
+                PatchGetter<bool>(harmony, typeof(ITrackData), "IsUnlocked", nameof(Get_IsUnlocked_Prefix), "Unlocked");
 
                 // 5. ITrackData.get_LockType
-                PatchGetter<ELockType>(harmony, typeof(ITrackData), "LockType", nameof(Get_LockType_Prefix));
+                PatchGetter<ELockType>(harmony, typeof(ITrackData), "LockType", nameof(Get_LockType_Prefix), "TrackLockType");
 
                 // 6. UserDataLoader.INNER_UnlockDataModule.IsUnlocked
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_UnlockDataModule), "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix), preferredParamCount: 1);
+                PatchMethod(harmony, typeof(UserDataLoader.INNER_UnlockDataModule), "IsUnlocked", nameof(UnlockDataModule_IsUnlocked_Prefix), typeof(bool), preferredParamCount: 1, "IsTrackUnlocked", "CheckUnlocked");
 
                 // 7. UserDataLoader.INNER_CurrencyModule.GetVolts
-                PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), preferredParamCount: 0);
+                PatchMethod(harmony, typeof(UserDataLoader.INNER_CurrencyModule), "GetVolts", nameof(CurrencyModule_GetVolts_Prefix), typeof(long), preferredParamCount: 0, "GetVolt", "GetCurrency");
 
                 HookHealth.Report("전곡 해금", _patched.Count, TotalPatchCount);
                 if (_patched.Count != patchedBefore)
@@ -75,33 +75,47 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void PatchGetter<T>(HarmonyLib.Harmony harmony, Type targetType, string propName, string prefixMethodName)
+        private static void PatchGetter<T>(HarmonyLib.Harmony harmony, Type targetType, string propName, string prefixMethodName, params string[] alternatePropNames)
         {
             string key = $"{targetType.FullName}.get_{propName}";
             if (_patched.Contains(key)) return;
 
             const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-            MethodInfo? getter = null;
-            try
-            {
-                getter = AccessTools.PropertyGetter(targetType, propName);
-            }
-            catch (AmbiguousMatchException)
-            {
-                getter = null;
-            }
+            Type expectedReturnType = typeof(T);
+            MethodInfo? getter = FindGetterByName(targetType, propName, expectedReturnType, Flags);
 
-            if (getter == null)
+            if (getter == null && alternatePropNames.Length > 0)
             {
-                string getterName = $"get_{propName}";
-                foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+                foreach (string altName in alternatePropNames)
                 {
-                    if (string.Equals(candidate.Name, getterName, StringComparison.Ordinal)
-                        && candidate.GetParameters().Length == 0)
+                    getter = FindGetterByName(targetType, altName, expectedReturnType, Flags);
+                    if (getter != null)
                     {
-                        getter = candidate;
+                        MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 프로퍼티 '{getter.Name}' 으로 연결합니다.");
                         break;
                     }
+                }
+            }
+
+            // ELockType 같은 고유 enum 반환 타입이면 이름이 완전히 바뀌어도 유일한 인자 0개 getter로 폴백한다.
+            if (getter == null && expectedReturnType.IsEnum)
+            {
+                var enumGetters = new List<MethodInfo>();
+                foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+                {
+                    if (candidate.DeclaringType == targetType
+                        && candidate.Name.StartsWith("get_", StringComparison.Ordinal)
+                        && candidate.GetParameters().Length == 0
+                        && candidate.ReturnType == expectedReturnType)
+                    {
+                        enumGetters.Add(candidate);
+                    }
+                }
+
+                if (enumGetters.Count == 1)
+                {
+                    getter = enumGetters[0];
+                    MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 반환 타입({expectedReturnType.Name}) 유일 getter '{getter.Name}' 으로 연결합니다.");
                 }
             }
 
@@ -121,18 +135,59 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void PatchMethod(HarmonyLib.Harmony harmony, Type targetType, string methodName, string prefixMethodName, int? preferredParamCount = null)
+        private static MethodInfo? FindGetterByName(Type targetType, string propName, Type expectedReturnType, BindingFlags flags)
+        {
+            try
+            {
+                MethodInfo? found = AccessTools.PropertyGetter(targetType, propName);
+                if (found != null && found.ReturnType == expectedReturnType)
+                {
+                    return found;
+                }
+            }
+            catch (AmbiguousMatchException)
+            {
+            }
+
+            string getterName = $"get_{propName}";
+            foreach (MethodInfo candidate in targetType.GetMethods(flags))
+            {
+                if (string.Equals(candidate.Name, getterName, StringComparison.Ordinal)
+                    && candidate.GetParameters().Length == 0
+                    && candidate.ReturnType == expectedReturnType)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static void PatchMethod(
+            HarmonyLib.Harmony harmony,
+            Type targetType,
+            string methodName,
+            string prefixMethodName,
+            Type expectedReturnType,
+            int? preferredParamCount = null,
+            params string[] alternateMethodNames)
         {
             string key = $"{targetType.FullName}.{methodName}";
             if (_patched.Contains(key)) return;
 
             const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-            var exactMatches = new List<MethodInfo>();
-            foreach (MethodInfo candidate in targetType.GetMethods(Flags))
+            var exactMatches = CollectMatchingMethods(targetType, methodName, expectedReturnType, Flags);
+
+            if (exactMatches.Count == 0 && alternateMethodNames.Length > 0)
             {
-                if (string.Equals(candidate.Name, methodName, StringComparison.Ordinal) && !candidate.IsGenericMethod)
+                foreach (string altName in alternateMethodNames)
                 {
-                    exactMatches.Add(candidate);
+                    exactMatches = CollectMatchingMethods(targetType, altName, expectedReturnType, Flags);
+                    if (exactMatches.Count > 0)
+                    {
+                        MelonLogger.Warning($"[UnlockAllPatch][resolve] {key} 대신 대체 이름 '{altName}' 후보로 연결합니다.");
+                        break;
+                    }
                 }
             }
 
@@ -180,6 +235,22 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Warning($"[UnlockAllPatch] {key} 메서드를 찾을 수 없습니다.");
             }
+        }
+
+        private static List<MethodInfo> CollectMatchingMethods(Type targetType, string methodName, Type expectedReturnType, BindingFlags flags)
+        {
+            var matches = new List<MethodInfo>();
+            foreach (MethodInfo candidate in targetType.GetMethods(flags))
+            {
+                if (string.Equals(candidate.Name, methodName, StringComparison.Ordinal)
+                    && !candidate.IsGenericMethod
+                    && candidate.ReturnType == expectedReturnType)
+                {
+                    matches.Add(candidate);
+                }
+            }
+
+            return matches;
         }
 
         private static bool Get_IsUnlocked_Prefix(ref bool __result)

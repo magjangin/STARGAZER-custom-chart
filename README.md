@@ -26,20 +26,25 @@
 * `JudgementExtension.FromTimeDiffernce`, `JudgementExtension.TryJudgeHead`, `TravelPlayer.INNER_Result.BufferProcess`, `JudgementWidget.Watch` 4중 런타임 패치 적용.
 * `savecustomkey/config.txt`의 `AllPerfect` 옵션(`true`/`false`)으로 손쉽게 켜고 끌 수 있습니다.
 
+### 🔓 전곡 해금 및 볼트 제한 해제 (Unlock All)
+* 오프라인 영구 보존 환경에서도 볼트(VOLT)/DLC/어드벤처 잠금 없이 모든 공식 수록곡을 즉시 플레이할 수 있습니다.
+* `savecustomkey/config.txt`의 `UnlockAll` 옵션(`true`/`false`, 기본값 `true`)으로 제어하며, 꺼두면 패치 자체를 걸지 않습니다.
+
 ### 💾 기록 보호 (Save Guard)
 * 커스텀 곡은 Starting Point의 복제본이라 TrackID가 같습니다. 그대로 저장하면 공식 Starting Point 기록을 덮어쓰므로 커스텀 곡의 기록 저장을 막습니다.
+* 게임 업데이트 등으로 결과 인자에서 트랙 추출이 실패하더라도 커스텀 곡 플레이 중이면 방어적으로 저장을 차단합니다.
 
 ### ⚙️ 설정 (`savecustomkey/config.txt`)
-* 오토플레이(`autoplay`), 올 퍼펙트 모드(`AllPerfect`), 노트 연출(흔들림, 낙하 속도 카오스)을 켜고 끌 수 있습니다.
-* 노트 연출은 그려지는 위치만 바꾸며 판정·점수에는 영향이 없습니다.
+* 오토플레이(`autoplay`), 올 퍼펙트 모드(`AllPerfect`), 전곡 해금(`UnlockAll`), 노트 연출(흔들림, 낙하 속도 카오스)을 켜고 끌 수 있습니다.
+* 노트 연출은 그려지는 위치만 바꾸며 판정·점수에는 영향이 없습니다. 설정이 꺼진 기능(`AllPerfect`, `UnlockAll`, `NoteMotion`)은 런타임 훅 자체를 걸지 않아 오버헤드가 0입니다.
 
-### 🔍 자켓 및 UI 탐색기 (Jacket & UI Probing)
-* `CurrentTrackViewer`, `Result.PlayInfoViewer` 등의 인게임 UI 컴포넌트를 관측합니다.
-* 트랜스폼 경로(Transform Path), 게임 오브젝트 이름 및 연결된 자켓 이미지를 스냅샷 형태로 분석하고 로깅합니다.
+### 🛡️ 업데이트 내성 & 훅 상태 요약 (`[Health]`)
+* **이중 경로 차트 주입**: 1차 컴파일러 람다(`_Load_b__5_0`) 시그니처 탐색이 막혀도 2차 `INNER_PatternLoader.onCompleted` 이중래퍼(Dual-Wrapper)가 패턴을 가로채며, 네이티브 포인터 기준 중복 가드로 2회 주입을 방지합니다.
+* **타입/이름 폴백 해석**: 메서드 대체 이름(`WithAlternates`), 짧은 타입명 폴백(`ResolveGameType`), 멤버 타입 기반 유일 후보 폴백(`TryGetMemberByType`, 컬렉션 컨테이너 변경 대응 포함), UI 세터 대체 이름 탐색을 갖추고 있습니다.
+* **훅 상태 요약 & 바이너리 지문 감지**: 기동 시 `[Health]` 블록으로 모든 기능의 `(적용 수 / 기대 수)`를 한눈에 요약하고, `GameAssembly.dll` 지문(`savecustomkey/.game-fingerprint`)이 달라지면 게임 업데이트 경고를 출력합니다.
 
 ### ⏱️ 로그 스로틀링 (Log Throttling)
-* 자주 불리는 후킹 지점의 로그가 쌓이지 않도록, 같은 메서드의 PRE/POST 로그를 합쳐 1초에 최대 3줄까지만 남깁니다
-  (`HookRuntimeSupport.cs`의 `InvocationLogMaxPerWindow`).
+* 자주 불리는 후킹 지점의 로그가 쌓이지 않도록, 같은 메서드의 호출 로그를 1초에 최대 3줄까지만 남기며(`InvocationLogMaxPerWindow`), 음원·자켓 서빙 및 대체 해석 경고는 키별 1회(`LogOnce`)만 기록합니다.
 
 ---
 
@@ -48,25 +53,29 @@
 ```text
 STARGAZER custom chart/
 ├── STARGAZER custom chart.slnx          # Visual Studio 솔루션 파일
-├── .gitignore                           # 빌드 산출물, VS 설정, decompiled/ 제외
+├── .gitignore                           # 빌드 산출물, VS 설정, decompiled/·il2cpp_dump/·slices/ 제외
+├── AGENTS.md / CLAUDE.md                # 에이전트 인수인계 및 아키텍처·Dead Ends 가이드
 ├── README.md                            # 본 문서
 ├── build.bat                            # 모드 빌드 및 Mods 폴더 배포 스크립트
 ├── scripts/
 │   ├── build_mod.bat                    # 모드 빌드 및 Mods 폴더 배포 스크립트
+│   ├── dump_il2cpp.ps1                  # Il2CppDumper 자동 실행
 │   ├── decompile.ps1                    # 게임 어셈블리를 decompiled/로 디컴파일
-│   └── strip_bodies.py                  # 디컴파일 결과에서 시그니처만 추출 (decompile.ps1이 호출)
+│   ├── strip_bodies.py                  # 디컴파일 결과에서 시그니처만 추출 (decompile.ps1이 호출)
+│   ├── disasm.ps1                       # 특정 클래스/메서드 심볼 주석 어셈블리 덤프
+│   └── slice.ps1                        # 조각 PE 추출 (정적 분석용)
 ├── docs/                                # 문서 (목록과 분류는 docs/README.md)
 └── STARGAZER custom chart/
     ├── STARGAZER custom chart.csproj    # C# 프로젝트 파일 (빌드 후 게임 Mods 폴더로 자동 복사)
     ├── Properties/                      # 어셈블리 정보
     └── src/                             # 소스 코드
-        ├── Core/                        # 모드 진입점 (MelonMod 상속)
-        ├── Custom/                      # hwa 앨범 스캔, info.txt / config.txt 파서
-        ├── Bms/                         # BMS 파서
+        ├── Core/                        # 모드 진입점(ModEntry.cs) 및 훅 상태 요약·업데이트 감지(HookHealth.cs)
+        ├── Custom/                      # hwa 앨범 스캔, info.txt / config.txt 다국어 파서
+        ├── Bms/                         # BMS 파서 (파일 타임스탬프 캐시 포함)
         ├── Hooks/
-        │   ├── Patches/                 # Harmony 패치 클래스
-        │   └── Support/                 # 패치가 호출하는 처리 (트랙 주입, 자켓·음원, 난이도 표시, 노트 연출 등)
-        └── Probes/                      # 런타임 탐색 로그, BMS 차트 주입 (Probes/Notes)
+        │   ├── Patches/                 # Harmony 패치 클래스 (Prefix/Postfix 단계 분리 공용 훅, 판정, 노트 연출, 해금, 기록 보호)
+        │   └── Support/                 # 패치가 호출하는 처리 (트랙 주입·복제, 자켓·음원, 난이도 표시, 노트 연출, 리플렉션/타깃 해석)
+        └── Probes/                      # FocusedTrackViewer 화이트리스트 훅 및 BMS 차트 주입 (Probes/Notes)
 ```
 
 ---

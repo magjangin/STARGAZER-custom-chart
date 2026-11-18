@@ -29,13 +29,13 @@ Sixtar Gate STARGAZER/
 | 역할 | 찾는 순서 |
 | --- | --- |
 | 차트 | 첫 번째 `*.bms` |
-| 음원 | `music.ogg` → 첫 번째 `*.ogg` |
-| 프리뷰 | `music_preview.ogg` → 없으면 음원과 동일 |
-| 자켓 | `jacket` / `cover` / `thumbnail` (`.png` `.jpg` `.jpeg`), `자켓.png` / `커버.png` / `썸네일.png` → 없으면 폴더 안 첫 번째 이미지(`.png` `.jpg` `.jpeg`) |
+| 음원 | `music` / `bgm` / `audio` / `song` / `track` (`.ogg` `.mp3` `.wav`) → 첫 번째 `*.ogg` → 첫 번째 `*.mp3` |
+| 프리뷰 | `music_preview` / `preview` / `bgm_preview` (`.ogg` `.mp3` `.wav`) → 없으면 음원과 동일 |
+| 자켓 | `jacket` / `cover` / `thumbnail` (`.png` `.jpg` `.jpeg`), `자켓.png` / `커버.png` / `썸네일.png`, `封面` / `封套` / `曲绘` / `插图` → 없으면 폴더 안 첫 번째 이미지(`.png` `.jpg` `.jpeg`) |
 | 정보 | `info.txt` → 첫 번째 `*.txt` |
 
-음원 폴백이 `.ogg`로만 한정된 이유가 있습니다. 폴더에는 BMS 키음(`*.wav`)이 함께 들어있는데,
-그걸 곡 음원으로 잘못 집으면 엉뚱한 소리가 재생되기 때문입니다. **곡 음원은 반드시 `.ogg`로 넣으세요.**
+확장자 기준 음원 폴백이 `.ogg`/`.mp3`로만 한정된 이유가 있습니다. 폴더에는 BMS 키음(`*.wav`)이 함께 들어있는데,
+임의의 `.wav`를 곡 음원으로 잘못 집으면 짧은 키음이 재생되기 때문입니다. 곡 음원을 `.wav`로 넣을 때는 반드시 `music.wav`처럼 지정된 이름을 쓰거나, 가급적 `.ogg`/`.mp3`로 넣으세요.
 
 차트나 음원 중 하나도 없는 폴더는 곡으로 인정하지 않고 건너뜁니다(로그에 이유가 남습니다).
 
@@ -58,8 +58,10 @@ stellar = 8
 void = 8
 ```
 
-- 구분자는 `:` 와 `=` 둘 다 됩니다.
-- `곡 제목`은 `제목`, `title`로도 씁니다. `아티스트`는 `artist`로도 씁니다.
+- 구분자는 `:` 와 `=` 둘 다 됩니다. UTF-8(BOM 유무 무관), UTF-16, 한국어(CP949), 중국어(GB18030/GBK) 인코딩을 자동으로 인식합니다.
+- `곡 제목`은 `제목`, `title`, `name`, `曲名`, `歌名`, `标题`로도 씁니다.
+- `아티스트`는 `artist`, `composer`, `작곡`, `艺术家`, `作曲`, `曲师`로도 씁니다.
+- 난이도 키는 `cosmic`(`宇宙`/`星空`), `stellar`(`恒星`), `void`(`虚空`)를 모두 인식합니다.
 - 제목이 없으면 **폴더 이름**이 곡 이름으로 표시됩니다.
 - `난이도 :` 줄은 사람이 읽기 위한 것이고, 실제로 반영되는 건 `cosmic` / `stellar` / `void` 각 줄입니다.
 
@@ -80,12 +82,13 @@ void = 8
   ([REFERENCE_BMS_CONVERSION.md](REFERENCE_BMS_CONVERSION.md#중복-노트-억제-현재-꺼짐)).
 - 파일을 읽지 못하거나 값을 해석하지 못하면 그 항목은 아래 기본값으로 동작합니다(로그에 경고가 남습니다).
 
-### 플레이
+### 플레이 및 해금
 
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
 | `autoplay` | `false` | 오토플레이 강제 사용 여부 (`true` = 자동 연주) |
-| `AllPerfect` | `true` | 올 퍼펙트 판정 모드 (`true` = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, `false` = 기본 판정) |
+| `AllPerfect` | `true` | 올 퍼펙트 판정 모드 (`true` = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, `false` = 기본 판정 및 판정 훅 미적용) |
+| `UnlockAll` | `true` | 전곡 해금 및 볼트 제한 해제 (`true` = 볼트/DLC/어드벤처 잠금 없이 모든 공식 수록곡 즉시 플레이 가능 및 999,999 볼트 표시, `false` = 기본 잠금 유지) |
 
 ### 노트 연출
 
@@ -122,5 +125,7 @@ BMS 파일 작성 규칙과 레인 매핑은 [REFERENCE_BMS_CONVERSION.md](REFER
 | `[Album] 건너뜀(차트/음원 없음)` | 그 폴더는 곡으로 인정되지 않음 |
 | `[TrackSelector.Set] 커스텀 트랙을 주입했습니다! 적용=N/M` | 목록에 실제로 들어간 개수 |
 | `[BmsInject] 완료: ... notesCreated=N` | 차트가 몇 노트로 변환됐는지 |
-| `[CustomJacket] Serving custom jacket for ...` | 자켓이 교체됨 |
-| `[CustomBgm] Serving cached ...` | 음원이 교체됨 |
+| `[CustomJacket] Serving custom jacket for ...` | 자켓이 교체됨 (경로별 처음 1회만 기록) |
+| `[CustomBgm] Serving cached ...` | 음원이 교체됨 (경로별 처음 1회만 기록) |
+| `[Health] 훅 상태 요약` | 각 기능의 훅이 몇 개 걸렸는지(`정상`/`일부`/`실패`/`꺼짐`) 한눈에 표시 |
+| `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` | 게임이 업데이트되었을 때 뜨는 경고 (`savecustomkey/.game-fingerprint` 기준) |

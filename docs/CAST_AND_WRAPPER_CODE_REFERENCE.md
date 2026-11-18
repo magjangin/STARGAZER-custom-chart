@@ -21,13 +21,13 @@ STARGAZER의 게임 타입은 대부분 `Il2Cpp...` 네임스페이스 아래의
 
 | 파일 | 역할 |
 | :--- | :--- |
-| `src/Hooks/Support/TrackSelector/TrackSelectorReflectionSupport.cs` | IL2CPP 타입 검색, `Pointer` 기반 concrete wrapper 생성, 메타데이터 탐색 |
-| `src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs` | 컬렉션 `Insert` 대상 타입 확인 및 삽입 전 캐스트 처리 |
+| `src/Hooks/Support/TrackSelector/TrackSelectorReflectionSupport.cs` | IL2CPP 타입 검색, `Pointer` 기반 concrete wrapper 생성, 메타데이터 탐색(`GetTrackMetaDataObject`) |
+| `src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs` | 네이티브 포인터(`IntPtr`) 기반 커스텀 트랙 식별(`InjectedCustomTrackAlbums`), 컬렉션 `Insert` 대상 타입 확인 및 캐스트 처리 |
 | `src/Hooks/Support/TrackSelector/TrackSelectorCloningSupport.cs` | 트랙/메타데이터 복제, IL2CPP identity 검증, 래퍼 생성 후 writable 멤버 복사 |
-| `src/Hooks/Support/TrackSelector/TrackSelectorMetadataSupport.cs` | 트랙 ID 및 내부 메타데이터 접근, 덤프 로그 출력 |
-| `src/Hooks/Support/Sound/CustomBgmSupport.cs` | `AudioClip` 포인터 설명, IL2CPP 콜백 래퍼의 `Invoke` 호출 |
-| `src/Hooks/Support/TrackLoader/TrackLoaderHookSupport.cs` | onLoaded 콜백의 `Invoke` 메서드를 찾아 Harmony postfix 패치 |
-| `src/Hooks/Support/Common/ReflectionSupport.cs` | 프로퍼티/필드/getter 순서로 멤버 값을 읽는 공통 helper |
+| `src/Hooks/Support/Sound/CustomBgmSupport.cs` | `AudioClip` 포인터 설명, 커스텀 BGM/프리뷰 캐시 서빙 및 콜백 전달 |
+| `src/Hooks/Support/Visual/CustomJacketSupport.cs` | 커스텀 자켓 `Sprite` 캐시 서빙 및 콜백 전달 |
+| `src/Hooks/Support/Common/HookInvocationSupport.cs` | `INNER_PatternLoader.onCompleted` 이중래퍼(Dual-Wrapper) 설치 및 로더/델리게이트 `Pointer` 비교 |
+| `src/Hooks/Support/Common/ReflectionSupport.cs` | 프로퍼티/필드/getter 캐시 조회(`TryGetMemberValue`), 타입 기반 유일 멤버 폴백(`TryGetMemberByType`), 단일 인자 콜백 호출(`TryInvokeSingleArgCallback`) |
 
 ## 캐스트 흐름
 
@@ -101,43 +101,49 @@ STARGAZER의 게임 타입은 대부분 `Il2Cpp...` 네임스페이스 아래의
 
 우선 `Pointer` 또는 `m_CachedPtr`을 비교하고, 포인터를 읽을 수 없으면 `ReferenceEquals`로 fallback합니다. 이 비교는 복제 검증에서 중요합니다. 새 메타데이터가 원본과 같은 포인터를 공유하면 독립 복제가 아니기 때문입니다.
 
-## delegate 래퍼와 `Invoke`
+## delegate 래퍼와 `Invoke` / 이중래퍼(Dual-Wrapper)
 
-### `InvokeActionOfAudioClip`
+### `TryInvokeSingleArgCallback`
 
-위치: `CustomBgmSupport.cs`
+위치: `ReflectionSupport.cs` (호출부: `CustomBgmSupport.cs`, `CustomJacketSupport.cs`)
 
-커스텀 BGM 로더는 게임의 `LoadBGMClip` 또는 `LoadPreviewClip`에 전달된 콜백을 보관했다가, 로컬 `AudioClip` 로딩이 끝나면 호출합니다.
+커스텀 BGM/프리뷰 및 자켓 로더는 게임의 `LoadBGMClip`, `LoadPreviewClip`, `LoadJacketSprite`에 전달된 콜백을 받아 로컬 에셋(`AudioClip` 또는 `Sprite`)을 전달합니다.
 
-콜백 객체가 컴파일 타임의 `Action<AudioClip>` 타입으로 직접 보장되지 않기 때문에 다음처럼 처리합니다.
+콜백 객체가 일반 C# `Action<T>`가 아니라 `Il2CppSystem.Action<T>` 래퍼이므로 다음처럼 처리합니다.
 
-1. 콜백 객체의 런타임 타입에서 public instance `Invoke` 메서드를 찾습니다.
-2. 찾으면 `invoke.Invoke(callback, new object?[] { clip })`로 호출합니다.
+1. 콜백 객체의 런타임 타입에서 public instance `Invoke` 메서드를 찾아 `CallbackInvokeCache`에 캐시합니다.
+2. 찾으면 `invoke.Invoke(callback, new[] { arg })`로 호출합니다.
 3. 없거나 실패하면 경고 로그를 남깁니다.
 
-이 방식은 IL2CPP delegate 래퍼를 직접 generic delegate로 캐스팅하지 않아도 되게 해 줍니다.
+> **주의 (Dead End 7)**: 예전에는 `TrackLoader`의 콜백 타입(`Il2CppSystem.Action<List<ITrackData>>.Invoke`)에 직접 Harmony 패치를 걸었으나, IL2CPP가 참조 타입 제네릭 델리게이트의 네이티브 구현을 공유하기 때문에 게임 전체의 `Action<참조형>` 콜백(오디오/스프라이트 등)에 트램펄린이 붙는 병목과 오발동이 발생했습니다(2026-11-14 제거). **공유 제네릭 델리게이트의 `Invoke`는 절대 Harmony로 패치하지 말고**, 아래처럼 인스턴스 필드의 델리게이트 참조를 교체하거나 리플렉션으로 호출만 해야 합니다.
 
-### `TryPatchTrackLoaderOnLoadedCallback`
+### `TryWrapPatternLoaderOnCompleted` (이중래퍼 / Dual-Wrapper)
 
-위치: `TrackLoaderHookSupport.cs`
+위치: `HookInvocationSupport.cs`
 
-트랙 로더의 onLoaded 콜백도 같은 원리로 처리합니다. 콜백 객체에서 `Invoke` 메서드를 찾고, 그 메서드 자체에 Harmony postfix를 붙입니다.
+BMS 차트 주입의 1차 경로(컴파일러 생성 람다 `_Load_b__5_0` Postfix)가 게임 업데이트로 깨졌을 때를 대비한 2차 백업 경로입니다.
 
-중복 패치를 막기 위해 `BuildMethodPatchKey(invokeMethod)` 결과를 `TrackLoaderCallbackPatchedMethods`에 저장합니다.
+1. `INNER_PatternLoader.Load` Prefix에서 로더 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 이름 변경 시 타입 기반 유일 멤버 폴백)를 읽습니다.
+2. 관리 람다(`Action<Pattern>`)가 먼저 `ProbeNoteArrayMembers(pattern, "PatternLoader.DualWrapper")`를 실행한 뒤 원래 `origAction.Invoke(pattern)`를 호출하도록 감싸고, 이를 `Il2CppSystem.Action<Pattern>`으로 암시적 변환해 `onCompleted`에 다시 넣습니다.
+3. `WrappedPatternLoaders[loaderPtr] = wrapper.Pointer`로 기록해 두어 이미 감싼 로더를 중복 래핑하지 않으며, 1차 람다 Postfix와 2차 이중래퍼가 모두 실행될 때는 `Pattern`의 네이티브 포인터(`LastProbedPatternPtr`)로 중복 차트 주입을 차단합니다.
 
 ## 멤버 접근 helper
 
-### `TryGetMemberValue`
+### `TryGetMemberValue` & `TryGetMemberByType`
 
 위치: `ReflectionSupport.cs`
 
-IL2CPP 래퍼 타입은 프로퍼티, 필드, getter 메서드 노출 방식이 타입마다 다를 수 있습니다. `TryGetMemberValue`는 이 차이를 흡수하기 위해 다음 순서로 값을 찾습니다.
+IL2CPP 래퍼 타입은 프로퍼티, 필드, getter 메서드 노출 방식이 타입마다 다를 수 있습니다. `TryGetMemberValue`는 이 차이를 흡수하기 위해 `MemberAccessorCache`를 통해 다음 순서로 값을 찾습니다.
 
 1. 같은 이름의 readable property
 2. 같은 이름의 field
 3. `get_{memberName}` 형태의 getter method
 
-각 단계는 실패해도 예외를 밖으로 던지지 않고 다음 후보를 시도합니다. 런타임 분석과 patch 코드에서 게임 버전 차이를 견디기 위한 방어적 접근입니다.
+게임 업데이트로 멤버 이름이 바뀌는 경우를 대비해 핵심 경로에서는 `TryGetMemberByType(instance, expectedTypeShortName, preferredNames...)`을 사용합니다.
+
+1. `preferredNames` 중 하나라도 타입에 선언돼 있으면 이름 기반 조회 결과만 반환합니다(런타임 값이 `null`이어도 불필요한 타입 스캔을 하지 않음).
+2. `preferredNames`가 전부 타입에서 사라졌을 때만 `expectedTypeShortName`(예: `"ITrackData"`, `"TravelArgs"`, `"List<Area>"`)과 일치하는 **유일한** 멤버(컴파일러 생성 `<*>`/`k__BackingField`는 후순위)를 찾아 `TypeFallbackAccessorCache`에 캐시하고 `[HookPatch][resolve]` 경고를 1회 남깁니다.
+3. `expectedTypeShortName`이 `"List<T>"` 형태인데 정확히 일치하는 멤버가 없으면, 원소 타입 `T`가 같은 배열/컬렉션(`T[]`, `Il2CppReferenceArray<T>`, `IList<T>` 등) 중 유일 후보로 한 단계 더 폴백합니다.
 
 ## 수정 시 주의사항
 

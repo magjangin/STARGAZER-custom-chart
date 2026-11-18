@@ -63,17 +63,17 @@ namespace STARGAZER_custom_chart
             }
 
             // 플레이 화면 난이도 표시에 쓰려고 이 시점에 재생 난이도를 기억해 둔다.
-            CustomChartPlayLevelKey = TryGetMemberValue(travelArgs, travelArgs.GetType(), "PlayLevel")?.ToString();
+            // 업데이트로 TravelArgs 프로퍼티 이름이 바뀌어도 ELevels/ITrackData 유일 멤버 폴백으로 살아남도록 한다.
+            CustomChartPlayLevelKey = TryGetMemberByType(travelArgs, "ELevels", "PlayLevel", "playLevel", "Level", "level")?.ToString();
 
-            object? track = TryGetMemberValue(travelArgs, travelArgs.GetType(), "PlayTrack");
+            object? track = TryGetMemberByType(travelArgs, "ITrackData", "PlayTrack", "playTrack", "Track", "track");
             if (track is null)
             {
                 MelonLogger.Msg("[BgmDebug] play state track=<null>");
                 return;
             }
 
-            string title = TryGetMemberValue(track, track.GetType(), "TrackDisplayName")?.ToString()
-                ?? TryGetMemberValue(track, track.GetType(), "TrackDisplayNameEN")?.ToString()
+            string title = TryGetMemberValue(track, "TrackDisplayName", "TrackDisplayNameEN", "DisplayName", "displayName")?.ToString()
                 ?? string.Empty;
             // 표시명은 사용자가 바꿀 수 있고, TrackID는 복제 원본인 공식 트랙과 동일하다.
             // 우리가 주입한 객체인지(객체 동일성)로만 확실하게 판별할 수 있다.
@@ -254,8 +254,10 @@ namespace STARGAZER_custom_chart
 
             private static bool Prepare() => PrepareTargets(Targets, new[]
             {
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action"),
-                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action"),
+                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadBGMClip", 1, "Action")
+                    .WithAlternates("LoadBgmClip", "LoadBGM", "LoadAudioClip"),
+                new PatchSpec("Il2CppStargazer.TrackLoader+INNER_TrackData", "LoadPreviewClip", 1, "Action")
+                    .WithAlternates("LoadPreviewBGM", "LoadPreviewBgm", "LoadPreviewAudioClip"),
             }, "커스텀 BGM/프리뷰");
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
@@ -274,9 +276,12 @@ namespace STARGAZER_custom_chart
                         return true;
                     }
 
-                    string? path = string.Equals(__originalMethod.Name, "LoadPreviewClip", StringComparison.Ordinal)
-                        ? album.PreviewPath
-                        : album.MusicPath;
+                    // 대체 이름(예: LoadPreviewBGM)으로 연결된 경우에도 프리뷰 역할을 그대로 유지하도록 논리 이름을 먼저 본다.
+                    string? logicalName = TryGetResolvedTargetLogicalName(__originalMethod);
+                    bool isPreview = logicalName is not null
+                        ? logicalName.EndsWith(".LoadPreviewClip", StringComparison.Ordinal)
+                        : __originalMethod.Name.IndexOf("Preview", StringComparison.OrdinalIgnoreCase) >= 0;
+                    string? path = isPreview ? album.PreviewPath : album.MusicPath;
 
                     // 곡 선택 커서를 옮길 때마다 프리뷰가 요청되므로, 캐시 적중이면 디스크(File.Exists)를 보지 않는다.
                     if (path is not null && TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)

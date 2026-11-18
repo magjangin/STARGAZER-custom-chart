@@ -280,43 +280,15 @@ namespace STARGAZER_custom_chart
             var nonBackingMatches = new List<(string Name, MemberAccessor Accessor)>();
             var backingMatches = new List<(string Name, MemberAccessor Accessor)>();
 
-            try
-            {
-                foreach (PropertyInfo prop in type.GetProperties(InstanceMemberFlags))
-                {
-                    if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
-                    {
-                        continue;
-                    }
+            CollectTypeMatches(type, pType => MatchesShortTypeName(pType, expectedTypeShortName, matchGenericArgs), nonBackingMatches, backingMatches);
 
-                    if (!MatchesShortTypeName(prop.PropertyType, expectedTypeShortName, matchGenericArgs))
-                    {
-                        continue;
-                    }
-
-                    var targetList = IsCompilerBackingMember(prop.Name) ? backingMatches : nonBackingMatches;
-                    AddDistinctCaseInsensitiveMatch(targetList, prop.Name, new MemberAccessor(prop.Name, prop, null, null));
-                }
-            }
-            catch
+            // List<T> 로 못 찾았지만 게임 업데이트로 T[] / Il2CppReferenceArray<T> / IList<T> 등
+            // 다른 컬렉션 컨테이너로 바뀐 경우, 원소 타입 T가 같은 유일 컬렉션 멤버로 한 단계 더 폴백한다.
+            if (nonBackingMatches.Count == 0
+                && backingMatches.Count == 0
+                && TryExtractListElementShortName(expectedTypeShortName, out string elementShortName))
             {
-            }
-
-            try
-            {
-                foreach (FieldInfo field in type.GetFields(InstanceMemberFlags))
-                {
-                    if (!MatchesShortTypeName(field.FieldType, expectedTypeShortName, matchGenericArgs))
-                    {
-                        continue;
-                    }
-
-                    var targetList = IsCompilerBackingMember(field.Name) ? backingMatches : nonBackingMatches;
-                    AddDistinctCaseInsensitiveMatch(targetList, field.Name, new MemberAccessor(field.Name, null, field, null));
-                }
-            }
-            catch
-            {
+                CollectTypeMatches(type, pType => MatchesCollectionElementShortName(pType, elementShortName), nonBackingMatches, backingMatches);
             }
 
             List<(string Name, MemberAccessor Accessor)> candidates = nonBackingMatches.Count > 0 ? nonBackingMatches : backingMatches;
@@ -341,6 +313,94 @@ namespace STARGAZER_custom_chart
 
             TypeFallbackAccessorCache.TryAdd(key, resolved);
             return resolved;
+        }
+
+        private static void CollectTypeMatches(
+            Type type,
+            Func<Type, bool> predicate,
+            List<(string Name, MemberAccessor Accessor)> nonBackingMatches,
+            List<(string Name, MemberAccessor Accessor)> backingMatches)
+        {
+            try
+            {
+                foreach (PropertyInfo prop in type.GetProperties(InstanceMemberFlags))
+                {
+                    if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
+                    {
+                        continue;
+                    }
+
+                    if (!predicate(prop.PropertyType))
+                    {
+                        continue;
+                    }
+
+                    var targetList = IsCompilerBackingMember(prop.Name) ? backingMatches : nonBackingMatches;
+                    AddDistinctCaseInsensitiveMatch(targetList, prop.Name, new MemberAccessor(prop.Name, prop, null, null));
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                foreach (FieldInfo field in type.GetFields(InstanceMemberFlags))
+                {
+                    if (!predicate(field.FieldType))
+                    {
+                        continue;
+                    }
+
+                    var targetList = IsCompilerBackingMember(field.Name) ? backingMatches : nonBackingMatches;
+                    AddDistinctCaseInsensitiveMatch(targetList, field.Name, new MemberAccessor(field.Name, null, field, null));
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool TryExtractListElementShortName(string expectedTypeShortName, out string elementShortName)
+        {
+            if (expectedTypeShortName.StartsWith("List<", StringComparison.OrdinalIgnoreCase)
+                && expectedTypeShortName.EndsWith(">", StringComparison.Ordinal)
+                && expectedTypeShortName.Length > 6)
+            {
+                elementShortName = expectedTypeShortName.Substring(5, expectedTypeShortName.Length - 6).Trim();
+                return elementShortName.Length > 0;
+            }
+
+            elementShortName = string.Empty;
+            return false;
+        }
+
+        private static bool MatchesCollectionElementShortName(Type memberType, string elementShortName)
+        {
+            if (memberType.IsArray)
+            {
+                Type? elem = memberType.GetElementType();
+                return elem is not null && MatchesShortTypeName(elem, elementShortName, matchGenericArgs: false);
+            }
+
+            if (!memberType.IsGenericType)
+            {
+                return false;
+            }
+
+            Type[] args = memberType.GetGenericArguments();
+            if (args.Length != 1)
+            {
+                return false;
+            }
+
+            string containerName = StripGenericArity(memberType.Name);
+            bool isCollectionContainer = containerName.IndexOf("List", StringComparison.OrdinalIgnoreCase) >= 0
+                || containerName.IndexOf("Array", StringComparison.OrdinalIgnoreCase) >= 0
+                || containerName.IndexOf("Collection", StringComparison.OrdinalIgnoreCase) >= 0
+                || containerName.IndexOf("Enumerable", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            return isCollectionContainer && MatchesShortTypeName(args[0], elementShortName, matchGenericArgs: false);
         }
 
         private static void AddDistinctCaseInsensitiveMatch(

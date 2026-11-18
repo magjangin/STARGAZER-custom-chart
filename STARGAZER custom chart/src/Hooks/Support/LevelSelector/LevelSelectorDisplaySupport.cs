@@ -1,5 +1,5 @@
 using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using MelonLoader;
@@ -47,7 +47,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? levels = TryGetMemberValue(levelSelector, levelSelector.GetType(), "levels");
+                object? levels = TryGetMemberByType(levelSelector, "List<SelectionLevel>", "levels", "Levels", "_levels", "levelItems", "LevelItems");
                 if (levels is null)
                 {
                     if (LogOnce("CustomLevelDisplay.noLevels"))
@@ -66,7 +66,7 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    object? levelItem = TryGetMemberValue(selectionLevel, selectionLevel.GetType(), "item");
+                    object? levelItem = TryGetMemberByType(selectionLevel, "LevelItem", "item", "Item", "_item", "levelItem", "LevelItem");
                     if (levelItem is null)
                     {
                         seen++;
@@ -131,13 +131,14 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? levelUnits = TryGetMemberValue(viewer, viewer.GetType(), "levelItems");
+                object? levelUnits = TryGetMemberByType(viewer, "List<LevelUnit>", "levelItems", "LevelItems", "_levelItems", "levels", "Levels");
                 if (levelUnits is null)
                 {
                     return;
                 }
 
                 int applied = 0;
+                int seen = 0;
                 foreach (object? levelUnit in EnumerateCollectionItems(levelUnits, 12))
                 {
                     if (levelUnit is null)
@@ -145,7 +146,19 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    string? levelKey = TryGetMemberValue(levelUnit, levelUnit.GetType(), "targetLevel")?.ToString();
+                    string? levelKey = TryGetMemberByType(levelUnit, "ELevels", "targetLevel", "TargetLevel", "level", "Level")?.ToString();
+                    if (levelKey is null || !info.Levels.ContainsKey(levelKey))
+                    {
+                        levelKey = TryGetMemberValue(levelUnit, levelUnit.GetType(), "name")?.ToString()?.Trim();
+                    }
+
+                    if (levelKey is null || !info.Levels.ContainsKey(levelKey))
+                    {
+                        levelKey = seen < LevelOrderFallback.Length ? LevelOrderFallback[seen] : null;
+                    }
+
+                    seen++;
+
                     if (levelKey is null || !info.Levels.TryGetValue(levelKey, out string? levelValue))
                     {
                         continue;
@@ -169,6 +182,10 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static readonly string[] LevelUnitSetterCandidates = { "Set", "SetLevel", "FetchLevelText", "SetText" };
+        private static readonly string[] LevelItemSetterCandidates = { "FetchLevelText", "SetLevelText", "Set", "SetText" };
+        private static readonly string[] TextProviderSetterCandidates = { "DoTextSetter", "SetText", "Set" };
+
         private static MethodInfo? _cachedLevelUnitSetMethod;
         private static Type? _cachedLevelUnitType;
         private static MethodInfo? _cachedFetchLevelTextMethod;
@@ -176,6 +193,29 @@ namespace STARGAZER_custom_chart
         private static MethodInfo? _cachedDoTextSetterMethod;
         private static PropertyInfo? _cachedTextProviderTextProp;
         private static Type? _cachedTextProviderType;
+
+        private static MethodInfo? ResolveSingleStringSetterMethod(Type type, IReadOnlyList<string> candidates)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            Type[] stringParam = { typeof(string) };
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string candidate = candidates[i];
+                MethodInfo? found = type.GetMethod(candidate, flags, null, stringParam, null);
+                if (found is not null)
+                {
+                    if (i > 0 && LogOnce($"setter.resolve.{type.FullName}.{candidates[0]}"))
+                    {
+                        MelonLogger.Warning($"[HookPatch][resolve] {type.FullName}.{candidates[0]}(string) 대신 대체 세터 '{found.Name}(string)' 으로 연결합니다.");
+                    }
+
+                    return found;
+                }
+            }
+
+            return null;
+        }
 
         private static bool TryInvokeLevelUnitSet(object levelUnit, string levelValue)
         {
@@ -185,12 +225,7 @@ namespace STARGAZER_custom_chart
                 if (_cachedLevelUnitType != type)
                 {
                     _cachedLevelUnitType = type;
-                    _cachedLevelUnitSetMethod = type.GetMethod(
-                        "Set",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                        null,
-                        new[] { typeof(string) },
-                        null);
+                    _cachedLevelUnitSetMethod = ResolveSingleStringSetterMethod(type, LevelUnitSetterCandidates);
                 }
 
                 if (_cachedLevelUnitSetMethod is null)
@@ -250,8 +285,8 @@ namespace STARGAZER_custom_chart
             if (_cachedTextProviderType != type)
             {
                 _cachedTextProviderType = type;
-                _cachedDoTextSetterMethod = type.GetMethod("DoTextSetter", flags, null, new[] { typeof(string) }, null);
-                _cachedTextProviderTextProp = type.GetProperty("Text", flags);
+                _cachedDoTextSetterMethod = ResolveSingleStringSetterMethod(type, TextProviderSetterCandidates);
+                _cachedTextProviderTextProp = type.GetProperty("Text", flags) ?? type.GetProperty("text", flags);
             }
 
             // textChain까지 전파하는 게임 자체 세터를 우선 사용한다.
@@ -341,12 +376,7 @@ namespace STARGAZER_custom_chart
                 if (_cachedLevelItemType != type)
                 {
                     _cachedLevelItemType = type;
-                    _cachedFetchLevelTextMethod = type.GetMethod(
-                        "FetchLevelText",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                        null,
-                        new[] { typeof(string) },
-                        null);
+                    _cachedFetchLevelTextMethod = ResolveSingleStringSetterMethod(type, LevelItemSetterCandidates);
                 }
 
                 if (_cachedFetchLevelTextMethod is null)
