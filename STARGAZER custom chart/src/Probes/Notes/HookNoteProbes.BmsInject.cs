@@ -28,86 +28,6 @@ namespace STARGAZER_custom_chart
         private static readonly string[] TargetLaneUidNames = { "targetlaneuid" };
         private static readonly string[] TargetLayerNames = { "targetlayer" };
 
-        private sealed class AreaInjectorMetadata
-        {
-            public ConstructorInfo? LayerCtor { get; init; }
-            public MethodInfo? NotesAddMethod { get; set; }
-        }
-
-        private sealed class BeatInfoInjectorMetadata
-        {
-            public ConstructorInfo? DefaultCtor { get; init; }
-            public FieldInfo? BeatSplitField { get; init; }
-            public PropertyInfo? BeatSplitProp { get; init; }
-            public FieldInfo? BeatIndexField { get; init; }
-            public PropertyInfo? BeatIndexProp { get; init; }
-
-            public bool CanWriteDirect =>
-                (BeatSplitField is not null || BeatSplitProp is not null)
-                && (BeatIndexField is not null || BeatIndexProp is not null);
-
-            public void WriteDirect(object beatInfo, int split, int index)
-            {
-                if (BeatSplitField is not null) BeatSplitField.SetValue(beatInfo, split);
-                else BeatSplitProp!.SetValue(beatInfo, split);
-
-                if (BeatIndexField is not null) BeatIndexField.SetValue(beatInfo, index);
-                else BeatIndexProp!.SetValue(beatInfo, index);
-            }
-        }
-
-        private sealed class NoteInjectorMetadata
-        {
-            public ConstructorInfo? Ctor3 { get; init; }
-            public PropertyInfo? PropertyProp { get; init; }
-            public FieldInfo? PropertyField { get; init; }
-
-            public bool CanSetProperty =>
-                (PropertyProp is not null && PropertyProp.CanWrite) || PropertyField is not null;
-
-            public void SetProperty(object note, object propValue)
-            {
-                if (PropertyProp is not null && PropertyProp.CanWrite) PropertyProp.SetValue(note, propValue);
-                else PropertyField?.SetValue(note, propValue);
-            }
-        }
-
-        private sealed class NotePropertyInjectorMetadata
-        {
-            public ConstructorInfo? DefaultCtor { get; init; }
-            public PropertyInfo? ExprProp { get; init; }
-            public FieldInfo? ExprField { get; init; }
-            public PropertyInfo? LinkedProp { get; init; }
-            public FieldInfo? LinkedField { get; init; }
-            public object? LinkedNone { get; init; }
-            public object? LinkedStart { get; init; }
-            public object? LinkedEnd { get; init; }
-
-            public void Apply(object propObj, object? templateExprHolder, object linkedEnumVal)
-            {
-                if (templateExprHolder is not null)
-                {
-                    if (ExprProp is not null && ExprProp.CanWrite) ExprProp.SetValue(propObj, templateExprHolder);
-                    else if (ExprField is not null) ExprField.SetValue(propObj, templateExprHolder);
-                }
-
-                if (LinkedProp is not null && LinkedProp.CanWrite) LinkedProp.SetValue(propObj, linkedEnumVal);
-                else if (LinkedField is not null) LinkedField.SetValue(propObj, linkedEnumVal);
-            }
-        }
-
-        private static readonly ConcurrentDictionary<(Type AreaType, Type LayerType), AreaInjectorMetadata> AreaMetaCache =
-            new ConcurrentDictionary<(Type, Type), AreaInjectorMetadata>();
-
-        private static readonly ConcurrentDictionary<Type, BeatInfoInjectorMetadata> BeatInfoMetaCache =
-            new ConcurrentDictionary<Type, BeatInfoInjectorMetadata>();
-
-        private static readonly ConcurrentDictionary<Type, NoteInjectorMetadata> NoteMetaCache =
-            new ConcurrentDictionary<Type, NoteInjectorMetadata>();
-
-        private static readonly ConcurrentDictionary<Type, NotePropertyInjectorMetadata> NotePropertyMetaCache =
-            new ConcurrentDictionary<Type, NotePropertyInjectorMetadata>();
-
         // templateArea/templateNote는 위치 정보용이 아니라, Area/Note/BeatInfo/NoteProperty의 실제 IL2CPP 타입과
         // length 및 NoteProperty.expressionHolder 샘플 값을 얻기 위한 템플릿으로만 쓰인다.
         private static void TryInjectBmsChart(object layer, object areasValue, object templateArea, object templateNote)
@@ -202,6 +122,8 @@ namespace STARGAZER_custom_chart
 
                 // 먼저 임시 리스트에 새 Area를 모두 조립한다. 1개도 못 만들면 원본 Areas를 지우지 않고 보존한다.
                 var builtAreas = new List<object>(chart.Measures.Count);
+                int templateLengthIndex = TryGetIntMember(templateLength, "BeatIndex", "beatIndex") ?? 4;
+                int templateLengthSplit = TryGetIntMember(templateLength, "BeatSplit", "beatSplit") ?? 1;
 
                 foreach (BmsMeasure measure in chart.Measures)
                 {
@@ -212,8 +134,22 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
+                    object areaLength = templateLength;
+                    if (Math.Abs(measure.LengthRatio - 1.0) >= 1e-6)
+                    {
+                        (int ratioNum, int ratioDenom) = BmsChart.ToFraction(measure.LengthRatio);
+                        object? customLength = beatInfoMeta.DefaultCtor is not null
+                            ? beatInfoMeta.DefaultCtor.Invoke(null)
+                            : InstantiateIl2CppObject(beatInfoType);
+                        if (customLength is not null
+                            && TryWriteBeatInfoPosition(customLength, beatInfoMeta, templateLengthIndex * ratioNum, templateLengthSplit * ratioDenom))
+                        {
+                            areaLength = customLength;
+                        }
+                    }
+
                     TrySetValueByNameCandidates(newArea, AreaBpmNames, chart.Bpm);
-                    TrySetValueByNameCandidates(newArea, LengthNames, templateLength);
+                    TrySetValueByNameCandidates(newArea, LengthNames, areaLength);
                     TrySetValueByNameCandidates(newArea, TargetLayerNames, layer);
 
                     object? notesValue = TryGetMemberByType(newArea, "List<Note>", "notes", "Notes");
@@ -538,6 +474,12 @@ namespace STARGAZER_custom_chart
             {
                 SingleArgBuffer[0] = null;
             }
+        }
+
+        private static int? TryGetIntMember(object instance, params string[] names)
+        {
+            object? value = TryGetMemberValue(instance, names);
+            return value is int intVal ? intVal : null;
         }
 
         private static bool TryWriteBeatInfoPosition(object beatInfo, BeatInfoInjectorMetadata meta, int beatNumerator, int beatDenominator)

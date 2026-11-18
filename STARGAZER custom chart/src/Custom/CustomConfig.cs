@@ -67,6 +67,9 @@ namespace STARGAZER_custom_chart
                 "[디버그] 런타임 프로브 상세 로그 출력 여부"),
             new ConfigEntry("TrackSelectorVerboseLogging", "false",
                 "[디버그] TrackSelector 주입 상세 로그 출력 여부"),
+
+            new ConfigEntry("BgmCacheMaxEntries", "24",
+                "메모리에 유지할 커스텀 BGM AudioClip 최대 개수 (0 = 무제한, 초과 시 가장 오래 안 쓴 클립부터 해제)"),
         };
 
         private static readonly Dictionary<string, string> DefaultsByKey = BuildDefaultsMap();
@@ -104,6 +107,7 @@ namespace STARGAZER_custom_chart
         public static bool FocusedHarmonyInvocationLogging => Current.FocusedHarmonyInvocationLogging;
         public static bool RuntimeProbeLogging => Current.RuntimeProbeLogging;
         public static bool TrackSelectorVerboseLogging => Current.TrackSelectorVerboseLogging;
+        public static int BgmCacheMaxEntries => Current.BgmCacheMaxEntries;
 
         public static string FolderPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName);
 
@@ -157,6 +161,7 @@ namespace STARGAZER_custom_chart
                 settings.FocusedHarmonyInvocationLogging = ReadBool(values, "FocusedHarmonyInvocationLogging", settings.FocusedHarmonyInvocationLogging);
                 settings.RuntimeProbeLogging = ReadBool(values, "RuntimeProbeLogging", settings.RuntimeProbeLogging);
                 settings.TrackSelectorVerboseLogging = ReadBool(values, "TrackSelectorVerboseLogging", settings.TrackSelectorVerboseLogging);
+                settings.BgmCacheMaxEntries = Math.Max(0, ReadInt(values, "BgmCacheMaxEntries", settings.BgmCacheMaxEntries));
 
                 LogInfo($"[Config] autoplay={settings.AutoPlay} AllPerfect={settings.AllPerfect}(customOnly={settings.AllPerfectCustomOnly}) UnlockAll={settings.UnlockAll}");
                 LogInfo($"[Config] NoteSway={settings.NoteSway} amplitude={settings.NoteSwayAmplitude} speed={settings.NoteSwaySpeed} damping={settings.NoteSwayDamping}/{settings.NoteSwayDampingTime}s");
@@ -191,7 +196,13 @@ namespace STARGAZER_custom_chart
                 FocusedHarmonyInvocationLogging = GetDefaultBool("FocusedHarmonyInvocationLogging"),
                 RuntimeProbeLogging = GetDefaultBool("RuntimeProbeLogging"),
                 TrackSelectorVerboseLogging = GetDefaultBool("TrackSelectorVerboseLogging"),
+                BgmCacheMaxEntries = GetDefaultInt("BgmCacheMaxEntries"),
             };
+        }
+
+        private static int GetDefaultInt(string key)
+        {
+            return DefaultsByKey.TryGetValue(key, out string? raw) ? ParseInt(raw, key, 0) : 0;
         }
 
         private static bool GetDefaultBool(string key)
@@ -331,6 +342,22 @@ namespace STARGAZER_custom_chart
             return result;
         }
 
+        private static int ReadInt(Dictionary<string, string> values, string key, int fallback)
+        {
+            return values.TryGetValue(key, out string? text) ? ParseInt(text, key, fallback) : fallback;
+        }
+
+        private static int ParseInt(string text, string key, int fallback)
+        {
+            if (int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+            {
+                return value;
+            }
+
+            LogWarning($"[Config] {key} 값을 정수로 읽지 못해 기본값({fallback})을 씁니다: {text}");
+            return fallback;
+        }
+
         private static bool ReadBool(Dictionary<string, string> values, string key, bool fallback)
         {
             return values.TryGetValue(key, out string? text) ? ParseBool(text, key, fallback) : fallback;
@@ -412,6 +439,7 @@ namespace STARGAZER_custom_chart
             public bool FocusedHarmonyInvocationLogging;
             public bool RuntimeProbeLogging;
             public bool TrackSelectorVerboseLogging;
+            public int BgmCacheMaxEntries;
         }
 
         private sealed class ConfigEntry

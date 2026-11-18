@@ -19,6 +19,8 @@
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomAlbum.cs" Link="Source\CustomAlbum.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomConfig.cs" Link="Source\CustomConfig.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomTrackInfo.cs" Link="Source\CustomTrackInfo.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Hooks\Patches\UserData\SaveGuardLogic.cs" Link="Source\SaveGuardLogic.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\Common\PatchResolutionLogic.cs" Link="Source\PatchResolutionLogic.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\Common\SafeTextReader.cs" Link="Source\SafeTextReader.cs" />
   </ItemGroup>
 </Project>

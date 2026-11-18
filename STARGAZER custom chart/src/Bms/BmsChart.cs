@@ -36,12 +36,14 @@ namespace STARGAZER_custom_chart
 
     internal sealed class BmsMeasure
     {
-        public BmsMeasure(int index)
+        public BmsMeasure(int index, double lengthRatio = 1.0)
         {
             Index = index;
+            LengthRatio = lengthRatio;
         }
 
         public int Index { get; }
+        public double LengthRatio { get; internal set; }
         public List<BmsNoteEvent> Notes { get; } = new List<BmsNoteEvent>();
     }
 
@@ -242,9 +244,33 @@ namespace STARGAZER_custom_chart
             var chart = new BmsChart { Bpm = bpm, SoundKinds = kindBySoundId };
             chart.Warnings.AddRange(warnings);
             var measuresByIndex = new Dictionary<int, BmsMeasure>();
-            bool hasMeasureLengthChange = false;
+            var measureLengthRatios = new Dictionary<int, double>();
             bool hasBpmChange = false;
             bool hasStop = false;
+
+            // 1차 스캔: 채널 02(마디 길이 배율)를 먼저 수집해야 노트 박자 계산 시 해당 마디 길이를 반영할 수 있다.
+            foreach (int lineIdx in dataLineIndices)
+            {
+                ReadOnlySpan<char> line = rawLines[lineIdx].AsSpan().Trim();
+                ReadOnlySpan<char> measureSpan = line.Slice(1, 3);
+                ReadOnlySpan<char> channelSpan = line.Slice(4, 2);
+                ReadOnlySpan<char> dataSpan = line.Slice(7);
+
+                if (!int.TryParse(measureSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int measureIndex)
+                    || measureIndex < 0
+                    || !int.TryParse(channelSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int channel))
+                {
+                    continue;
+                }
+
+                if (channel == 2)
+                {
+                    if (double.TryParse(dataSpan.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double ratio) && ratio > 0)
+                    {
+                        measureLengthRatios[measureIndex] = ratio;
+                    }
+                }
+            }
 
             foreach (int lineIdx in dataLineIndices)
             {
@@ -260,10 +286,8 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                // 노트로 취급하지 않는 채널: 01=BGM, 02=마디 길이, 03/08=BPM변경, 09=STOP.
-                if (channel == 2)
+                if (channel is 1 or 2)
                 {
-                    hasMeasureLengthChange = true;
                     continue;
                 }
 
@@ -279,22 +303,19 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (channel == 1)
-                {
-                    continue;
-                }
-
                 if (dataSpan.IsEmpty || dataSpan.Length % chunkWidth != 0)
                 {
                     continue;
                 }
 
+                double lengthRatio = measureLengthRatios.TryGetValue(measureIndex, out double r) ? r : 1.0;
                 if (!measuresByIndex.TryGetValue(measureIndex, out BmsMeasure? targetMeasure))
                 {
-                    targetMeasure = new BmsMeasure(measureIndex);
+                    targetMeasure = new BmsMeasure(measureIndex, lengthRatio);
                     measuresByIndex[measureIndex] = targetMeasure;
                 }
 
+                (int ratioNum, int ratioDenom) = ToFraction(lengthRatio);
                 int slotCount = dataSpan.Length / chunkWidth;
 
                 for (int slot = 0; slot < slotCount; slot++)
@@ -307,8 +328,8 @@ namespace STARGAZER_custom_chart
 
                     string normalized = NormalizeSoundId(chunk, extended);
 
-                    int numerator = slot * MeasureBeats;
-                    int denominator = slotCount;
+                    int numerator = slot * MeasureBeats * ratioNum;
+                    int denominator = slotCount * ratioDenom;
                     int gcd = Gcd(numerator, denominator);
                     numerator /= gcd;
                     denominator /= gcd;
@@ -319,11 +340,6 @@ namespace STARGAZER_custom_chart
 
                     targetMeasure.Notes.Add(new BmsNoteEvent(channel, numerator, denominator, normalized, kind));
                 }
-            }
-
-            if (hasMeasureLengthChange)
-            {
-                chart.Warnings.Add("마디 길이 변경(채널 02)은 지원하지 않아 4/4 박자로 고정 처리됩니다.");
             }
 
             if (hasBpmChange)
@@ -338,15 +354,59 @@ namespace STARGAZER_custom_chart
 
             // 중간에 비어있는 마디(노트가 없는 마디)가 누락되면 타임라인 영역(Area) 순서가 당겨져
             // 노트가 곡보다 일찍 끝나고 박자가 어긋나게 된다. 0부터 maxIndex까지 모든 마디를 순서대로 채운다.
-            int maxMeasureIndex = measuresByIndex.Count > 0 ? measuresByIndex.Keys.Max() : 0;
+            int maxMeasureIndex = Math.Max(
+                measuresByIndex.Count > 0 ? measuresByIndex.Keys.Max() : 0,
+                measureLengthRatios.Count > 0 ? measureLengthRatios.Keys.Max() : 0);
             for (int i = 0; i <= maxMeasureIndex; i++)
             {
-                chart.Measures.Add(measuresByIndex.TryGetValue(i, out BmsMeasure? measure)
-                    ? measure
-                    : new BmsMeasure(i));
+                if (measuresByIndex.TryGetValue(i, out BmsMeasure? measure))
+                {
+                    chart.Measures.Add(measure);
+                }
+                else
+                {
+                    double ratio = measureLengthRatios.TryGetValue(i, out double r) ? r : 1.0;
+                    chart.Measures.Add(new BmsMeasure(i, ratio));
+                }
             }
 
             return chart;
+        }
+
+        internal static (int Numerator, int Denominator) ToFraction(double value, int maxDenominator = 192)
+        {
+            if (Math.Abs(value - 1.0) < 1e-6)
+            {
+                return (1, 1);
+            }
+
+            int bestNum = Math.Max(1, (int)Math.Round(value));
+            int bestDenom = 1;
+            double bestError = Math.Abs(value - bestNum);
+
+            for (int denom = 1; denom <= maxDenominator; denom++)
+            {
+                int num = (int)Math.Round(value * denom);
+                if (num <= 0)
+                {
+                    continue;
+                }
+
+                double error = Math.Abs(value - (double)num / denom);
+                if (error < bestError - 1e-9)
+                {
+                    bestError = error;
+                    bestNum = num;
+                    bestDenom = denom;
+                    if (error < 1e-6)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            int gcd = Gcd(bestNum, bestDenom);
+            return (bestNum / gcd, bestDenom / gcd);
         }
 
         private static int Gcd(int a, int b)

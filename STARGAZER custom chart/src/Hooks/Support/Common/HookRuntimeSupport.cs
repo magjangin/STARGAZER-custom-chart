@@ -36,6 +36,7 @@ namespace STARGAZER_custom_chart
         private const int InvocationLogMaxPerWindow = 3;
 
         // savecustomkey/config.txt의 autoplay 값으로 제어한다. 파일이 없으면 autoplay=false로 새로 만든다.
+        // 메인 스레드 전용: Harmony 훅과 Unity 콜백 모두 메인 스레드에서 실행된다.
         private static bool EnableForceAutoPlayAtPlayerBasePlay => CustomConfig.AutoPlay;
         internal static bool IsCustomChartPlayActive;
     }

@@ -27,11 +27,78 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static readonly Dictionary<string, (AudioClip Clip, DateTime LastWriteUtc)> CustomBgmClipCache =
-            new Dictionary<string, (AudioClip, DateTime)>(StringComparer.OrdinalIgnoreCase);
-        private static readonly Dictionary<string, DownloadHandlerAudioClip> CustomBgmDownloadHandlerCache = new Dictionary<string, DownloadHandlerAudioClip>(StringComparer.OrdinalIgnoreCase);
+        private sealed class BgmCacheEntry
+        {
+            public BgmCacheEntry(AudioClip clip, DateTime lastWriteUtc, long lastAccessSeq)
+            {
+                Clip = clip;
+                LastWriteUtc = lastWriteUtc;
+                LastAccessSeq = lastAccessSeq;
+            }
+
+            public AudioClip Clip { get; }
+            public DateTime LastWriteUtc { get; }
+            public long LastAccessSeq { get; set; }
+        }
+
+        // 메인 스레드 전용: Unity 코루틴(MelonCoroutines)과 Harmony 훅 모두 메인 스레드에서 실행되므로 락 없이 접근한다.
+        private static readonly Dictionary<string, BgmCacheEntry> CustomBgmClipCache =
+            new Dictionary<string, BgmCacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, DownloadHandlerAudioClip> CustomBgmDownloadHandlerCache =
+            new Dictionary<string, DownloadHandlerAudioClip>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, DateTime> CustomBgmFailedCache =
+            new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> CustomBgmLoadsInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, List<object>> PendingCustomBgmCallbacks = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+        private static long _bgmAccessSeq;
+
+        private static void EvictBgmCacheEntry(string fullPath)
+        {
+            if (CustomBgmClipCache.Remove(fullPath, out BgmCacheEntry? entry) && entry.Clip != null)
+            {
+                UnityEngine.Object.Destroy(entry.Clip);
+            }
+
+            if (CustomBgmDownloadHandlerCache.Remove(fullPath, out DownloadHandlerAudioClip? handler))
+            {
+                handler.Dispose();
+            }
+        }
+
+        private static void EnforceBgmCacheLimit(string keepPath)
+        {
+            int maxEntries = CustomConfig.BgmCacheMaxEntries;
+            if (maxEntries <= 0)
+            {
+                return;
+            }
+
+            while (CustomBgmClipCache.Count >= maxEntries)
+            {
+                string? oldestKey = null;
+                long oldestSeq = long.MaxValue;
+                foreach (var kvp in CustomBgmClipCache)
+                {
+                    if (string.Equals(kvp.Key, keepPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (kvp.Value.LastAccessSeq < oldestSeq)
+                    {
+                        oldestSeq = kvp.Value.LastAccessSeq;
+                        oldestKey = kvp.Key;
+                    }
+                }
+
+                if (oldestKey is null)
+                {
+                    break;
+                }
+
+                EvictBgmCacheEntry(oldestKey);
+            }
+        }
 
         // 앨범마다 전용 프리뷰 파일만 미리 디코딩해 둔다. 본 음원은 플레이 진입 시 지연 로딩하여
         // 커스텀 곡이 많아져도 시작 시간과 메모리 사용량이 급증하지 않게 한다.
@@ -114,19 +181,31 @@ namespace STARGAZER_custom_chart
             string fullPath = Path.GetFullPath(filePath);
             if (!File.Exists(fullPath))
             {
-                CustomBgmClipCache.Remove(fullPath);
+                EvictBgmCacheEntry(fullPath);
+                CustomBgmFailedCache.Remove(fullPath);
                 return;
             }
 
             DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
-            if (CustomBgmClipCache.TryGetValue(fullPath, out var cached))
+            if (CustomBgmFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
             {
-                if (cached.Clip != null && cached.LastWriteUtc == lastWriteUtc)
+                if (failedWriteUtc == lastWriteUtc)
                 {
                     return;
                 }
 
-                CustomBgmClipCache.Remove(fullPath);
+                CustomBgmFailedCache.Remove(fullPath);
+            }
+
+            if (CustomBgmClipCache.TryGetValue(fullPath, out BgmCacheEntry? cached))
+            {
+                if (cached.Clip != null && cached.LastWriteUtc == lastWriteUtc)
+                {
+                    cached.LastAccessSeq = ++_bgmAccessSeq;
+                    return;
+                }
+
+                EvictBgmCacheEntry(fullPath);
             }
 
             if (!CustomBgmLoadsInProgress.Add(fullPath))
@@ -159,6 +238,7 @@ namespace STARGAZER_custom_chart
             www.disposeDownloadHandlerOnDispose = false;
             DownloadHandlerAudioClip? downloadHandler = www.downloadHandler as DownloadHandlerAudioClip;
             bool cachedHandler = false;
+            AudioClip? completedClip = null;
             try
             {
                 if (downloadHandler != null)
@@ -170,8 +250,8 @@ namespace STARGAZER_custom_chart
 
                 if (www.result != UnityWebRequest.Result.Success)
                 {
+                    CustomBgmFailedCache[filePath] = lastWriteUtc;
                     MelonLogger.Error($"[CustomBgm] 커스텀 BGM 로드에 실패했습니다: {www.error}");
-                    CompletePendingCustomBgmCallbacks(filePath, null);
                 }
                 else
                 {
@@ -180,30 +260,29 @@ namespace STARGAZER_custom_chart
                     {
                         clip.name = "CustomBGM_" + Path.GetFileNameWithoutExtension(filePath);
                         clip.hideFlags |= HideFlags.DontUnloadUnusedAsset;
-                        CustomBgmClipCache[filePath] = (clip, lastWriteUtc);
+                        EvictBgmCacheEntry(filePath);
+                        EnforceBgmCacheLimit(filePath);
+                        CustomBgmFailedCache.Remove(filePath);
+                        CustomBgmClipCache[filePath] = new BgmCacheEntry(clip, lastWriteUtc, ++_bgmAccessSeq);
                         if (downloadHandler is not null)
                         {
-                            if (CustomBgmDownloadHandlerCache.TryGetValue(filePath, out DownloadHandlerAudioClip? oldHandler)
-                                && oldHandler != downloadHandler)
-                            {
-                                oldHandler.Dispose();
-                            }
                             CustomBgmDownloadHandlerCache[filePath] = downloadHandler;
                             cachedHandler = true;
                         }
+                        completedClip = clip;
                         MelonLogger.Msg($"[CustomBgm] Cached custom BGM: {filePath} clip={DescribeAudioClip(clip)}");
-                        CompletePendingCustomBgmCallbacks(filePath, clip);
                     }
                     else
                     {
+                        CustomBgmFailedCache[filePath] = lastWriteUtc;
                         MelonLogger.Error("[CustomBgm] 로드된 클립이 null입니다!");
-                        CompletePendingCustomBgmCallbacks(filePath, null);
                     }
                 }
             }
             finally
             {
                 CustomBgmLoadsInProgress.Remove(filePath);
+                CompletePendingCustomBgmCallbacks(filePath, completedClip);
                 if (!cachedHandler)
                 {
                     downloadHandler?.Dispose();
@@ -245,19 +324,37 @@ namespace STARGAZER_custom_chart
         private static bool TryGetCachedCustomBgm(string path, out AudioClip? clip)
         {
             string fullPath = Path.GetFullPath(path);
-            if (CustomBgmClipCache.TryGetValue(fullPath, out var cached))
+            if (CustomBgmClipCache.TryGetValue(fullPath, out BgmCacheEntry? cached))
             {
                 if (cached.Clip != null && File.GetLastWriteTimeUtc(fullPath) == cached.LastWriteUtc)
                 {
+                    cached.LastAccessSeq = ++_bgmAccessSeq;
                     clip = cached.Clip;
                     return true;
                 }
 
-                // Unity 쪽에서 파괴됐거나 디스크 파일이 수정된 경우. 다음 로드에서 다시 채운다.
-                CustomBgmClipCache.Remove(fullPath);
+                // Unity 쪽에서 파괴됐거나 디스크 파일이 수정된 경우. 기존 리소스를 즉시 해제한다.
+                EvictBgmCacheEntry(fullPath);
             }
 
             clip = null;
+            return false;
+        }
+
+        private static bool IsKnownFailedAudio(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+            if (!CustomBgmFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
+            {
+                return false;
+            }
+
+            if (File.GetLastWriteTimeUtc(fullPath) == failedWriteUtc)
+            {
+                return true;
+            }
+
+            CustomBgmFailedCache.Remove(fullPath);
             return false;
         }
 
@@ -309,7 +406,7 @@ namespace STARGAZER_custom_chart
                         return false;
                     }
 
-                    if (path is not null && File.Exists(path))
+                    if (path is not null && !IsKnownFailedAudio(path) && File.Exists(path))
                     {
                         QueueCustomBgmCallback(path, __args[0]);
                         return false;
