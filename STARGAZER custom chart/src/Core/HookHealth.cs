@@ -155,6 +155,11 @@ namespace STARGAZER_custom_chart
             {
                 MelonLogger.Msg("[Health] 훅 상태 요약\n" + summary);
             }
+
+            if (criticalProblems.Count > 0)
+            {
+                MelonLogger.Error("[Health][CRITICAL] 핵심 기능이 적용되지 않았습니다!\n  - " + string.Join("\n  - ", criticalProblems));
+            }
         }
 
         // 게임 바이너리 지문(GameAssembly.dll + global-metadata.dat)을 이전 실행과 비교하고, Steam ACF의 buildid가
@@ -170,7 +175,7 @@ namespace STARGAZER_custom_chart
         // MelonLoader 0.7(net6 호스트)에서는 AppDomain.BaseDirectory 가 빈 문자열이라(2026-11-19 실측)
         // 상대 경로는 작업 디렉터리 덕에 우연히 맞지만 Directory.GetParent("") 등은 예외를 던진다.
         // MelonEnvironment.GameRootDirectory → BaseDirectory → 현재 디렉터리 순으로 절대 경로를 만든다.
-        private static string ResolveGameDirectory()
+        internal static string ResolveGameDirectory()
         {
             string? dir = null;
             try

@@ -136,5 +136,19 @@ namespace STARGAZER_custom_chart.Tests
             Assert.NotNull(second);
             Assert.Equal(175d, second!.Bpm);
         }
+
+        [Fact]
+        public void TryParse_EmptyOrHeaderOnlyChart_ReturnsNoMeasures()
+        {
+            string path = WriteBms("empty.bms", string.Join("\n",
+                "#BPM 140",
+                "#WAV01 tap.wav",
+                "#00001:01"));
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Empty(chart!.Measures);
+        }
     }
 }

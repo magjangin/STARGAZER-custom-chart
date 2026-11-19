@@ -17,6 +17,7 @@ namespace STARGAZER_custom_chart
                 SafeTextReader.EnsureInitialized();
                 CustomConfig.LogInfo = MelonLogger.Msg;
                 CustomConfig.LogWarning = MelonLogger.Warning;
+                CustomConfig.ResolveBaseDirectory = HookHealth.ResolveGameDirectory;
                 EnsureAlbumRootExists();
 
                 // 여기서 한 번 읽어 두면 savecustomkey 폴더와 기본 config.txt가 없을 때 만들어진다.

@@ -21,6 +21,9 @@ namespace STARGAZER_custom_chart
 
         internal static Action<string> LogInfo = _ => { };
         internal static Action<string> LogWarning = _ => { };
+        // MelonLoader 0.7(net6)에서는 AppDomain.BaseDirectory가 빈 문자열이므로 ModEntry에서
+        // HookHealth.ResolveGameDirectory로 연결한다(xUnit 테스트는 기본값 사용).
+        internal static Func<string> ResolveBaseDirectory = () => AppDomain.CurrentDomain.BaseDirectory;
 
         // 파일 생성·누락 항목 추가·기본값 조회가 모두 이 단일 정의를 사용한다.
         private static readonly ConfigEntry[] Entries =
@@ -109,7 +112,7 @@ namespace STARGAZER_custom_chart
         public static bool TrackSelectorVerboseLogging => Current.TrackSelectorVerboseLogging;
         public static int BgmCacheMaxEntries => Current.BgmCacheMaxEntries;
 
-        public static string FolderPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName);
+        public static string FolderPath => Path.Combine(ResolveBaseDirectory(), FolderName);
 
         public static string FilePath => Path.Combine(FolderPath, FileName);
 
