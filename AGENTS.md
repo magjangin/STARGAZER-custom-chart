@@ -15,7 +15,7 @@
 - **Unity 엔진 버전**: `2022.3.50f1` (x64)
 - **Steam ACF 설정**: `H:\steam\steamapps\appmanifest_3446490.acf`
   - 자동 업데이트 방지를 위해 `AutoUpdateBehavior`를 `1`로 고정하거나 읽기 전용 속성 유지.
-  - ⚠️ **2026-11-19 실측: 실제 파일은 `AutoUpdateBehavior=0`(항상 최신 유지), 읽기 전용 아님** — 위 고정이 적용돼 있지 않다. 모드가 기동 시 `[Health] Steam 자동 업데이트가 막혀 있지 않습니다` 경고로 알린다. 사용자가 직접 `1` + 읽기 전용으로 바꿀 것(에이전트는 Steam 파일을 임의로 고치지 않는다).
+  - ⚠️ **2026-11-19·11-20 실측: 실제 파일은 `AutoUpdateBehavior=0`(항상 최신 유지), 읽기 전용 아님** — 위 고정이 적용돼 있지 않다. 모드가 기동 시 `[Health] Steam 자동 업데이트가 막혀 있지 않습니다` 경고로 알린다. 사용자가 직접 `1` + 읽기 전용으로 바꿀 것(에이전트는 Steam 파일을 임의로 고치지 않는다).
   - 런타임 확인: `HookHealth.CheckSteamBuild`가 `buildid`를 `GameVersionLogic.PinnedSteamBuildId`(`21205351`)와 비교하고 `TargetBuildID` 대기 여부도 경고한다. **고정 빌드를 바꾸면 이 상수와 본 문서를 함께 갱신할 것.**
 - **MelonLoader 버전 (2026-11-19 실측)**: `v0.7.3 Open-Beta`, Runtime `net6`, 게임 버전 문자열 `1.0.7.001`.
 - **오프라인 영구 보존 (Goldberg Emulator)**:
@@ -64,12 +64,18 @@
 - 커스텀 곡의 내부 `TrackID`가 공식 Starting Point와 같으므로, 결과 점수가 그대로 세이브 파일에 기록되면 공식 랭킹 및 로컬 기록이 오염됨.
 - 따라서 커스텀 곡 플레이 종료 시 세이브 루틴(`SaveTrackRecord`)을 가로채 `TryGetMemberByType`으로 `PlayData`/`PlayTrack`을 추출해 저장을 원천 차단함.
 - 게임 업데이트 등으로 `PlayData`/`PlayTrack` 추출이 실패하더라도 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태면 방어적으로 저장을 차단해 공식 기록 오염을 방지함.
+- **트랙 불일치 차단 (2026-11-20)**: `PlayTrack`은 꺼냈지만 포인터 매핑으로 커스텀 트랙이 식별되지 않는데 `PlayerBase.Play` 시점엔 커스텀 플레이였다면 `SaveGuardDecision.BlockDefensiveTrackMismatch`로 막는다. 업데이트로 결과 데이터가 트랙을 복사·래핑해 포인터가 달라지는 경우 대비. 플래그는 `Play`마다 재계산되고 Play 씬 밖(`OnSceneWasLoaded`)·`TrackSelector.Set`에서 꺼지므로 오래된 값으로 공식 곡을 막지 않는다.
+- **판정 표 (`SaveGuardLogic.Evaluate`, xUnit 대상)**: 결과 없음/트랙 추출 실패/트랙 불일치 → 커스텀 플레이 중일 때만 차단, 커스텀 트랙 → 항상 차단, 공식 곡 → `AllPerfect=true && AllPerfectCustomOnly=false`일 때만 차단.
+- **범위 밖(알려진 한계)**: `SaveTrackRecord` 하나만 막는다. 결과 화면 `ResultViewer.RewardVolts`(볼트 보상 → `INNER_CurrencyModule.AddVolts`), `UpdateStatistics`(통계), `CheckAchievement`(도전과제)는 커스텀 곡에서도 그대로 돈다. 볼트는 `UnlockAll`이 `GetVolts`를 999,999로 고정해 체감 영향이 없고, 도전과제는 골드버그라 오프라인에 머문다. 막으려면 `INNER_CurrencyModule.AddVolts`/`ResultViewer.UpdateStatistics` Prefix를 커스텀 플레이 판정과 묶어야 하는데, 결과 화면이 Play 씬 안인지 실기 확인이 먼저다(미검증).
 
 ### 람다 후킹 이중래퍼 & 업데이트 내성 아키텍처
 - **1차 계층 (`PatchTargetSupport.ResolveTargetMethod`, 3단계 해석)**:
   1. 정확 이름(또는 `PatchSpec.AlternateMethodNames`, 예: `LevelSelector.FetchJacektImage` → `"FetchJacketImage"`) + 파라미터 타입명 점수(정확 일치 2점 / 포함 1점) 최고 후보.
   2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음).
   3. 이름은 같고 파라미터 개수만 맞는 후보가 **유일**할 때만 경고와 함께 채택.
+  4. **(옵트인, 2026-11-20) 타입 개명 폴백 `PatchSpec.WithTypeScanFallback()`**: 위 단계가 모두 실패하면(대상 타입 이름이 통째로 바뀜) 게임 어셈블리 전체(`GetGameTypeIndex`)에서 이름(대체 이름 포함) + 파라미터 타입명 **정확** 일치 + IL2CPP 구체 클래스(`IsConcreteIl2CppClass`)인 메서드가 **유일**할 때만 채택(`PatchResolutionLogic.FindUniqueMethodAcrossTypes`). 현재 기록 보호(`SaveTrackRecord(ITravelResultData)`)에만 켬 — 흔한 시그니처에 켜면 엉뚱한 메서드에 걸릴 수 있으니 파라미터 타입이 고유한 핵심 기능에만 쓸 것.
+     - Il2CppInterop은 IL2CPP **인터페이스를 일반 클래스로 생성**한다(`Type.IsInterface == false`). 그래서 `ITrackRecordModule.SaveTrackRecord`도 후보로 보이는데, `Il2CppClassPointerStore<T>.NativeClassPtr` → `IL2CPP.il2cpp_class_is_interface/_is_abstract`로 거른다(Dead End 15).
+     - 실기 검증(2026-11-20): 대상 타입명을 일부러 `…INNER_TrackRecordModuleRENAMEDTEST`로 바꾼 빌드에서 `[HookPatch][resolve] … 게임 전체 시그니처 탐색으로 유일 후보 …INNER_TrackRecordModule.SaveTrackRecord(ITravelResultData result) 에 연결` + `기록 보호(SaveGuard): 정상 (1/1)` 확인 후 원복.
   - 대체 해석이 일어나면 `[HookPatch][resolve]` 경고가 로그에 남는다 → 업데이트 후 로그에서 이 태그부터 확인할 것.
 - **타입 해석 (`ResolveGameType`)**: FullName 정확 일치 → 실패 시 `외부타입+중첩타입` 짧은 이름이 게임 어셈블리에서 유일할 때만 채택(인터롭 재생성으로 네임스페이스가 바뀌는 경우 대비). 찾은 결과만 캐시하며, 로드된 어셈블리 수가 늘어나면 `_shortTypeNameIndex`를 자동 재구축해 지연 로드 어셈블리도 놓치지 않는다.
 - **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`(원래 `TypeName.MethodName`)을 등록하고, `HookPrefix/HookPostfix`는 런타임 FullName이 아니라 이 논리 이름으로 `HookKind`를 고른다. 그래서 대체 해석된 대상(이름 바뀐 람다/오타 수정 메서드 등)도 같은 핸들러에 연결된다.
@@ -184,6 +190,12 @@
 14. **`AppDomain.CurrentDomain.BaseDirectory`로 게임 폴더 계산 (MelonLoader 0.7에서 빈 문자열)**
     - 원인: 빈 문자열이라 `Path.Combine("", …)`은 작업 디렉터리 기준 상대 경로로 우연히 동작하지만 `Directory.GetParent`/`GetDirectories("")`는 `ArgumentException`.
     - 규칙: `HookHealth.ResolveGameDirectory` 순서(`MelonEnvironment.GameRootDirectory` 우선)를 쓸 것. (`CustomConfig`/`CustomAlbumRegistry`는 테스트 프로젝트와 공유돼 MelonLoader 의존을 넣을 수 없어 현행 유지 — 상대 경로라 실동작에는 문제없음.)
+15. **IL2CPP 인터페이스를 `Type.IsInterface`/.NET 인터페이스 구현 목록으로 찾기 (불가)**
+    - 원인: Il2CppInterop은 IL2CPP 인터페이스(`ITrackRecordModule` 등)를 `Il2CppObjectBase` 파생 **일반 클래스**로 만들고, 구현 클래스도 그걸 .NET 인터페이스로 구현하지 않는다. `GetInterfaces()`/`IsAssignableFrom`/`GetInterfaceMap`으로는 구현체를 찾을 수 없고, 반대로 인터페이스 클래스의 메서드가 일반 메서드처럼 보여 시그니처 탐색 후보에 섞인다.
+    - 규칙: 인터페이스/추상 여부는 네이티브 클래스 플래그(`Il2CppClassPointerStore<T>.NativeClassPtr` + `IL2CPP.il2cpp_class_is_interface/_is_abstract`, `PatchTargetSupport.IsConcreteIl2CppClass`)로 판정할 것. "인터페이스의 모든 구현체를 건다"는 설계가 필요하면 `il2cpp_class_get_interfaces`를 써야 하며 아직 구현하지 않았다.
+16. **폴백 경로를 단위 테스트만으로 검증 (부족)**
+    - 원인: 폴백(대체 이름·타입 개명·멤버 타입 폴백)은 정상 빌드에선 한 번도 실행되지 않아, Il2CppInterop 특유의 표현(위 15번, Dead End 13의 static/instance) 때문에 실기에서만 깨지는 경우를 놓친다.
+    - 규칙: 새 폴백을 넣으면 **대상 이름을 일부러 틀린 임시 빌드**로 게임을 한 번 띄워 `[HookPatch][resolve]`가 기대한 대상에 붙는지 보고, 정상 이름으로 되돌려 다시 빌드·스모크할 것(원복 시 PowerShell `Set-Content`가 붙인 UTF-8 BOM도 제거).
 
 ---
 
@@ -216,7 +228,7 @@
   - **자켓/BGM/프리뷰가 원본으로 나옴** → `[CustomJacket]`, `[CustomBgm]` → `src/Hooks/Support/Visual/CustomJacketSupport.cs`, `src/Hooks/Support/Sound/CustomBgmSupport.cs`
   - **BMS 채보가 주입되지 않음** → `[HookPatch][resolve]`, `[DualWrapper]`, `[NoteProbe]`, `[BmsInject]` → `src/Hooks/Support/Common/HookInvocationSupport.cs`, `src/Probes/Notes/HookNoteProbes.cs`, `HookNoteProbes.BmsInject.cs`
   - **난이도 숫자가 원본으로 표시됨** → `[FocusedTrackViewerProbe]`, `[CustomLevel]` → `src/Probes/Track/FocusedTrackViewerProbe.cs`, `src/Hooks/Support/LevelSelector/LevelSelectorDisplaySupport.cs`
-  - **공식 기록 오염/저장 차단 이상** → `[SaveGuard]` → `src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`, `SaveGuardLogic.cs`
+  - **공식 기록 오염/저장 차단 이상** → `[SaveGuard]`, `[Health][CRITICAL]`, `[HookPatch][resolve] … 시그니처 탐색` → `src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`, `SaveGuardLogic.cs`, `PatchTargetSupport.ResolveTargetMethodByTypeScan` (`트랙 불일치` 경고가 반복되면 결과 데이터의 `PlayTrack`이 주입 객체와 다른 포인터인지부터 확인)
   - **올 퍼펙트 / 전곡 해금 / 오토플레이 미동작** → `[JudgePatch]`, `[UnlockAllPatch]`, `[PlayerBaseAutoPlay]`, `[Health]` → `JudgeAllPerfectPatch.cs`, `TrackUnlockAllPatch.cs`, `HookInvocationSupport.cs`, `HookHealth.cs` (올 퍼펙트 2/4면 Dead End 13 — static/instance 플래그부터)
   - **업데이트 경고가 거짓으로 뜸 / 안 뜸** → `[Health]` → `src/Core/GameVersionLogic.cs`(비교 규칙), `HookHealth.CheckBinaryFingerprint`/`CheckSteamBuild`, `savecustomkey/.game-fingerprint`
 - **변경 이력**: [CHANGELOG.md](CHANGELOG.md) 참고 (과거 작업 일지는 `docs/archive/` 보관).
