@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-20 (2차: [Health][CRITICAL] 누락 버그 수정 · 게임 루트 경로 통일 · SaveGuard 예외 방어 · 빈 BMS 처리)
+- **버그 수정 & 안전성 강화**:
+  - `HookHealth.LogSummary`: 수집만 되고 출력이 빠져 있던 `criticalProblems`를 `[Health][CRITICAL]` `MelonLogger.Error`로 실제 출력하도록 수정.
+  - `CustomConfig` / `CustomAlbumRegistry` / `ModEntry`: MelonLoader 0.7(net6)에서 빈 문자열인 `AppDomain.CurrentDomain.BaseDirectory` 대신 `HookHealth.ResolveGameDirectory()`를 공유하도록 통일(`hwa/`, `savecustomkey/config.txt`, `.game-fingerprint` 모두 절대 게임 루트 기준).
+  - `TrackRecordSaveGuardPatch`: `Prefix` 예외 발생 시 커스텀 곡 플레이 중(`IsCustomChartPlayActive && CurrentPlayAlbum is not null`)이면 fail-open(`true`) 대신 fail-closed(`false`)로 공식 Starting Point 기록 보호.
+  - `BmsChart`: 노트가 없는 빈/헤더 전용 `.bms`가 빈 0번 마디 1개를 만들어 0노트 차트를 주입하던 엣지 케이스 수정(`Measures` 비움) 및 박자 분수 계산 시 `long` 중간 연산으로 오버플로 방지.
+- **테스트 보강**:
+  - `BmsChartTests`: 빈/헤더 전용 BMS 회귀 테스트 1건 추가(총 44건 통과).
+
 ## 2026-11-20 (기록 보호 내성 강화 · 타입 개명 폴백 · 결과 화면 범위 감사)
 - **기록 보호(SaveGuard) 강화**:
   - `SaveGuardLogic`: `BlockDefensiveTrackMismatch` 추가 — `PlayTrack`은 추출됐지만 포인터 매핑으로 커스텀 트랙이 식별되지 않는데 `PlayerBase.Play` 시점엔 커스텀 플레이였다면 저장을 차단(업데이트로 결과 트랙이 복사·래핑돼 포인터가 달라지는 경우 공식 Starting Point 기록 오염 방지). 이전엔 이 경우 저장을 허용했다.

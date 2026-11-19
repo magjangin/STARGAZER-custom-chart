@@ -12,7 +12,7 @@ namespace STARGAZER_custom_chart
     {
         private static List<CustomAlbum>? _albums;
 
-        public static string RootPath => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hwa");
+        public static string RootPath => Path.Combine(HookHealth.ResolveGameDirectory(), "hwa");
 
         public static IReadOnlyList<CustomAlbum> GetAlbums() => _albums ??= Scan();
 

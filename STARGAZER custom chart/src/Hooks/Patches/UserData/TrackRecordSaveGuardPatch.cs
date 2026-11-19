@@ -74,6 +74,12 @@ namespace STARGAZER_custom_chart
                 }
                 catch (Exception ex)
                 {
+                    if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
+                    {
+                        MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 중 예외가 발생했지만 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 기록 보호를 위해 방어적으로 저장을 차단합니다: {ex.GetType().Name}: {ex.Message}");
+                        return false;
+                    }
+
                     MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 실패, 원본 동작을 따릅니다: {ex.GetType().Name}: {ex.Message}");
                     return true;
                 }

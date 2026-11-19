@@ -328,9 +328,9 @@ namespace STARGAZER_custom_chart
 
                     string normalized = NormalizeSoundId(chunk, extended);
 
-                    int numerator = slot * MeasureBeats * ratioNum;
-                    int denominator = slotCount * ratioDenom;
-                    int gcd = Gcd(numerator, denominator);
+                    long numerator = (long)slot * MeasureBeats * ratioNum;
+                    long denominator = (long)slotCount * ratioDenom;
+                    long gcd = Gcd(numerator, denominator);
                     numerator /= gcd;
                     denominator /= gcd;
 
@@ -338,7 +338,7 @@ namespace STARGAZER_custom_chart
                         ? found
                         : BmsNoteKind.Normal;
 
-                    targetMeasure.Notes.Add(new BmsNoteEvent(channel, numerator, denominator, normalized, kind));
+                    targetMeasure.Notes.Add(new BmsNoteEvent(channel, (int)numerator, (int)denominator, normalized, kind));
                 }
             }
 
@@ -352,10 +352,16 @@ namespace STARGAZER_custom_chart
                 chart.Warnings.Add("STOP 기믹(채널 09)은 지원하지 않아 무시됩니다.");
             }
 
+            // 노트가 하나도 없는 빈/주석 전용 파일은 Measures를 비워 둬서 주입부가 0노트 차트로 덮어쓰지 않게 한다.
+            if (measuresByIndex.Count == 0)
+            {
+                return chart;
+            }
+
             // 중간에 비어있는 마디(노트가 없는 마디)가 누락되면 타임라인 영역(Area) 순서가 당겨져
             // 노트가 곡보다 일찍 끝나고 박자가 어긋나게 된다. 0부터 maxIndex까지 모든 마디를 순서대로 채운다.
             int maxMeasureIndex = Math.Max(
-                measuresByIndex.Count > 0 ? measuresByIndex.Keys.Max() : 0,
+                measuresByIndex.Keys.Max(),
                 measureLengthRatios.Count > 0 ? measureLengthRatios.Keys.Max() : 0);
             for (int i = 0; i <= maxMeasureIndex; i++)
             {
@@ -405,11 +411,11 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            int gcd = Gcd(bestNum, bestDenom);
+            int gcd = (int)Gcd(bestNum, bestDenom);
             return (bestNum / gcd, bestDenom / gcd);
         }
 
-        private static int Gcd(int a, int b)
+        private static long Gcd(long a, long b)
         {
             if (a == 0)
             {
