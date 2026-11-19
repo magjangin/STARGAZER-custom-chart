@@ -262,5 +262,71 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal("FromTimeDiffernce", both!.Name);
             Assert.Null(reason);
         }
+
+        // ── 타입 개명 폴백(FindUniqueMethodAcrossTypes) ──
+        private sealed class ITravelResultData { }
+
+        // Il2CppInterop은 IL2CPP 인터페이스를 일반 클래스로 만든다. 이름으로 흉내 내고 isEligibleType으로 거른다.
+        private class ITrackRecordModuleLike
+        {
+            public virtual void SaveTrackRecord(ITravelResultData result) { }
+        }
+
+        private sealed class RenamedTrackRecordModule
+        {
+            public void SaveTrackRecord(ITravelResultData result) { }
+            public void SaveTrackRecord(ITravelResultData result, int extra) { }
+            public void Save() { }
+        }
+
+        private sealed class SecondRecordModule
+        {
+            public void SaveRecord(ITravelResultData result) { }
+        }
+
+        private sealed class UnrelatedSaver
+        {
+            public void SaveTrackRecord(OtherArg arg) { }
+        }
+
+        private static readonly string[] SaveNames = { "SaveTrackRecord", "SaveRecord" };
+
+        [Fact]
+        public void FindUniqueMethodAcrossTypes_PicksUniqueConcreteMatch_SkippingIneligibleAndWrongSignature()
+        {
+            var (chosen, candidates) = PatchResolutionLogic.FindUniqueMethodAcrossTypes(
+                new[] { typeof(ITrackRecordModuleLike), typeof(RenamedTrackRecordModule), typeof(UnrelatedSaver) },
+                SaveNames, 1, new[] { "ITravelResultData" },
+                t => t != typeof(ITrackRecordModuleLike));
+
+            Assert.Single(candidates);
+            Assert.NotNull(chosen);
+            Assert.Equal(typeof(RenamedTrackRecordModule), chosen!.DeclaringType);
+            Assert.Single(chosen.GetParameters());
+        }
+
+        [Fact]
+        public void FindUniqueMethodAcrossTypes_Ambiguous_ReturnsNullWithAllCandidates()
+        {
+            var (chosen, candidates) = PatchResolutionLogic.FindUniqueMethodAcrossTypes(
+                new[] { typeof(RenamedTrackRecordModule), typeof(SecondRecordModule) },
+                SaveNames, 1, new[] { "ITravelResultData" },
+                _ => true);
+
+            Assert.Null(chosen);
+            Assert.Equal(2, candidates.Count);
+        }
+
+        [Fact]
+        public void FindUniqueMethodAcrossTypes_EligibilityThrows_TreatedAsIneligible()
+        {
+            var (chosen, candidates) = PatchResolutionLogic.FindUniqueMethodAcrossTypes(
+                new[] { typeof(RenamedTrackRecordModule) },
+                SaveNames, 1, new[] { "ITravelResultData" },
+                _ => throw new System.InvalidOperationException("class ptr lookup failed"));
+
+            Assert.Null(chosen);
+            Assert.Empty(candidates);
+        }
     }
 }

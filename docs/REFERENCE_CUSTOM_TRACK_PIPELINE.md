@@ -202,11 +202,17 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
 
 - `result`에서 `PlayData`(`TravelArgs`) → `PlayTrack`(`ITrackData`) 추출은 `TryGetMemberByType`을 사용해 프로퍼티 이름이 바뀌어도 동작합니다.
 - 만약 게임 업데이트로 `result` 또는 `PlayTrack` 추출 자체가 실패하더라도, 현재 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태라면 **방어적으로 저장을 차단(`return false`)**하여 공식 Starting Point 기록이 오염되는 것을 막습니다.
+- `PlayTrack`은 꺼냈지만 주입 객체로 식별되지 않는데 플레이 시작 시엔 커스텀 곡이었다면(업데이트로 결과 데이터가 트랙을 복사·래핑하는 경우) `BlockDefensiveTrackMismatch`로 역시 차단합니다(2026-11-20).
+- 저장 모듈 클래스 이름이 통째로 바뀌어도 `PatchSpec.WithTypeScanFallback()`이 게임 전체에서 `SaveTrackRecord(ITravelResultData)`(대체 이름 포함) 구체 메서드가 **유일**하면 그것에 겁니다. Il2CppInterop이 인터페이스 `ITrackRecordModule`을 일반 클래스로 노출하므로 네이티브 클래스 플래그로 인터페이스/추상 클래스를 걸러 냅니다(실기 검증 완료, `AGENTS.md` 1차 계층 4단계).
+- 판정 규칙은 순수 로직 `SaveGuardLogic.Evaluate`(단위 테스트 대상)에 있습니다.
 - 구현: [`src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`](../STARGAZER%20custom%20chart/src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs)
 
-> **확인 필요.** 막는 것은 `SaveTrackRecord` 하나뿐입니다. 결과 화면의 `ResultViewer.UpdateStatistics(ITravelResultData)`,
-> `ResultViewer.CheckAchievement()`는 건드리지 않으므로, 커스텀 곡 플레이가 Starting Point 통계나 도전과제로
-> 집계되는지는 아직 확인하지 않았습니다.
+> **범위 밖(덤프 대조 2026-11-20).** 막는 것은 `SaveTrackRecord` 하나뿐입니다. `ITrackRecordModule` 구현체는 현재
+> `UserDataLoader+INNER_TrackRecordModule` 하나뿐이라 다른 기록 저장 경로는 없습니다. 다만 결과 화면 `ResultViewer`의
+> `RewardVolts`(볼트 보상 → `INNER_CurrencyModule.AddVolts`), `UpdateStatistics`(통계), `CheckAchievement`(도전과제)는
+> 커스텀 곡에서도 그대로 동작합니다. `UnlockAll`이 켜져 있으면 `GetVolts`가 999,999로 고정돼 볼트 영향은 체감되지 않고,
+> 도전과제는 골드버그 에뮬레이터라 오프라인에 머뭅니다. 차단이 필요해지면 결과 화면이 Play 씬 안에서 열리는지
+> (`IsCustomChartPlayActive`가 살아 있는지) 실기 확인부터 해야 합니다.
 
 ## 패치 대상 해석 & 훅 상태 요약 (`HookHealth`)
 

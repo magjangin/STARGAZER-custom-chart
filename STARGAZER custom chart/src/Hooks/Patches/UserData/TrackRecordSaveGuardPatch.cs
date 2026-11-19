@@ -20,7 +20,11 @@ namespace STARGAZER_custom_chart
             private static bool Prepare() => PrepareTargets(Targets, new[]
             {
                 new PatchSpec("Il2CppStargazer.UserDataLoader+INNER_TrackRecordModule", "SaveTrackRecord", 1, "ITravelResultData")
-                    .WithAlternates("SaveRecord", "UpdateTrackRecord", "RecordTrackResult"),
+                    .WithAlternates("SaveRecord", "UpdateTrackRecord", "RecordTrackResult")
+                    // 저장 모듈 클래스 자체가 개명되면(FullName·짧은 이름 모두 실패) 게임 어셈블리 전체에서
+                    // 같은 이름(대체 이름 포함)+ (ITravelResultData) 시그니처의 구체 메서드가 유일할 때만 건다.
+                    // 기록 보호는 핵심 기능이라(HookHealth.CriticalFeatures) 다른 훅보다 한 단계 더 버틴다.
+                    .WithTypeScanFallback(),
             }, HookHealth.SaveGuardFeature);
 
             private static IEnumerable<MethodBase> TargetMethods() => Targets;
@@ -51,6 +55,9 @@ namespace STARGAZER_custom_chart
                             return false;
                         case SaveGuardDecision.BlockDefensiveMissingTrack:
                             MelonLogger.Warning($"[SaveGuard] PlayTrack 추출에 실패했으나 커스텀 곡({CurrentPlayAlbum!.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다.");
+                            return false;
+                        case SaveGuardDecision.BlockDefensiveTrackMismatch:
+                            MelonLogger.Warning($"[SaveGuard] 결과의 PlayTrack이 주입한 커스텀 트랙으로 식별되지 않지만 커스텀 곡({CurrentPlayAlbum!.Name}) 플레이 중이므로 저장을 방어적으로 차단합니다 — 업데이트로 결과 트랙이 복사/래핑됐는지 확인하세요.");
                             return false;
                         case SaveGuardDecision.BlockCustomTrack:
                             MelonLogger.Msg($"[SaveGuard] 커스텀 트랙({album!.Name}) 저장을 막았습니다 — 공식 Starting Point 기록 보호.");

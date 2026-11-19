@@ -29,6 +29,17 @@ namespace STARGAZER_custom_chart.Tests
                 SaveGuardLogic.Evaluate(true, true, true, true, false, true));
         }
 
+        // 플레이 시작 시엔 커스텀으로 판정됐는데 결과의 트랙이 우리 주입 객체로 식별되지 않는 경우
+        // (업데이트로 결과 데이터가 트랙을 복사/래핑해 포인터가 달라지는 등). 공식 기록을 지키려고 막는다.
+        [Fact]
+        public void Evaluate_TrackNotRecognizedDuringCustomPlay_BlocksDefensively()
+        {
+            Assert.Equal(SaveGuardDecision.BlockDefensiveTrackMismatch,
+                SaveGuardLogic.Evaluate(true, true, false, true, false, true));
+            Assert.Equal(SaveGuardDecision.BlockDefensiveTrackMismatch,
+                SaveGuardLogic.Evaluate(true, true, false, true, true, false));
+        }
+
         [Fact]
         public void Evaluate_OfficialTrack_BlocksOnlyWhenAllPerfectAppliesToOfficial()
         {

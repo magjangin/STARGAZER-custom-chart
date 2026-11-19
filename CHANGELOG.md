@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-20 (기록 보호 내성 강화 · 타입 개명 폴백 · 결과 화면 범위 감사)
+- **기록 보호(SaveGuard) 강화**:
+  - `SaveGuardLogic`: `BlockDefensiveTrackMismatch` 추가 — `PlayTrack`은 추출됐지만 포인터 매핑으로 커스텀 트랙이 식별되지 않는데 `PlayerBase.Play` 시점엔 커스텀 플레이였다면 저장을 차단(업데이트로 결과 트랙이 복사·래핑돼 포인터가 달라지는 경우 공식 Starting Point 기록 오염 방지). 이전엔 이 경우 저장을 허용했다.
+  - `TrackRecordSaveGuardPatch`: `.WithTypeScanFallback()` 적용 — 저장 모듈 클래스 이름이 통째로 바뀌어도 게임 전체에서 `SaveTrackRecord(ITravelResultData)`(대체 이름 포함) 구체 메서드가 유일하면 연결.
+- **업데이트 내성 (해석 4단계)**:
+  - `PatchSpec.WithTypeScanFallback()` / `PatchTargetSupport.ResolveTargetMethodByTypeScan`: 옵트인 타입 개명 폴백. 파라미터 타입명 정확 일치 + 유일성 조건, 모호하면 후보 목록과 함께 경고만 남기고 걸지 않음.
+  - `PatchTargetSupport.IsConcreteIl2CppClass`: Il2CppInterop이 IL2CPP 인터페이스를 일반 클래스로 생성하는 문제를 `Il2CppClassPointerStore<T>.NativeClassPtr` + `il2cpp_class_is_interface/_is_abstract`로 판정.
+  - `GetGameTypeIndex`로 짧은 이름 색인 재구축 로직을 공용화.
+- **실기 검증**: 대상 타입명을 일부러 틀린 임시 빌드에서 폴백이 `ITrackRecordModule`(인터페이스 클래스)을 거르고 `INNER_TrackRecordModule.SaveTrackRecord`에 유일 연결됨을 확인 → 원복 빌드에서 `[Health]` 전 기능 정상, 대체 해석 경고 없음.
+- **테스트**: `FindUniqueMethodAcrossTypes` 3건, 트랙 불일치 차단 1건 추가(총 43건 통과).
+- **문서**: `AGENTS.md`에 해석 4단계, 트랙 불일치 차단, SaveGuard 범위 밖(볼트 보상·통계·도전과제) 정리, Dead End 15(IL2CPP 인터페이스 판정)·16(폴백은 실기 변조 빌드로 검증) 추가. `docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md`의 "확인 필요" 항목을 덤프 대조 결과로 갱신.
+
 ## 2026-11-19 (3차: 올 퍼펙트 회귀 복구 · 게임 버전 감지 정밀화 · 핵심 기능 에스컬레이션)
 - **버그 수정 (실기 검증으로 발견)**:
   - `JudgeAllPerfectPatch`: 2차 리팩터에서 `JudgementExtension.FromTimeDiffernce`/`TryJudgeHead` 탐색을 `BindingFlags.Static` 전용으로 좁혀, 실제로는 **인스턴스 메서드**인 두 훅이 조용히 빠져 있었음(`[Health] 올 퍼펙트 판정: 일부 (2/4)`). `JudgementExtensionMethodFlags`(`Instance | Static`)로 복구 → 4/4 확인.

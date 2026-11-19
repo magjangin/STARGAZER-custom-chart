@@ -149,18 +149,7 @@ namespace STARGAZER_custom_chart
         private static Type? ResolveGameTypeByShortName(string fullName)
         {
             string shortKey = GetShortTypeKey(fullName);
-            Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
-            Dictionary<string, List<Type>> index;
-            lock (TypeLookupLock)
-            {
-                if (_shortTypeNameIndex is null || _shortTypeNameIndexAssemblyCount != loadedAssemblies.Length)
-                {
-                    _shortTypeNameIndex = BuildShortTypeNameIndex(loadedAssemblies);
-                    _shortTypeNameIndexAssemblyCount = loadedAssemblies.Length;
-                }
-
-                index = _shortTypeNameIndex;
-            }
+            Dictionary<string, List<Type>> index = GetGameTypeIndex();
 
             if (!index.TryGetValue(shortKey, out List<Type>? matches) || matches.Count == 0)
             {
@@ -179,6 +168,23 @@ namespace STARGAZER_custom_chart
 
             MelonLogger.Warning($"[HookPatch][resolve] {fullName} → {matches[0].FullName} (네임스페이스 변경으로 판단해 짧은 이름으로 대체 해석)");
             return matches[0];
+        }
+
+        // 게임 어셈블리 타입의 짧은 이름 색인. 로드된 어셈블리 수가 바뀌면(지연 로드) 다시 만든다.
+        // 반환된 사전은 교체만 되고 수정되지 않으므로 락 밖에서 읽어도 안전하다.
+        private static Dictionary<string, List<Type>> GetGameTypeIndex()
+        {
+            Assembly[] loadedAssemblies = AppDomain.CurrentDomain.GetAssemblies();
+            lock (TypeLookupLock)
+            {
+                if (_shortTypeNameIndex is null || _shortTypeNameIndexAssemblyCount != loadedAssemblies.Length)
+                {
+                    _shortTypeNameIndex = BuildShortTypeNameIndex(loadedAssemblies);
+                    _shortTypeNameIndexAssemblyCount = loadedAssemblies.Length;
+                }
+
+                return _shortTypeNameIndex;
+            }
         }
 
         private static Dictionary<string, List<Type>> BuildShortTypeNameIndex(Assembly[] assemblies)
@@ -253,6 +259,66 @@ namespace STARGAZER_custom_chart
         // ─────────────────────────────────────────────────────────────────────────────
 
         private static MethodInfo? ResolveTargetMethod(PatchSpec spec)
+        {
+            MethodInfo? resolved = ResolveTargetMethodInType(spec);
+            if (resolved is null && spec.AllowTypeScanFallback)
+            {
+                resolved = ResolveTargetMethodByTypeScan(spec);
+            }
+
+            return resolved;
+        }
+
+        // 4단계(옵트인, PatchSpec.WithTypeScanFallback): 대상 타입 이름이 통째로 바뀐 경우.
+        // 게임 어셈블리 전체에서 이름(대체 이름 포함) + 파라미터 타입명 정확 일치 + IL2CPP 구체 클래스인 메서드가
+        // 유일할 때만 쓴다. 타입 전체를 훑으므로 해석 실패 시 한 번만 도는 경로이며, 핵심 기능에만 켠다.
+        private static MethodInfo? ResolveTargetMethodByTypeScan(PatchSpec spec)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal) { spec.MethodName };
+            names.UnionWith(spec.AlternateMethodNames);
+
+            IEnumerable<Type> allGameTypes = GetGameTypeIndex().Values.SelectMany(list => list);
+            var (chosen, candidates) = PatchResolutionLogic.FindUniqueMethodAcrossTypes(
+                allGameTypes,
+                names,
+                spec.ParameterCount,
+                spec.ParameterTypeNameContains,
+                IsConcreteIl2CppClass);
+
+            if (chosen is not null)
+            {
+                MelonLogger.Warning($"[HookPatch][resolve] {spec.LogicalName} 의 타입을 찾지 못해 게임 전체 시그니처 탐색으로 유일 후보 {DescribeMethod(chosen)} 에 연결합니다(타입 개명 의심 — dump로 확인 권장).");
+            }
+            else if (candidates.Count > 1)
+            {
+                MelonLogger.Warning($"[HookPatch][resolve] {spec.LogicalName} 시그니처 탐색 후보가 {candidates.Count}개라 모호해서 걸지 않습니다: {string.Join(" | ", candidates.Select(DescribeMethod))}");
+            }
+
+            return chosen;
+        }
+
+        // Il2CppInterop은 IL2CPP 인터페이스를 일반 클래스로 생성하므로(Type.IsInterface=false) 네이티브 클래스 플래그로 거른다.
+        // 인터페이스/추상 메서드는 네이티브 구현이 없어 패치해도 아무 일도 하지 않거나 실패한다.
+        private static bool IsConcreteIl2CppClass(Type type)
+        {
+            if (!typeof(Il2CppInterop.Runtime.InteropTypes.Il2CppObjectBase).IsAssignableFrom(type))
+            {
+                return false;
+            }
+
+            Type store = typeof(Il2CppInterop.Runtime.Il2CppClassPointerStore<>).MakeGenericType(type);
+            object? raw = store.GetField("NativeClassPtr", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null)
+                ?? store.GetProperty("NativeClassPtr", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null);
+            if (raw is not IntPtr classPtr || classPtr == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            return !Il2CppInterop.Runtime.IL2CPP.il2cpp_class_is_interface(classPtr)
+                && !Il2CppInterop.Runtime.IL2CPP.il2cpp_class_is_abstract(classPtr);
+        }
+
+        private static MethodInfo? ResolveTargetMethodInType(PatchSpec spec)
         {
             Type? type = ResolveGameType(spec.TypeName);
             if (type is null)
@@ -449,6 +515,16 @@ namespace STARGAZER_custom_chart
             public PatchSpec WithAlternates(params string[] alternateMethodNames)
             {
                 AlternateMethodNames = alternateMethodNames ?? Array.Empty<string>();
+                return this;
+            }
+
+            // 타입 이름이 통째로 바뀌었을 때 게임 전체 시그니처 탐색(ResolveTargetMethodByTypeScan)을 허용한다.
+            // 파라미터 타입명이 충분히 고유한 핵심 기능에만 켤 것(흔한 시그니처면 엉뚱한 메서드에 걸릴 수 있음).
+            public bool AllowTypeScanFallback { get; private set; }
+
+            public PatchSpec WithTypeScanFallback()
+            {
+                AllowTypeScanFallback = true;
                 return this;
             }
         }

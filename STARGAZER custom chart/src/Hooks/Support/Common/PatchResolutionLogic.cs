@@ -179,6 +179,78 @@ namespace STARGAZER_custom_chart
             return (chosen, all);
         }
 
+        /// <summary>
+        /// 타입 이름이 통째로 바뀌어 FullName·짧은 이름 해석이 모두 실패했을 때 쓰는 마지막 폴백.
+        /// 주어진 타입들에서 이름이 <paramref name="methodNames"/> 중 하나이고 파라미터 타입명이 정확히 같은
+        /// "구체" 메서드를 모은다. 후보가 정확히 하나일 때만 Chosen을 돌려준다(모호하면 걸지 않음).
+        /// <paramref name="isEligibleType"/>은 시그니처가 맞는 타입에만 호출된다(IL2CPP 인터페이스/추상 클래스 제외용 —
+        /// Il2CppInterop은 IL2CPP 인터페이스를 일반 클래스로 생성하므로 Type.IsInterface로는 거를 수 없다).
+        /// </summary>
+        internal static (MethodInfo? Chosen, List<MethodInfo> Candidates) FindUniqueMethodAcrossTypes(
+            IEnumerable<Type> types,
+            IReadOnlyCollection<string> methodNames,
+            int expectedParamCount,
+            string[] expectedTypeNames,
+            Func<Type, bool> isEligibleType)
+        {
+            var candidates = new List<MethodInfo>();
+            foreach (Type type in types)
+            {
+                if (type.IsInterface || type.IsAbstract || type.IsGenericTypeDefinition)
+                {
+                    continue;
+                }
+
+                MethodInfo[] declared;
+                try
+                {
+                    declared = type.GetMethods(AllDeclaredMethods);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                List<MethodInfo>? matches = null;
+                foreach (MethodInfo method in declared)
+                {
+                    if (method.IsAbstract || method.IsGenericMethodDefinition || !methodNames.Contains(method.Name))
+                    {
+                        continue;
+                    }
+
+                    if (ScoreSignature(method, expectedParamCount, expectedTypeNames, exactTypeNames: true) < 0)
+                    {
+                        continue;
+                    }
+
+                    (matches ??= new List<MethodInfo>()).Add(method);
+                }
+
+                if (matches is null)
+                {
+                    continue;
+                }
+
+                bool eligible;
+                try
+                {
+                    eligible = isEligibleType(type);
+                }
+                catch
+                {
+                    eligible = false;
+                }
+
+                if (eligible)
+                {
+                    candidates.AddRange(matches);
+                }
+            }
+
+            return (candidates.Count == 1 ? candidates[0] : null, candidates);
+        }
+
         internal static string DescribeMethod(MethodInfo method)
         {
             string parameters = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
