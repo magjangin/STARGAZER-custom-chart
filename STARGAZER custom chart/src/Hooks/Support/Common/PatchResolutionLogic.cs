@@ -307,5 +307,55 @@ namespace STARGAZER_custom_chart
 
             return (null, null);
         }
+
+        /// <summary>
+        /// 공용 디스패처 표 정합성 검사. PatchSpec(논리 이름, 단계)·HookKind 핸들러(논리 이름, 단계)·
+        /// 포커스 로그 목록이 서로 어긋나면 사람이 읽을 문제 설명을 돌려준다(빈 목록 = 정상).
+        /// 어긋나면 훅이 걸려도 switch에서 HookKind.None으로 떨어져 "조용히 아무 일도 안 하는" 상태가 된다.
+        /// </summary>
+        internal static List<string> FindDispatchTableMismatches(
+            IEnumerable<(string LogicalName, bool IsPrefix)> specs,
+            IReadOnlyDictionary<string, bool> handlerIsPrefixByLogicalName,
+            IEnumerable<string> focusedLogicalNames)
+        {
+            var problems = new List<string>();
+            var specNames = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach ((string name, bool isPrefix) in specs)
+            {
+                if (!specNames.Add(name))
+                {
+                    problems.Add($"PatchSpec 중복: {name}");
+                    continue;
+                }
+
+                if (!handlerIsPrefixByLogicalName.TryGetValue(name, out bool handlerIsPrefix))
+                {
+                    problems.Add($"핸들러 없음(HookKind 매핑 누락): {name}");
+                }
+                else if (handlerIsPrefix != isPrefix)
+                {
+                    problems.Add($"단계 불일치: {name} 는 {(isPrefix ? "Prefix" : "Postfix")}로 걸리지만 핸들러는 {(handlerIsPrefix ? "Prefix" : "Postfix")} switch에 있음");
+                }
+            }
+
+            foreach (string name in handlerIsPrefixByLogicalName.Keys)
+            {
+                if (!specNames.Contains(name))
+                {
+                    problems.Add($"PatchSpec 없는 핸들러: {name}");
+                }
+            }
+
+            foreach (string name in focusedLogicalNames)
+            {
+                if (!specNames.Contains(name))
+                {
+                    problems.Add($"PatchSpec 없는 포커스 로그 항목: {name}");
+                }
+            }
+
+            return problems;
+        }
     }
 }

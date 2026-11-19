@@ -42,7 +42,7 @@
 ### 🛡️ 업데이트 내성 & 훅 상태 요약 (`[Health]`)
 * **이중 경로 차트 주입**: 1차 컴파일러 람다(`_Load_b__5_0`) 시그니처 탐색이 막혀도 2차 `INNER_PatternLoader.onCompleted` 이중래퍼(Dual-Wrapper)가 패턴을 가로채며, 네이티브 포인터 기준 중복 가드로 2회 주입을 방지합니다.
 * **타입/이름 폴백 해석**: 메서드 대체 이름(`WithAlternates`), 짧은 타입명 폴백(`ResolveGameType`), 멤버 타입 기반 유일 후보 폴백(`TryGetMemberByType`, 컬렉션 컨테이너 변경 대응 포함), UI 세터 대체 이름 탐색을 갖추고 있습니다.
-* **훅 상태 요약 & 바이너리 지문 감지**: 기동 시 `[Health]` 블록으로 모든 기능의 `(적용 수 / 기대 수)`를 한눈에 요약하고, `GameAssembly.dll` 지문(`savecustomkey/.game-fingerprint`)이 달라지면 게임 업데이트 경고를 출력합니다.
+* **훅 상태 요약 & 바이너리 지문 감지**: 기동 시 `[Health]` 블록으로 모든 기능의 `(적용 수 / 기대 수)`를 한눈에 요약하고, `GameAssembly.dll` + `global-metadata.dat` 지문(`savecustomkey/.game-fingerprint`)이 달라지면 게임 업데이트 경고를 출력합니다. Steam ACF의 `buildid`가 고정 빌드(`21205351`)와 다르거나 자동 업데이트가 막혀 있지 않으면 함께 경고하며, 기록 보호(SaveGuard)가 걸리지 않으면 `[Health][CRITICAL]` 오류로 따로 알립니다.
 
 ### ⏱️ 로그 스로틀링 (Log Throttling)
 * 자주 불리는 후킹 지점의 로그가 쌓이지 않도록, 같은 메서드의 호출 로그를 1초에 최대 3줄까지만 남기며(`InvocationLogMaxPerWindow`), 음원·자켓 서빙 및 대체 해석 경고는 키별 1회(`LogOnce`)만 기록합니다.
@@ -70,7 +70,7 @@ STARGAZER custom chart/
     ├── STARGAZER custom chart.csproj    # C# 프로젝트 파일 (빌드 후 게임 Mods 폴더로 자동 복사)
     ├── Properties/                      # 어셈블리 정보
     └── src/                             # 소스 코드
-        ├── Core/                        # 모드 진입점(ModEntry.cs) 및 훅 상태 요약·업데이트 감지(HookHealth.cs)
+        ├── Core/                        # 모드 진입점(ModEntry.cs), 훅 상태 요약·업데이트 감지(HookHealth.cs), 버전 판정 순수 로직(GameVersionLogic.cs)
         ├── Custom/                      # hwa 앨범 스캔, info.txt / config.txt 다국어 파서
         ├── Bms/                         # BMS 파서 (파일 타임스탬프 캐시 포함)
         ├── Hooks/

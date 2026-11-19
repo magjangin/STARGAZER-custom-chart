@@ -223,7 +223,10 @@ private static IEnumerable<MethodBase> TargetMethods() => Targets;
 - **단계 분리(`HookPhase`)**: 공용 디스패처(`InvocationPatches.cs`)는 `InvocationPrefixPatches`와 `InvocationPostfixPatches`로 나뉘어 각 대상에 실제로 필요한 쪽(Prefix 또는 Postfix) 하나만 붙입니다. 핸들러 없는 빈 반대쪽 트램펄린과 `object[]` 박싱 비용을 제거하기 위함입니다.
 - **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`을 등록하고, `HookPrefix`/`HookPostfix`는 런타임 메서드명이 아니라 논리 이름으로 `HookKind`를 결정합니다. 따라서 대체 이름(`WithAlternates`, 예: `FetchJacektImage` → `FetchJacketImage`)이나 람다 대체 해석으로 연결된 메서드도 원래 핸들러로 정확히 라우팅됩니다.
 - **안전한 건너뛰기**: 대상을 하나도 못 찾으면 `Prepare()`가 `false`를 돌려줘 **그 클래스만** 건너뜁니다. `TargetMethods()`가 빈 목록을 돌려주면 Harmony가 `"Undefined target method"` 예외를 던져 `PatchAll` 전체가 중단되므로 절대 빈 목록을 반환하면 안 됩니다.
-- **상태 요약 및 업데이트 감지**: 모든 패치(지연 패치 포함) 시도가 끝난 뒤 `HookHealth.LogSummary()`가 `[Health]` 블록으로 전체 기능의 `(적용 수 / 기대 수)`를 한 번 출력하며, `GameAssembly.dll`의 크기·수정시각(`savecustomkey/.game-fingerprint`)이 이전 실행과 다르면 게임 업데이트 경고와 확인 순서를 안내합니다.
+- **상태 요약 및 업데이트 감지**: 모든 패치(지연 패치 포함) 시도가 끝난 뒤 `HookHealth.LogSummary()`가 `[Health]` 블록으로 전체 기능의 `(적용 수 / 기대 수)`를 한 번 출력하며, `GameAssembly.dll`·`global-metadata.dat`의 크기·수정시각(`savecustomkey/.game-fingerprint`, v2 형식 `v2|ga=…|meta=…`)이 이전 실행과 다르면 바뀐 파일 이름과 함께 게임 업데이트 경고와 확인 순서를 안내합니다. 비교 규칙은 순수 로직 `GameVersionLogic`(단위 테스트 대상)에 있으며, v1 지문(`크기:Ticks`)과 `meta=none`(파일 못 찾음)은 거짓 경고를 막기 위해 GameAssembly 부분만 비교합니다.
+- **Steam 빌드 확인**: `steamapps/appmanifest_3446490.acf`의 `buildid`가 `GameVersionLogic.PinnedSteamBuildId`와 다르면, `TargetBuildID`가 대기 중이면, `AutoUpdateBehavior≠1`이고 읽기 전용도 아니면 각각 경고합니다(ACF가 없으면 Steam 밖 보존 사본으로 보고 조용히 넘어감).
+- **핵심 기능 에스컬레이션**: `HookHealth.CriticalFeatures`(현재 `기록 보호(SaveGuard)`)가 실패/일부이거나, `OnLateInitializeMelon` 이후에도 한 번도 보고되지 않으면(PatchAll 중단 의심) `[Health][CRITICAL]` Error 로그를 별도로 남깁니다.
+- **디스패처 표 자가 검사**: 시작 시 `ValidateInvocationHookTable`이 `InvocationPatchSpecs` ↔ `HookKindsByLogicalName` ↔ `PrefixHookKinds`(단계) ↔ `FocusedHarmonyInvocationMethods`의 어긋남을 `PatchResolutionLogic.FindDispatchTableMismatches`로 찾아 `[HookPatch][table]` Error로 알립니다(훅은 걸렸는데 핸들러가 `HookKind.None`으로 떨어지는 조용한 고장 방지).
 
 ## 기타 실측 메모
 

@@ -201,5 +201,66 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal(-1, PatchResolutionLogic.ScoreSignature(loaderOnly, 1, new[] { "Pattern" }, exactTypeNames: true));
             Assert.Equal(1, PatchResolutionLogic.ScoreSignature(loaderOnly, 1, new[] { "Pattern" }, exactTypeNames: false));
         }
+
+        [Fact]
+        public void FindDispatchTableMismatches_ConsistentTable_ReturnsEmpty()
+        {
+            var specs = new[] { ("A.Play", true), ("A.Set", false) };
+            var handlers = new System.Collections.Generic.Dictionary<string, bool> { ["A.Play"] = true, ["A.Set"] = false };
+            Assert.Empty(PatchResolutionLogic.FindDispatchTableMismatches(specs, handlers, new[] { "A.Play" }));
+        }
+
+        [Fact]
+        public void FindDispatchTableMismatches_ReportsEveryKindOfDrift()
+        {
+            var specs = new[] { ("A.Play", true), ("A.Set", true), ("A.NoHandler", false), ("A.Play", true) };
+            var handlers = new System.Collections.Generic.Dictionary<string, bool>
+            {
+                ["A.Play"] = true,
+                ["A.Set"] = false,
+                ["A.Orphan"] = false,
+            };
+
+            var problems = PatchResolutionLogic.FindDispatchTableMismatches(specs, handlers, new[] { "A.Ghost" });
+
+            Assert.Contains(problems, p => p.Contains("중복") && p.Contains("A.Play"));
+            Assert.Contains(problems, p => p.Contains("단계 불일치") && p.Contains("A.Set"));
+            Assert.Contains(problems, p => p.Contains("매핑 누락") && p.Contains("A.NoHandler"));
+            Assert.Contains(problems, p => p.Contains("PatchSpec 없는 핸들러") && p.Contains("A.Orphan"));
+            Assert.Contains(problems, p => p.Contains("포커스") && p.Contains("A.Ghost"));
+            Assert.Equal(5, problems.Count);
+        }
+
+        private enum EJudgements { BLUE }
+
+        private sealed class FakeJudgementExtension
+        {
+            private EJudgements FromTimeDiffernce(float noteTiming, float patternTime, out float judgeTiming)
+            {
+                judgeTiming = noteTiming - patternTime;
+                return EJudgements.BLUE;
+            }
+        }
+
+        // 회귀 방지(2026-11-19): 실제 게임의 FromTimeDiffernce/TryJudgeHead는 인스턴스 메서드다.
+        // Static 전용 플래그로 찾으면 조용히 실패하므로 JudgeAllPerfectPatch는 Instance|Static을 함께 넘긴다.
+        [Fact]
+        public void ResolveMethodByShortSignature_InstanceJudgeMethod_RequiresInstanceFlag()
+        {
+            var expected = new[] { ("Single", false), ("Single", false), ("Single", true) };
+            const BindingFlags any = BindingFlags.Public | BindingFlags.NonPublic;
+
+            var (staticOnly, _) = PatchResolutionLogic.ResolveMethodByShortSignature(
+                typeof(FakeJudgementExtension), any | BindingFlags.Static,
+                new[] { "FromTimeDiffernce" }, "TimeDiffer", "EJudgements", expected);
+            var (both, reason) = PatchResolutionLogic.ResolveMethodByShortSignature(
+                typeof(FakeJudgementExtension), any | BindingFlags.Static | BindingFlags.Instance,
+                new[] { "FromTimeDiffernce" }, "TimeDiffer", "EJudgements", expected);
+
+            Assert.Null(staticOnly);
+            Assert.NotNull(both);
+            Assert.Equal("FromTimeDiffernce", both!.Name);
+            Assert.Null(reason);
+        }
     }
 }

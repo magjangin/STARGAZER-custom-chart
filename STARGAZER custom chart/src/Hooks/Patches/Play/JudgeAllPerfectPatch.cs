@@ -23,6 +23,13 @@ namespace STARGAZER_custom_chart
         private const string TravelPlayerTypeName = "Il2CppStargazer.Play.TravelPlayer";
         private const string JudgementWidgetTypeName = "Il2CppStargazer.Play.Widgets.JudgementWidget";
 
+        // FromTimeDiffernce/TryJudgeHead는 JudgementExtension의 "인스턴스" 메서드다(dump.cs: private EJudgements FromTimeDiffernce(...),
+        // public bool TryJudgeHead(...)). 예전 AccessTools.Method는 정적/인스턴스를 가리지 않았는데, 2026-11-19 리팩터에서
+        // Static 전용으로 좁혀 두 훅이 조용히 빠졌다(Health 2/4). 업데이트로 정적화돼도 잡히도록 둘 다 본다.
+        // 핸들러는 위치 바인딩(__2)과 __result만 쓰므로 정적/인스턴스 어느 쪽이든 그대로 동작한다.
+        private const BindingFlags JudgementExtensionMethodFlags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
+
         // 이미 걸린 패치의 이름. Initialize는 OnInitializeMelon / OnLateInitializeMelon / OnSceneWasLoaded에서
         // 여러 번 불리므로, 4개가 모두 걸릴 때까지는 빠진 것만 다시 시도하고 이미 건 것은 다시 걸지 않는다.
         private static readonly HashSet<string> _patched = new HashSet<string>(StringComparer.Ordinal);
@@ -61,7 +68,7 @@ namespace STARGAZER_custom_chart
                     harmony,
                     judgeExtType,
                     JudgementExtensionTypeName,
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                    JudgementExtensionMethodFlags,
                     new[] { "FromTimeDiffernce", "FromTimeDifference" },
                     "TimeDiffer",
                     "EJudgements",
@@ -78,7 +85,7 @@ namespace STARGAZER_custom_chart
                     harmony,
                     judgeExtType,
                     JudgementExtensionTypeName,
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+                    JudgementExtensionMethodFlags,
                     new[] { "TryJudgeHead" },
                     "JudgeHead",
                     "Boolean",

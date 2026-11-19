@@ -15,6 +15,9 @@
 - **Unity 엔진 버전**: `2022.3.50f1` (x64)
 - **Steam ACF 설정**: `H:\steam\steamapps\appmanifest_3446490.acf`
   - 자동 업데이트 방지를 위해 `AutoUpdateBehavior`를 `1`로 고정하거나 읽기 전용 속성 유지.
+  - ⚠️ **2026-11-19 실측: 실제 파일은 `AutoUpdateBehavior=0`(항상 최신 유지), 읽기 전용 아님** — 위 고정이 적용돼 있지 않다. 모드가 기동 시 `[Health] Steam 자동 업데이트가 막혀 있지 않습니다` 경고로 알린다. 사용자가 직접 `1` + 읽기 전용으로 바꿀 것(에이전트는 Steam 파일을 임의로 고치지 않는다).
+  - 런타임 확인: `HookHealth.CheckSteamBuild`가 `buildid`를 `GameVersionLogic.PinnedSteamBuildId`(`21205351`)와 비교하고 `TargetBuildID` 대기 여부도 경고한다. **고정 빌드를 바꾸면 이 상수와 본 문서를 함께 갱신할 것.**
+- **MelonLoader 버전 (2026-11-19 실측)**: `v0.7.3 Open-Beta`, Runtime `net6`, 게임 버전 문자열 `1.0.7.001`.
 - **오프라인 영구 보존 (Goldberg Emulator)**:
   - 플러그인 위치: `Sixtar Gate STARGAZER_Data\Plugins\x86_64\` 및 게임 루트 디렉터리
   - 바이너리 사양: `SteamInternal_SteamAPI_Init` 심볼을 지원하는 골드버그 빌드 (`steam_api64.dll`, 7.3MB GSE 바이너리).
@@ -97,10 +100,15 @@
 - **이름 기반 세터 정확 일치 우선 (2026-11-15)**: `ResolveMemberSetter`는 밑줄 제거·소문자 정규화 이름이 후보와 **완전히 같은** 프로퍼티/필드를 먼저 고르고, 없을 때만 예전의 "포함" 일치로 내려간다. 포함 일치만 쓰면 `displayname`이 선언 순서에 따라 `displayNameEN`에, `targetlayer`가 `<TargetLayer>k__BackingField`에 걸릴 수 있었다.
 - **죽은 프로브·로그 전용 코드 정리**: 미사용·로그 전용 16개 파일(`ExperimentChartSettings`, `AssetBundleLoader`, `SoundInvocation`, `TrackLoaderInvocation`, `TrackListViewerProbe`, `AreaCreate`/`Catalog`/`LinkHold`/`Wipe`/`LongNote`/`Reflection`, `JacketObjectProbe`, `LevelSelectorHookSupport`/`ProbingSupport`, `TrackSelectorMetadataSupport`) 및 빈 폴더 4개 제거.
 
-### 훅 상태 요약 & 게임 업데이트 감지 (2026-11-16, `src/Core/HookHealth.cs`)
+### 훅 상태 요약 & 게임 업데이트 감지 (2026-11-16, 2026-11-19 보강, `src/Core/HookHealth.cs`, `src/Core/GameVersionLogic.cs`)
 - **목적**: 훅이 `PrepareTargets` / 수동 Patch(Judge·UnlockAll·FocusedTrackViewer) / 지연 재시도로 흩어져 걸리고 실패 로그도 각자 따로라, 업데이트 직후 "무엇이 살아 있나"를 로그 여러 곳에서 모아 봐야 했음.
 - **동작**: 각 기능이 `HookHealth.Report(기능명, 적용 수, 기대 수)`를 남기고(`PrepareTargets`는 필수 `feature` 인자로 자동 기록), `ApplyDeferredPatches` 끝에서 `HookHealth.LogSummary()`가 `[Health]` 블록을 한 번 찍는다(요약이 같으면 재출력 없음). 일부/전부 실패면 Warning, 설정으로 끈 기능은 "꺼짐"으로 표시(실패로 세지 않음).
-- **업데이트 감지**: `HookHealth.CheckGameFingerprint()`가 `GameAssembly.dll`의 크기+수정시각을 `savecustomkey/.game-fingerprint`에 저장하고, 다음 실행에서 달라지면 `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` 경고와 함께 확인 순서를 안내. 동작은 바꾸지 않는 힌트 전용이며 파일이 없거나 읽기 실패해도 조용히 넘어간다.
+- **업데이트 감지**: `HookHealth.CheckGameFingerprint()`가 `GameAssembly.dll` + `global-metadata.dat`의 크기+수정시각을 `savecustomkey/.game-fingerprint`(v2: `v2|ga=…|meta=…`)에 저장하고, 다음 실행에서 달라지면 바뀐 파일 이름과 함께 `[Health] … 이(가) 지난 실행과 다릅니다` 경고 및 확인 순서를 안내. 동작은 바꾸지 않는 힌트 전용이며 파일이 없거나 읽기 실패해도 조용히 넘어간다.
+  - 비교 규칙은 순수 로직 `GameVersionLogic`(xUnit 대상). v1 지문(`크기:Ticks`)이나 `meta=none`(파일 못 찾음)은 GameAssembly 부분만 비교해 형식 변경·경로 실패로 인한 거짓 경고를 막는다.
+  - **게임 루트 경로**: MelonLoader 0.7.3(net6)에서 `AppDomain.CurrentDomain.BaseDirectory`가 **빈 문자열**이다(실측). 상대 경로는 작업 디렉터리 덕에 우연히 맞지만 `Directory.GetParent("")`는 예외. `HookHealth.ResolveGameDirectory`는 `MelonEnvironment.GameRootDirectory` → `BaseDirectory` → `Environment.CurrentDirectory` 순으로 절대 경로를 만든다. 새 코드에서 게임 폴더 기준 경로가 필요하면 이 순서를 따를 것.
+- **Steam 빌드 감지**: `appmanifest_3446490.acf`의 `buildid`가 고정 빌드와 다르면, `TargetBuildID`가 대기 중이면, 자동 업데이트가 막혀 있지 않으면(`AutoUpdateBehavior≠1` && 읽기 전용 아님) 각각 경고. ACF가 없으면(Steam 밖 보존 사본) 조용히 넘어간다.
+- **핵심 기능 에스컬레이션 (`HookHealth.CriticalFeatures`)**: 실패 시 데이터가 망가지는 기능(현재 `기록 보호(SaveGuard)` = `HookHealth.SaveGuardFeature`)이 실패/일부거나, `OnLateInitializeMelon`(`MarkStartupComplete`) 이후에도 한 번도 보고되지 않으면(=PatchAll 중단 의심, Dead End 12) `[Health][CRITICAL]` **Error** 로그를 따로 남긴다. 새로 "실패하면 데이터 오염" 성격의 기능을 추가하면 이 표에 등록할 것.
+- **디스패처 표 자가 검사 (`ValidateInvocationHookTable`)**: 시작 시 `InvocationPatchSpecs` ↔ `HookKindsByLogicalName` ↔ `PrefixHookKinds`(Prefix switch 소속) ↔ `FocusedHarmonyInvocationMethods`가 어긋나면 `[HookPatch][table]` Error. 공용 훅을 추가/이름 변경할 때 네 곳을 같이 고치지 않으면 "훅은 걸렸는데 `HookKind.None`이라 아무 일도 안 하는" 조용한 고장이 생기기 때문.
 - **새 패치를 추가할 때 규칙**: `PrepareTargets(…, "기능명")`을 쓰거나, 수동 Patch면 적용 수를 `HookHealth.Report`로 남길 것. 그렇지 않으면 `[Health]`에서 그 기능이 빠진다.
 - **FocusedTrackViewer 철자 변형**: 게임 원본에 `FetchJacektImage` 오타가 있어 `FetchJacketImage` ↔ `FetchJacektImage`를 같은 훅으로 취급(`FocusedTrackViewerAlternateNames`). 새 변형이 생기면 이 표에 추가.
 - **UnlockAll 오버로드 모호성**: 같은 이름 오버로드 중 기대 인자 수와 맞는 것이 없으면 첫 후보로 대체하되 `[UnlockAllPatch] … 오버로드 … 대체` 경고를 1회 남긴다.
@@ -170,6 +178,12 @@
 12. **`TargetMethods()`가 빈 목록 반환 (치명적)**
     - 원인: Harmony가 어트리뷰트에서 대상을 찾다 "Undefined target method"로 던져 PatchAll이 중단, 이후 훅 전부 미적용.
     - 규칙: 항상 `Prepare()`에서 `PrepareTargets`로 해석하고 못 찾으면 `false`.
+13. **`AccessTools.Method` → `BindingFlags.Static` 전용 탐색으로 교체 (회귀, 2026-11-19 복구)**
+    - 원인: `AccessTools.Method`는 정적/인스턴스를 가리지 않는데, 위치 바인딩 리팩터에서 `ResolveMethodByShortSignature(..., Static)`로 바꾸며 인스턴스 메서드인 `JudgementExtension.FromTimeDiffernce`/`TryJudgeHead`가 조용히 빠짐(`[Health] 올 퍼펙트 판정: 일부 (2/4)`). 단위 테스트는 가짜 타입만 봐서 못 잡았고 실기 로그로 발견.
+    - 규칙: 리플렉션 탐색을 바꿀 때는 `il2cpp_dump/dump.cs`에서 대상의 static 여부를 확인하고, 모르면 `Instance | Static`을 함께 넘길 것. 리팩터 후엔 반드시 게임을 한 번 띄워 `[Health]` 요약이 전부 `정상`인지 볼 것.
+14. **`AppDomain.CurrentDomain.BaseDirectory`로 게임 폴더 계산 (MelonLoader 0.7에서 빈 문자열)**
+    - 원인: 빈 문자열이라 `Path.Combine("", …)`은 작업 디렉터리 기준 상대 경로로 우연히 동작하지만 `Directory.GetParent`/`GetDirectories("")`는 `ArgumentException`.
+    - 규칙: `HookHealth.ResolveGameDirectory` 순서(`MelonEnvironment.GameRootDirectory` 우선)를 쓸 것. (`CustomConfig`/`CustomAlbumRegistry`는 테스트 프로젝트와 공유돼 MelonLoader 의존을 넣을 수 없어 현행 유지 — 상대 경로라 실동작에는 문제없음.)
 
 ---
 
@@ -188,9 +202,10 @@
   - 배포 경로: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\Mods\STARGAZER custom chart.dll`
 - **로그 확인**:
   - `H:\steam\steamapps\common\Sixtar Gate STARGAZER\MelonLoader\Latest.log`
-  - 게임 업데이트 후 첫 확인 순서: `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]`.
+  - 게임 업데이트 후 첫 확인 순서: `[Health][CRITICAL]`/`[HookPatch][table]`(Error) → `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석 발생) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]`.
+  - 실기 스모크 테스트(에이전트용): 게임 exe를 직접 실행 → `Latest.log`에 `Registered mono type MelonLoader.Support`가 찍힌 뒤 몇 초 기다려 `[Health]` 요약을 읽고 프로세스 종료. 골드버그라 Steam 클라이언트를 거치지 않는다.
 - **게임 업데이트 대응 체크리스트** (순서대로):
-  1. Steam 자동 업데이트가 걸렸다면 `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` 경고가 뜬다. 고정 빌드(Build ID `21205351`)라면 뜨지 않아야 정상.
+  1. Steam 자동 업데이트가 걸렸다면 `[Health] GameAssembly.dll / global-metadata.dat 이(가) 지난 실행과 다릅니다` 및 `[Health] Steam BuildID … 가 고정 빌드 … 와 다릅니다` 경고가 뜬다. 고정 빌드(Build ID `21205351`)라면 `고정 빌드와 일치합니다`가 떠야 정상. `[Health][CRITICAL]`이나 `[HookPatch][table]` Error가 있으면 그것부터 고칠 것.
   2. 로그에서 `[HookPatch][attr] target not found` → `[HookPatch][resolve]`(대체 해석) → `[DualWrapper]` → `[FocusedTrackViewerProbe]` → `[Health]` 요약 순으로 본다.
   3. `[Health]` 가 "일부/실패"면 해당 기능의 `PatchSpec`(PatchTargetSupport.cs) 또는 수동 패치 대상 이름을 `dump_game_reference` 등으로 재확인.
   4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
@@ -202,5 +217,6 @@
   - **BMS 채보가 주입되지 않음** → `[HookPatch][resolve]`, `[DualWrapper]`, `[NoteProbe]`, `[BmsInject]` → `src/Hooks/Support/Common/HookInvocationSupport.cs`, `src/Probes/Notes/HookNoteProbes.cs`, `HookNoteProbes.BmsInject.cs`
   - **난이도 숫자가 원본으로 표시됨** → `[FocusedTrackViewerProbe]`, `[CustomLevel]` → `src/Probes/Track/FocusedTrackViewerProbe.cs`, `src/Hooks/Support/LevelSelector/LevelSelectorDisplaySupport.cs`
   - **공식 기록 오염/저장 차단 이상** → `[SaveGuard]` → `src/Hooks/Patches/UserData/TrackRecordSaveGuardPatch.cs`, `SaveGuardLogic.cs`
-  - **올 퍼펙트 / 전곡 해금 / 오토플레이 미동작** → `[JudgePatch]`, `[UnlockAllPatch]`, `[PlayerBaseAutoPlay]`, `[Health]` → `JudgeAllPerfectPatch.cs`, `TrackUnlockAllPatch.cs`, `HookInvocationSupport.cs`, `HookHealth.cs`
+  - **올 퍼펙트 / 전곡 해금 / 오토플레이 미동작** → `[JudgePatch]`, `[UnlockAllPatch]`, `[PlayerBaseAutoPlay]`, `[Health]` → `JudgeAllPerfectPatch.cs`, `TrackUnlockAllPatch.cs`, `HookInvocationSupport.cs`, `HookHealth.cs` (올 퍼펙트 2/4면 Dead End 13 — static/instance 플래그부터)
+  - **업데이트 경고가 거짓으로 뜸 / 안 뜸** → `[Health]` → `src/Core/GameVersionLogic.cs`(비교 규칙), `HookHealth.CheckBinaryFingerprint`/`CheckSteamBuild`, `savecustomkey/.game-fingerprint`
 - **변경 이력**: [CHANGELOG.md](CHANGELOG.md) 참고 (과거 작업 일지는 `docs/archive/` 보관).

@@ -67,6 +67,7 @@
   2. 선호 이름 조각(`TimeDiffer`, `JudgeHead`, `Buffer`, `Watch`) + 반환/파라미터 시그니처가 일치하는 **유일** 후보
   3. 반환/파라미터 시그니처가 일치하는 **유일** 후보 (대체 해석 발생 시 `[JudgePatch][resolve]` 경고 출력)
 - 4개 훅 핸들러는 파라미터 이름(`judgeTiming`, `result`, `te`, `t`) 대신 Harmony **위치 기반 바인딩(`__0`, `__2`)**을 사용하여 파라미터 이름 변경이나 메타데이터 스트립에 영향을 받지 않습니다.
+- ⚠️ `FromTimeDiffernce`/`TryJudgeHead`는 `JudgementExtension`의 **인스턴스 메서드**입니다(`dump.cs`: `private EJudgements FromTimeDiffernce(...)`, `public bool TryJudgeHead(...)`). 탐색 플래그는 `JudgementExtensionMethodFlags`(`Instance | Static`)를 씁니다. 2026-11-19 리팩터에서 `Static`만 넘겨 두 훅이 조용히 빠졌고(`[Health] 올 퍼펙트 판정: 일부 (2/4)`), 같은 날 실기 로그로 발견해 복구했습니다. 핸들러는 `__result`와 위치 바인딩만 쓰므로 정적/인스턴스 어느 쪽이든 동작합니다.
 
 ---
 

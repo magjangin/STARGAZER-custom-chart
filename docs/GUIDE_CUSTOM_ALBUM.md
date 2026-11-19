@@ -139,4 +139,7 @@ BMS 파일 작성 규칙과 레인 매핑은 [REFERENCE_BMS_CONVERSION.md](REFER
 | `[CustomJacket] Serving custom jacket for ...` | 자켓이 교체됨 (경로별 처음 1회만 기록) |
 | `[CustomBgm] Serving cached ...` | 음원이 교체됨 (경로별 처음 1회만 기록) |
 | `[Health] 훅 상태 요약` | 각 기능의 훅이 몇 개 걸렸는지(`정상`/`일부`/`실패`/`꺼짐`) 한눈에 표시 |
-| `[Health] GameAssembly.dll 이 지난 실행과 다릅니다` | 게임이 업데이트되었을 때 뜨는 경고 (`savecustomkey/.game-fingerprint` 기준) |
+| `[Health] GameAssembly.dll / global-metadata.dat 이(가) 지난 실행과 다릅니다` | 게임이 업데이트되었을 때 뜨는 경고 (`savecustomkey/.game-fingerprint` 기준) |
+| `[Health] Steam BuildID … 가 고정 빌드 … 와 다릅니다` | Steam 빌드가 모드가 검증된 빌드(`21205351`)와 다름 |
+| `[Health] Steam 자동 업데이트가 막혀 있지 않습니다` | `appmanifest_3446490.acf`의 `AutoUpdateBehavior`가 `1`이 아니고 읽기 전용도 아님 — 업데이트가 몰래 들어올 수 있음 |
+| `[Health][CRITICAL] 기록 보호(SaveGuard) …` | 저장 차단 훅이 안 걸림 — 커스텀 곡 결과가 공식 Starting Point 기록을 덮어쓸 수 있으니 고치기 전까지 커스텀 곡 플레이 금지 |
