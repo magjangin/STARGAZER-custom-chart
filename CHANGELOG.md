@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-19 (3차: 올 퍼펙트 회귀 복구 · 게임 버전 감지 정밀화 · 핵심 기능 에스컬레이션)
+- **버그 수정 (실기 검증으로 발견)**:
+  - `JudgeAllPerfectPatch`: 2차 리팩터에서 `JudgementExtension.FromTimeDiffernce`/`TryJudgeHead` 탐색을 `BindingFlags.Static` 전용으로 좁혀, 실제로는 **인스턴스 메서드**인 두 훅이 조용히 빠져 있었음(`[Health] 올 퍼펙트 판정: 일부 (2/4)`). `JudgementExtensionMethodFlags`(`Instance | Static`)로 복구 → 4/4 확인.
+  - `HookHealth`: MelonLoader 0.7.3(net6)에서 `AppDomain.BaseDirectory`가 빈 문자열이라 메타데이터·ACF 경로 해석이 예외로 실패하던 문제를 `ResolveGameDirectory`(`MelonEnvironment.GameRootDirectory` 우선)로 수정.
+- **업데이트 내성 강화**:
+  - `GameVersionLogic`(신규, 순수 로직): 지문 v2(`GameAssembly.dll` + `global-metadata.dat`), v1/`meta=none` 하위 호환 비교, ACF 키 파싱, 고정 빌드(`21205351`) 판정, 자동 업데이트 차단 여부 판정.
+  - `HookHealth.CheckSteamBuild`: Steam `buildid`가 고정 빌드와 다르거나 `TargetBuildID` 업데이트 대기 중이거나 `AutoUpdateBehavior≠1`(읽기 전용 아님)이면 경고. 바뀐 바이너리 파일 이름도 함께 표시.
+  - `HookHealth.CriticalFeatures`: 기록 보호(SaveGuard)가 실패/일부이거나 시작 완료 후에도 보고되지 않으면(PatchAll 중단 의심) `[Health][CRITICAL]` Error로 별도 경고.
+  - `ValidateInvocationHookTable` + `PatchResolutionLogic.FindDispatchTableMismatches`: `InvocationPatchSpecs` ↔ `HookKind` 매핑 ↔ Prefix/Postfix 단계 ↔ 포커스 로그 목록의 어긋남을 시작 시 `[HookPatch][table]` Error로 드러냄.
+- **테스트**: `GameVersionLogicTests` 8건, 디스패처 표 검사 2건, 인스턴스 판정 메서드 해석 회귀 테스트 1건 추가(총 39건 통과).
+- **문서**: `AGENTS.md`에 ACF 실측(`AutoUpdateBehavior=0`, 읽기 전용 아님 — 고정 미적용), MelonLoader `v0.7.3` 실측, Dead End 13/14, 실기 스모크 테스트 절차, 트러블슈팅 맵 추가. `README.md`·`docs/GUIDE_CUSTOM_ALBUM.md`·`docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md`·`docs/REFERENCE_ALL_PERFECT.md` 동기화.
+
 ## 2026-11-19 (2차: 수정 기록·업데이트 내성 감사, 리팩토링 및 인수인계 강화)
 - **업데이트 내성 감사 & 버그 예방**:
   - `TrackSelectorCloningSupport.GetCopyMemberSet`: `skipMetaDataMembers` 판정에 이름(`metadata`)뿐 아니라 `INNER_TrackMetaData` 타입 일치도 포함해, `_metaData` 이름이 변경돼도 복제 시 새 메타데이터가 원본으로 덮어씌워지는 회귀를 방지.

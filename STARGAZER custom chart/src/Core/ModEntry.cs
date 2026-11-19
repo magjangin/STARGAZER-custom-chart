@@ -24,6 +24,7 @@ namespace STARGAZER_custom_chart
                 LoggerInstance.Msg($"[Mod] NoteSway={CustomConfig.NoteSway} NoteSpeedChaos={CustomConfig.NoteSpeedChaos}");
 
                 HookHealth.CheckGameFingerprint();
+                ValidateInvocationHookTable();
                 LogBgmDebugFileInfo();
                 StartCustomBgmPreload();
                 ApplyDeferredPatches();
@@ -38,6 +39,9 @@ namespace STARGAZER_custom_chart
         {
             try
             {
+                // 이 시점엔 [HarmonyPatch] 클래스(SaveGuard 등)의 PatchAll이 끝나 있다. 이후 요약부터 한 번도
+                // 보고되지 않은 핵심 기능을 실패로 센다(HookHealth.CriticalFeatures).
+                HookHealth.MarkStartupComplete();
                 ApplyDeferredPatches();
             }
             catch (Exception ex)

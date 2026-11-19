@@ -44,6 +44,33 @@ namespace STARGAZER_custom_chart
             ["Il2CppStargazer.Travel.LevelSelector.LevelSelector.FetchJacektImage"] = HookKind.LevelSelectorFetchJacektImage,
         };
 
+        // HookPrefix switch가 처리하는 역할. 나머지는 HookPostfix switch가 처리한다.
+        // 새 HookKind를 추가할 때 어느 switch에 넣었는지 여기와 맞출 것(ValidateInvocationHookTable이 검사).
+        private static readonly HashSet<HookKind> PrefixHookKinds = new HashSet<HookKind>
+        {
+            HookKind.PlayerBasePlay,
+            HookKind.PatternLoaderLoad,
+        };
+
+        // 시작 시 1회: PatchSpec ↔ HookKind ↔ 단계 ↔ 포커스 로그 목록이 서로 맞는지 검사한다.
+        // 표를 고치다 한쪽만 바꾸면 훅은 걸리는데 핸들러가 안 도는 "조용한 고장"이 생기므로 로그로 드러낸다.
+        private static void ValidateInvocationHookTable()
+        {
+            var handlers = HookKindsByLogicalName.ToDictionary(
+                pair => pair.Key,
+                pair => PrefixHookKinds.Contains(pair.Value),
+                StringComparer.Ordinal);
+            List<string> problems = PatchResolutionLogic.FindDispatchTableMismatches(
+                InvocationPatchSpecs.Select(spec => (spec.LogicalName, spec.Phase == HookPhase.Prefix)),
+                handlers,
+                FocusedHarmonyInvocationMethods);
+
+            foreach (string problem in problems)
+            {
+                MelonLogger.Error($"[HookPatch][table] {problem}");
+            }
+        }
+
         private sealed class HookSite
         {
             public HookSite(HookKind kind, string logicalName, bool focused)

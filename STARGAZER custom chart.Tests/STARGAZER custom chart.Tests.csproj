@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Compile Include="..\STARGAZER custom chart\src\Bms\BmsChart.cs" Link="Source\BmsChart.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Core\GameVersionLogic.cs" Link="Source\GameVersionLogic.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomAlbum.cs" Link="Source\CustomAlbum.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomConfig.cs" Link="Source\CustomConfig.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Custom\CustomTrackInfo.cs" Link="Source\CustomTrackInfo.cs" />
