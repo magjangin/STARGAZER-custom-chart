@@ -35,6 +35,11 @@ INNER_PatternLoader._Load_b__5_0(Pattern)   Layer.Areas를 BMS 차트로 교체
   공식 "Starting Point"와 "Starting Point (yomoha Jazz Arrange)"까지 커스텀으로 오인해
   공식 곡에 커스텀 자켓·차트가 주입됩니다. 실제로 발생했던 버그입니다.
 
+**복제 원본 선택도 같은 이유로 정확 일치를 우선합니다.** `CloneSourceSelection.Pick`은 곡 목록에서 ID가 정확히
+`startingpoint`인 트랙을 먼저 고르고, 없을 때만 접두 일치(`StartsWith`) 트랙으로 내려가며 `[TrackSelector.Set]` 경고를
+남깁니다. 접두 일치만 쓰면 목록 순서에 따라 "Jazz Arrange"가 원본으로 복제될 수 있기 때문입니다.
+(이 함수는 *복제 원본 선택* 전용이고, 커스텀 곡 *식별*은 아래 포인터 동일성으로만 합니다.)
+
 그래서 **우리가 직접 만든 객체의 IL2CPP 네이티브 포인터**를 주입 시점에 기록하고,
 그 포인터를 가진 객체만 커스텀으로 판정합니다.
 

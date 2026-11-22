@@ -70,9 +70,23 @@ namespace STARGAZER_custom_chart
         public string? JacketPath { get; private set; }
         public IReadOnlyList<string> Warnings => _warnings;
 
-        // 표시명은 info.txt의 제목을 쓰고, 없으면 폴더 이름으로 대체한다.
-        public string DisplayName => string.IsNullOrEmpty(Info?.Title) ? Name : Info!.Title!;
-        public string Artist => string.IsNullOrEmpty(Info?.Artist) ? "화영왕" : Info!.Artist!;
+        // info.txt 없이 BMS 파일만 넣어도 곡이 제대로 보이도록 BMS 헤더의 #TITLE/#ARTIST를 폴백으로 쓴다.
+        public string? BmsTitle { get; private set; }
+        public string? BmsArtist { get; private set; }
+
+        // 표시명 우선순위: info.txt 제목 → BMS #TITLE → 폴더 이름.
+        public string DisplayName =>
+            !string.IsNullOrEmpty(Info?.Title) ? Info!.Title!
+            : !string.IsNullOrEmpty(BmsTitle) ? BmsTitle!
+            : Name;
+
+        // 아티스트 우선순위: info.txt → BMS #ARTIST → 기본값.
+        public string Artist =>
+            !string.IsNullOrEmpty(Info?.Artist) ? Info!.Artist!
+            : !string.IsNullOrEmpty(BmsArtist) ? BmsArtist!
+            : DefaultArtist;
+
+        internal const string DefaultArtist = "화영왕";
 
         // 곡으로 인정하는 최소 조건: 차트나 음원 중 하나는 있어야 한다.
         public bool IsPlayable => BmsPath is not null || _levelBmsPaths.Count > 0 || MusicPath is not null;
@@ -133,7 +147,48 @@ namespace STARGAZER_custom_chart
             string? infoPath = album.ResolveInfoPath(files, byName);
             album.Info = infoPath is null ? null : CustomTrackInfo.TryParse(infoPath);
 
+            album.WarnIfTooLarge(album.BmsPath, "BMS");
+            foreach (string levelBms in album._levelBmsPaths.Values)
+            {
+                album.WarnIfTooLarge(levelBms, "BMS");
+            }
+            album.WarnIfTooLarge(infoPath, "info");
+
+            album.LoadBmsHeaderFallback();
+
             return album;
+        }
+
+        private void WarnIfTooLarge(string? path, string label)
+        {
+            if (path is not null && SafeTextReader.IsTooLarge(path))
+            {
+                _warnings.Add($"{label} 파일 '{Path.GetFileName(path)}' 이(가) {SafeTextReader.MaxTextFileBytes / (1024 * 1024)}MB 상한을 넘어 읽지 않습니다.");
+            }
+        }
+
+        // info.txt에 제목/아티스트가 모두 있으면 BMS를 열 필요가 없다. 하나라도 비어 있을 때만 헤더를 읽는다.
+        private void LoadBmsHeaderFallback()
+        {
+            if (!string.IsNullOrEmpty(Info?.Title) && !string.IsNullOrEmpty(Info?.Artist))
+            {
+                return;
+            }
+
+            string? bms = BmsPath ?? _levelBmsPaths.Values.FirstOrDefault();
+            if (bms is null)
+            {
+                return;
+            }
+
+            try
+            {
+                (BmsTitle, BmsArtist) = BmsChart.ReadHeaderMetadata(bms);
+            }
+            catch
+            {
+                // 보조 메타데이터라 실패해도 폴더 이름/기본값으로 계속 간다.
+            }
         }
 
         private void ResolveBmsPaths(string[] sortedFiles)

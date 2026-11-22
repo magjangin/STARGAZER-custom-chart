@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-22 (복제 원본 선택 정확화 · BMS 헤더 메타데이터 폴백 · 텍스트 파일 상한 · 주입 시간 측정)
+- **버그 가능성 제거**:
+  - `CloneSourceSelection`(신규, 순수 로직): 복제 원본 선택 시 ID 정확 일치(`startingpoint`)를 우선하고 접두 일치는 폴백으로만 쓴다. "Starting Point (yomoha Jazz Arrange)"가 목록에서 원곡보다 앞에 와도 원곡이 복제된다. 정확 일치가 없어 폴백하면 `[TrackSelector.Set]` 경고를 1회 남긴다.
+- **기능 개선**:
+  - `BmsChart.ReadHeaderMetadata` + `CustomAlbum`: `info.txt`가 없거나 제목/아티스트가 비어 있으면 BMS 헤더의 `#TITLE` / `#ARTIST`를 필드별로 폴백한다(우선순위 info.txt → BMS 헤더 → 폴더 이름/기본값). `#SUBTITLE` 등 접두 변형은 무시한다.
+- **병목·안전**:
+  - `SafeTextReader.MaxTextFileBytes`(16MB): 상한을 넘는 `.txt`/`.bms`는 읽지 않는다(엉뚱한 대용량 파일을 통째로 올려 시작이 느려지는 것 방지). `CustomAlbum`은 `[Album]` 경고로 알린다.
+  - `[BmsInject] 완료` 로그에 `elapsed=Nms` 추가: 노트 수천 개를 리플렉션으로 만드는 구간의 시간을 바로 볼 수 있다.
+  - `TrackSelectorCloningSupport`: 앨범마다 반복되던 복제 성공 로그 3종을 `LogOnce`로 줄여 앨범이 많을 때 로그 폭주를 막는다(실패 경고는 그대로).
+- **테스트**: `CloneSourceSelectionTests` 5건, `BmsHeaderAndLimitsTests` 9건 추가(총 58건 통과).
+- **실기 검증**: Release 빌드(경고 0, 오류 0) 후 게임 기동 → `[Health]` 전 기능 정상(공용 훅 6/6·2/2, SaveGuard 1/1, FocusedTrackViewer 4/4, 올 퍼펙트 4/4, 전곡 해금 7/7, BGM 2/2, 자켓 1/1), `[HookPatch][resolve]`·`[table]`·`[CRITICAL]` 0건. **곡 선택 화면 진입(`TrackSelector.Set` 복제 원본 선택)과 커스텀 곡 플레이(`elapsed=` 로그, 헤더 폴백)는 이번에도 미확인** — 다음 실기 때 확인할 것.
+- **미적용(의도적)**: 일반적인 대체 이름(`Bind`/`Setup`/`Initialize`)에 타입 힌트를 강제하는 일은 인게임 검증 없이 훅을 깨뜨릴 위험이 커서 보류(해석 시 `[HookPatch][resolve]` 경고로 드러남). `#LNOBJ`/`#LNTYPE` 표준 롱노트와 공식 곡 자동 연주 저장 여부는 실기 확인이 필요해 보류.
+
 ## 2026-11-20 (2차: [Health][CRITICAL] 누락 버그 수정 · 게임 루트 경로 통일 · SaveGuard 예외 방어 · 빈 BMS 처리)
 - **버그 수정 & 안전성 강화**:
   - `HookHealth.LogSummary`: 수집만 되고 출력이 빠져 있던 `criticalProblems`를 `[Health][CRITICAL]` `MelonLogger.Error`로 실제 출력하도록 수정.

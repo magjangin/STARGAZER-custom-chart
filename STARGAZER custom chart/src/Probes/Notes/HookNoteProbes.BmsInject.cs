@@ -34,6 +34,9 @@ namespace STARGAZER_custom_chart
         {
             try
             {
+                // 노트 수천 개를 리플렉션 Invoke로 만드는 구간이라, 곡 로딩 지연이 어디서 나는지 로그로 바로 볼 수 있게 시간을 잰다.
+                long injectStartTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+
                 // 방어적 재확인: Layer.Areas를 통째로 지우는 파괴적 작업이라, 호출부 가드가 뚫려도
                 // 여기서 한 번 더 커스텀 트랙 여부를 확인하고 공식곡이면 절대 실행하지 않는다.
                 CustomAlbum? album = CurrentPlayAlbum;
@@ -233,7 +236,8 @@ namespace STARGAZER_custom_chart
 
                 string skippedChannelsText = skippedChannels.Count == 0 ? "<none>" : string.Join(",", skippedChannels.OrderBy(c => c));
                 MelonLogger.Msg($"[BmsInject] 완료: file={Path.GetFileName(bmsPath)} level={CustomChartPlayLevelKey ?? "<default>"} bpm={chart.Bpm} areasCreated={areasCreated} "
-                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝) skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText})");
+                    + $"notesCreated={notesCreated}(hold {holdStarts}시작/{holdEnds}끝) skippedByChannel={notesSkippedChannel}(channels={skippedChannelsText}) "
+                    + $"elapsed={(System.Diagnostics.Stopwatch.GetTimestamp() - injectStartTimestamp) * 1000.0 / System.Diagnostics.Stopwatch.Frequency:0.#}ms");
 
                 if (holdStarts != holdEnds)
                 {

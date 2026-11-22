@@ -34,12 +34,33 @@ namespace STARGAZER_custom_chart
         }
 
         /// <summary>
+        /// info.txt / config.txt / .bms 같은 텍스트 설정·차트 파일의 상한. 폴더에 엉뚱한 대용량 .txt가 섞여 있어도
+        /// 통째로 메모리에 올려 시작이 느려지거나 메모리를 쓰지 않도록 이 크기를 넘으면 읽지 않는다.
+        /// (실제 BMS 차트는 수백 KB 수준이라 16MB면 충분히 넉넉하다.)
+        /// </summary>
+        public const long MaxTextFileBytes = 16L * 1024 * 1024;
+
+        /// <summary>파일이 <see cref="MaxTextFileBytes"/>를 넘으면 true. 파일이 없거나 길이를 못 읽으면 false.</summary>
+        public static bool IsTooLarge(string filePath)
+        {
+            try
+            {
+                var info = new FileInfo(filePath);
+                return info.Exists && info.Length > MaxTextFileBytes;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 파일의 바이트와 BOM을 분석하여 최적의 인코딩으로 전체 라인을 읽어옵니다.
         /// 첫 줄의 UTF-8 BOM(\uFEFF)은 자동으로 제거되어 #WAV, #BPM, 제목 등의 헤더 파싱이 누락되지 않습니다.
         /// </summary>
         public static string[] ReadAllLines(string filePath)
         {
-            if (!File.Exists(filePath))
+            if (!File.Exists(filePath) || IsTooLarge(filePath))
             {
                 return Array.Empty<string>();
             }
