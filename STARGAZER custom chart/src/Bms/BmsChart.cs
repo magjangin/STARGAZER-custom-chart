@@ -165,9 +165,64 @@ namespace STARGAZER_custom_chart
             return BmsNoteKind.Normal;
         }
 
+        // BMS 헤더의 #TITLE / #ARTIST만 가볍게 읽는다. info.txt가 없는 앨범이 곡 제목·아티스트를 BMS 파일에서
+        // 폴백으로 얻는 데 쓴다. 노트 데이터는 파싱하지 않으므로 앨범 스캔 시점에 불러도 부담이 없다.
+        // "#TITLE"만 인정하고 "#SUBTITLE" 같은 접두 변형은 무시한다(대소문자 무시, 키 뒤에 공백/탭 필요).
+        public static (string? Title, string? Artist) ReadHeaderMetadata(string filePath)
+        {
+            string? title = null;
+            string? artist = null;
+
+            foreach (string rawLine in SafeTextReader.ReadAllLines(filePath))
+            {
+                ReadOnlySpan<char> line = rawLine.AsSpan().Trim();
+                if (line.Length < 7 || line[0] != '#')
+                {
+                    continue;
+                }
+
+                if (title is null && TryReadHeaderValue(line, "#TITLE", out string? titleValue))
+                {
+                    title = titleValue;
+                }
+                else if (artist is null && TryReadHeaderValue(line, "#ARTIST", out string? artistValue))
+                {
+                    artist = artistValue;
+                }
+
+                if (title is not null && artist is not null)
+                {
+                    break;
+                }
+            }
+
+            return (title, artist);
+        }
+
+        private static bool TryReadHeaderValue(ReadOnlySpan<char> line, string key, out string? value)
+        {
+            value = null;
+            if (line.Length <= key.Length
+                || !line.Slice(0, key.Length).Equals(key.AsSpan(), StringComparison.OrdinalIgnoreCase)
+                || !char.IsWhiteSpace(line[key.Length]))
+            {
+                return false;
+            }
+
+            string text = line.Slice(key.Length).Trim().ToString();
+            if (text.Length == 0)
+            {
+                return false;
+            }
+
+            value = text;
+            return true;
+        }
+
         public static BmsChart? TryParse(string filePath)
         {
-            if (!File.Exists(filePath))
+            // 상한을 넘는 파일은 읽지 않는다(엉뚱한 대용량 파일을 .bms로 두었을 때의 메모리/시간 낭비 방지).
+            if (!File.Exists(filePath) || SafeTextReader.IsTooLarge(filePath))
             {
                 return null;
             }

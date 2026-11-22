@@ -51,7 +51,11 @@ namespace STARGAZER_custom_chart
                     return null;
                 }
 
-                MelonLogger.Msg("[TrackSelector.Set] CloneTrackData: INNER_TrackData(metaData) 생성자로 독립 metaData 연결 완료.");
+                // 앨범마다 반복되는 성공 로그라 첫 1회만 남긴다(앨범이 많을 때 로그 폭주 방지). 실패는 항상 경고로 남는다.
+                if (LogOnce("CloneTrackData.linked"))
+                {
+                    MelonLogger.Msg("[TrackSelector.Set] CloneTrackData: INNER_TrackData(metaData) 생성자로 독립 metaData 연결 완료 (이후 앨범은 로그 생략).");
+                }
                 return newTrack;
             }
             catch (Exception ex)
@@ -105,7 +109,10 @@ namespace STARGAZER_custom_chart
             try
             {
                 object track = constructor.Invoke(new[] { newMeta });
-                MelonLogger.Msg("[TrackSelector.Set] INNER_TrackData(metaData) 생성자로 트랙 생성 완료.");
+                if (LogOnce("CloneTrackData.created"))
+                {
+                    MelonLogger.Msg("[TrackSelector.Set] INNER_TrackData(metaData) 생성자로 트랙 생성 완료 (이후 앨범은 로그 생략).");
+                }
                 return track;
             }
             catch (Exception ex)
@@ -152,7 +159,10 @@ namespace STARGAZER_custom_chart
                 }
 
                 CopyFieldsAndProperties(source, newObj);
-                MelonLogger.Msg($"[TrackSelector.Set] CloneIl2CppObject: wrapper 생성자와 writable 멤버 복사로 복제 완료: {type.FullName}");
+                if (LogOnce($"CloneIl2CppObject.{type.FullName}"))
+                {
+                    MelonLogger.Msg($"[TrackSelector.Set] CloneIl2CppObject: wrapper 생성자와 writable 멤버 복사로 복제 완료: {type.FullName} (이후 같은 타입은 로그 생략)");
+                }
                 return newObj;
             }
             catch (Exception ex)

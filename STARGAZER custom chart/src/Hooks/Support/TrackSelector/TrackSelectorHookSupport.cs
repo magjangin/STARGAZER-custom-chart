@@ -66,11 +66,17 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                object? source = EnumerateCollectionItems(tracks, enumerateLimit).FirstOrDefault(IsStartingPointTrack);
+                // ID가 정확히 "startingpoint"인 트랙을 우선한다(Jazz Arrange 등 접두 일치 변형이 먼저 나와도 원곡을 복제).
+                object? source = CloneSourceSelection.Pick(EnumerateCollectionItems(tracks, enumerateLimit), GetTrackIdText, out bool exactSourceMatch);
                 if (source is null)
                 {
                     MelonLogger.Msg("[TrackSelector.Set] startingpoint 트랙을 찾지 못했습니다. 복사 삽입을 건너뜁니다.");
                     return;
+                }
+
+                if (!exactSourceMatch && LogOnce("TrackSelector.CloneSource.Prefix"))
+                {
+                    MelonLogger.Warning("[TrackSelector.Set] ID가 정확히 'startingpoint'인 트랙이 없어 접두 일치 트랙을 복제 원본으로 씁니다. 게임 업데이트로 ID가 바뀌었는지 확인하세요.");
                 }
 
                 Type? concreteTrackType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");

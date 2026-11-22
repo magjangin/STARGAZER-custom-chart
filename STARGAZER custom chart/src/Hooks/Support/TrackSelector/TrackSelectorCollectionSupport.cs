@@ -14,9 +14,16 @@ namespace STARGAZER_custom_chart
         // 이 함수로는 커스텀 트랙과 공식 트랙을 구분할 수 없다 — 구분에는 IsCustomChartTrack을 써야 한다.
         private static bool IsStartingPointTrack(object? track)
         {
+            string? trackId = GetTrackIdText(track);
+            return trackId is not null && trackId.StartsWith(CloneSourceSelection.StartingPointId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 trackid로 폴백한다.
+        private static string? GetTrackIdText(object? track)
+        {
             if (track is null)
             {
-                return false;
+                return null;
             }
 
             string? trackId = TryGetMemberValue(track, "TrackID", "TrackId", "trackId", "trackid")?.ToString();
@@ -29,7 +36,7 @@ namespace STARGAZER_custom_chart
                 }
             }
 
-            return trackId is not null && trackId.StartsWith("startingpoint", StringComparison.OrdinalIgnoreCase);
+            return trackId;
         }
 
         // 주입한 커스텀 트랙의 IL2CPP 네이티브 포인터 -> (앨범, 관리 래퍼 참조).

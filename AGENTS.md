@@ -58,6 +58,7 @@
 ### IntPtr 기반 객체 동일성 판정 (포인터 1:1 매핑)
 - **표시명 기반 식별 불가**: 사용자가 `info.txt`에서 곡명을 임의로 지정하므로 고정 식별자로 사용 불가.
 - **TrackID 기반 식별 불가**: 복제 원본의 ID인 `startingpoint`를 그대로 유지함. 만약 `StartsWith` 등으로 문자열 비교를 수행할 경우, 공식 수록곡인 `"Starting Point"` 및 `"Starting Point (yomoha Jazz Arrange)"`까지 커스텀으로 오인되어 공식 곡 플레이 시 커스텀 차트와 자켓이 주입되는 버그 발생.
+- **복제 원본 선택은 별개 문제 (2026-11-22)**: `TrackSelector.Set`에서 복제할 공식 트랙은 `CloneSourceSelection.Pick`(순수 로직, xUnit 대상)이 ID **정확 일치 `startingpoint`를 우선**하고 없을 때만 접두 일치로 폴백한다(`IsStartingPointTrack`의 `StartsWith`만 쓰면 목록 순서에 따라 Jazz Arrange가 원본이 될 수 있었음). 커스텀 곡 *식별*에는 여전히 쓰지 않는다.
 - **해결책**: 주입 시점에 생성된 IL2CPP C++ 인스턴스의 네이티브 포인터(`IntPtr`)와 관리 래퍼 참조(`TrackRef`, GC 수거 및 주소 재사용 방지)를 `Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbums`에 보관하고, 포인터 일치 여부로만 커스텀 곡을 식별함.
 
 ### 기록 보호 (Save Guard)
@@ -196,6 +197,10 @@
 16. **폴백 경로를 단위 테스트만으로 검증 (부족)**
     - 원인: 폴백(대체 이름·타입 개명·멤버 타입 폴백)은 정상 빌드에선 한 번도 실행되지 않아, Il2CppInterop 특유의 표현(위 15번, Dead End 13의 static/instance) 때문에 실기에서만 깨지는 경우를 놓친다.
     - 규칙: 새 폴백을 넣으면 **대상 이름을 일부러 틀린 임시 빌드**로 게임을 한 번 띄워 `[HookPatch][resolve]`가 기대한 대상에 붙는지 보고, 정상 이름으로 되돌려 다시 빌드·스모크할 것(원복 시 PowerShell `Set-Content`가 붙인 UTF-8 BOM도 제거).
+
+17. **모드 본체(`net6.0`)에서 .NET 7+ API 사용 (빌드 오류, 2026-11-22)**
+    - 원인: 모드는 `net6.0`이라 `Stopwatch.GetElapsedTime` 등 .NET 7 이후 API가 없다(`CS0117`). 단위 테스트(`net8.0`)는 통과해도 모드 본체 빌드에서만 깨지는 경우가 있다.
+    - 규칙: 시간 측정은 `Stopwatch.GetTimestamp()` 차이 × `1000.0 / Stopwatch.Frequency`로 계산하고, 순수 로직을 테스트와 공유하는 파일(`BmsChart`/`CustomAlbum` 등)에도 .NET 7+ 전용 API를 넣지 말 것. 변경 후엔 테스트와 **모드 본체 빌드를 둘 다** 돌릴 것.
 
 ---
 
