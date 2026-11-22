@@ -18,6 +18,9 @@ decompiled/
 il2cpp_dump/
 slices/
 
+# 골드버그 에뮬레이터 적용 툴 및 로컬 GSE 바이너리 (개인 보존용, 커밋 제외)
+goldberg/
+
 # OS generated files
 .DS_Store
 Thumbs.db
