@@ -8,6 +8,7 @@ namespace STARGAZER_custom_chart
         BlockDefensiveMissingTrack,
         BlockDefensiveTrackMismatch,
         BlockOfficialAllPerfect,
+        BlockOfficialAutoPlay,
     }
 
     internal static class SaveGuardLogic
@@ -18,20 +19,21 @@ namespace STARGAZER_custom_chart
             bool isCustomTrack,
             bool isCustomPlayActive,
             bool allPerfectEnabled,
-            bool allPerfectCustomOnly)
+            bool allPerfectCustomOnly,
+            bool autoPlayEnabled)
         {
             if (!hasResult)
             {
                 return isCustomPlayActive
                     ? SaveGuardDecision.BlockDefensiveNullResult
-                    : SaveGuardDecision.Allow;
+                    : (autoPlayEnabled ? SaveGuardDecision.BlockOfficialAutoPlay : SaveGuardDecision.Allow);
             }
 
             if (!hasPlayTrack)
             {
                 return isCustomPlayActive
                     ? SaveGuardDecision.BlockDefensiveMissingTrack
-                    : SaveGuardDecision.Allow;
+                    : (autoPlayEnabled ? SaveGuardDecision.BlockOfficialAutoPlay : SaveGuardDecision.Allow);
             }
 
             if (isCustomTrack)
@@ -50,6 +52,14 @@ namespace STARGAZER_custom_chart
             if (allPerfectEnabled && !allPerfectCustomOnly)
             {
                 return SaveGuardDecision.BlockOfficialAllPerfect;
+            }
+
+            // autoplay는 PlayerBase.Play마다 곡 구분 없이 IsAutoPlay를 켠다. 결과 데이터(ITravelResultData)에는
+            // 오토플레이 여부가 없어서 게임이 스스로 저장을 거르는지 알 수 없으므로, 공식 기록에 자동 연주 점수가
+            // 남지 않도록 모드가 막는다(AllPerfect를 공식 곡에 켰을 때와 같은 취급).
+            if (autoPlayEnabled)
+            {
+                return SaveGuardDecision.BlockOfficialAutoPlay;
             }
 
             return SaveGuardDecision.Allow;

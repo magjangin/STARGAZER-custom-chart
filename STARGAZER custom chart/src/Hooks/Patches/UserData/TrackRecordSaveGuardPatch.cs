@@ -46,7 +46,8 @@ namespace STARGAZER_custom_chart
                         isCustomTrack: album is not null,
                         isCustomPlayActive: IsCustomChartPlayActive && CurrentPlayAlbum is not null,
                         allPerfectEnabled: CustomConfig.AllPerfect,
-                        allPerfectCustomOnly: CustomConfig.AllPerfectCustomOnly);
+                        allPerfectCustomOnly: CustomConfig.AllPerfectCustomOnly,
+                        autoPlayEnabled: CustomConfig.AutoPlay);
 
                     switch (decision)
                     {
@@ -68,6 +69,12 @@ namespace STARGAZER_custom_chart
                                 MelonLogger.Msg("[SaveGuard] AllPerfect가 공식 곡에도 활성화되어 있으므로 공식 기록 저장을 차단합니다 (이후 같은 로그는 생략).");
                             }
                             return false;
+                        case SaveGuardDecision.BlockOfficialAutoPlay:
+                            if (LogOnce("SaveGuard.OfficialAutoPlay"))
+                            {
+                                MelonLogger.Msg("[SaveGuard] autoplay=true라 공식 곡의 자동 연주 결과를 기록에 저장하지 않습니다 (이후 같은 로그는 생략).");
+                            }
+                            return false;
                         default:
                             return true;
                     }
@@ -77,6 +84,12 @@ namespace STARGAZER_custom_chart
                     if (IsCustomChartPlayActive && CurrentPlayAlbum is not null)
                     {
                         MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 중 예외가 발생했지만 커스텀 곡({CurrentPlayAlbum.Name}) 플레이 중이므로 기록 보호를 위해 방어적으로 저장을 차단합니다: {ex.GetType().Name}: {ex.Message}");
+                        return false;
+                    }
+
+                    if (CustomConfig.AutoPlay)
+                    {
+                        MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 중 예외가 발생했지만 autoplay=true라 자동 연주 결과 저장을 막습니다: {ex.GetType().Name}: {ex.Message}");
                         return false;
                     }
 

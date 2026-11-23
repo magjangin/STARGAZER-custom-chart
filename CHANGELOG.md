@@ -2,7 +2,25 @@
 
 > 릴리즈 버전 항목은 `## [x.y.z] - 날짜` 형식으로 쓴다. `tools/release.ps1`이 이 항목을 찾아 GitHub 릴리즈 노트 본문으로 쓴다(csproj `<Version>`·`AssemblyInfo.cs` MelonInfo와 버전이 같아야 함). 날짜 항목은 작업 기록이다.
 
-## [1.1.0] - 2026-11-23
+## [1.2.0] - 2026-11-23
+v1.0.0 이후 첫 공개 릴리즈입니다(v1.1.0은 릴리즈로 게시하지 않았고, 그 변경분도 모두 포함). 세부 내용은 CHANGELOG.md의 2026-11-23 날짜 항목들을 보세요.
+
+- **기록 보호 (신규)**: `autoplay=true`일 때 **공식 곡** 자동 연주 결과가 기록에 저장되던 경로를 막았다. 오토플레이는 곡 구분 없이 켜지는데 결과 데이터(`ITravelResultData`)에는 오토플레이 여부가 없어 게임이 스스로 거르는지 알 수 없었다. 결과·트랙 추출에 실패하거나 판정 중 예외가 나도 autoplay면 막는다.
+- **기록 보호 (v1.1.0분)**: 트래블 모드 재진입 때 커스텀 곡 복제본을 새로 만들지 않고 재사용해, 이전 복제본을 들고 있던 결과 데이터가 공식 Starting Point로 취급되던 경로와 정렬된 목록의 중복 삽입을 막았다.
+- **업데이트 내성**: 복제할 트랙/메타데이터 형식(`INNER_TrackData`/`INNER_TrackMetaData`)을 이름으로 못 찾으면 복제 원본 객체의 실제 형식(IL2CPP 구체 클래스일 때만)으로 대체하고 `[HookPatch][resolve]` 경고를 남긴다. Steam 업데이트 대기 판정 정밀화(`TargetBuildID=0` 거짓 경고 제거, `StateFlags` 확인), `artistInfos` 갱신 실패 경고.
+- **병목·로그**: 노트 연출 `Time.*`를 프레임당 1회 캐시, 캐시한 `RectTransform` 확인을 관리 비교로, BMS 주입 후보 캐시 키 1회 생성, 곡 선택 커서 이동 경로의 BGM/난이도 경고를 원인별 1회로.
+- **도구**: `tools/release.ps1`(릴리즈 — 노트 본문이 아래 날짜 작업 기록까지 섞이던 추출 범위 수정), `tools/bodycheck`(게임 DLL 없이 본체 net6 컴파일 검사, CI).
+- **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)와 노트 연출 프레임 캐시는 실기 미확인. 곡 중 BPM 변경·STOP, 표준 롱노트(`#LNOBJ`/`#LNTYPE`)는 미지원.
+
+## 2026-11-23 (4차: 전체 감사 · 오토플레이 기록 보호 · 복제 형식 폴백, v1.2.0)
+- `SaveGuardLogic`: `autoPlayEnabled` 인자와 `BlockOfficialAutoPlay` 판정 추가. 공식 곡 AllPerfect 차단 다음 순서이며, 결과 없음/트랙 추출 실패(커스텀 플레이 아님)에서도 autoplay면 차단. `TrackRecordSaveGuardPatch`는 1회 로그, 판정 예외 시에도 autoplay면 차단.
+- `TrackSelectorHookSupport`: `INNER_TrackData`/`INNER_TrackMetaData` 이름 해석 실패 시 복제 원본 객체 형식 폴백(`IsConcreteIl2CppClass`로 인터페이스·추상 래퍼 제외, `[HookPatch][resolve]` 1회 경고).
+- 테스트: `SaveGuardLogicTests`에 autoplay 케이스 추가(총 71건 통과). Release 빌드·bodycheck(인터롭 포함) 통과.
+- 실기: 게임 기동 `[Health]` 전 기능 정상(공용 훅 6/6·2/2, SaveGuard 1/1, FocusedTrackViewer 4/4, 올 퍼펙트 4/4, 전곡 해금 7/7, BGM 2/2, 자켓 1/1), `Steam BuildID 21205351 — 고정 빌드와 일치`, 모드 오류 0건. 새 폴백 경로는 정상 빌드에선 실행되지 않으며 이름을 일부러 틀린 빌드로는 확인하지 않았다(Dead End 16 — 다음 업데이트 대응 때 확인).
+- `tools/release.ps1`: CHANGELOG 버전 항목 본문을 다음 `## ` 제목에서 끊도록(예전엔 `## [`까지 읽어 날짜 작업 기록이 릴리즈 노트에 섞임).
+- 문서: `AGENTS.md` 기록 보호 판정 표·범위, `docs/GUIDE_CUSTOM_ALBUM.md`/`REFERENCE_CUSTOM_TRACK_PIPELINE.md`의 autoplay 설명, csproj·MelonInfo·release.ps1 버전 1.2.0.
+
+## [1.1.0] - 2026-11-23 (미게시 — 1.2.0에 포함)
 v1.0.0 이후 변경 모음입니다. 세부 내용은 아래 2026-11-23 항목들을 보세요.
 
 - **기록 보호 강화**: 트래블 모드를 나갔다 다시 들어와도 커스텀 곡 복제본을 새로 만들지 않고 재사용한다. 예전엔 재진입 때마다 복제본을 새로 만들어, 이전 복제본을 들고 있던 결과 데이터가 공식 Starting Point로 취급돼 기록이 섞일 수 있었다. 정렬된 목록에서 커스텀 곡이 중복으로 들어가던 경로도 막았다.

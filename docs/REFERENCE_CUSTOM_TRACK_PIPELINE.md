@@ -121,6 +121,7 @@ Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbu
 
 `PlayerBase.Play` Prefix에서 `IsAutoPlay`를 설정합니다.
 켜고 끄는 값은 `savecustomkey/config.txt`의 `autoplay`에서 읽습니다(게임 시작 시 1회).
+곡 구분 없이 켜지므로, `autoplay=true`면 기록 보호(`SaveGuardLogic` → `BlockOfficialAutoPlay`)가 공식 곡의 자동 연주 결과도 저장하지 않습니다(v1.2.0).
 
 ## 노트 연출 (흔들림 / 속도 카오스)
 
