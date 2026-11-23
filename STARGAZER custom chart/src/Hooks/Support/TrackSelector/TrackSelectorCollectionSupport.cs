@@ -9,16 +9,8 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class StargazerCustomChartMod
     {
-        // 복제 원본(공식 "Starting Point")을 찾는 용도로만 쓴다.
-        // 주의: 우리가 주입한 커스텀 트랙도 이 원본의 복제본이라 TrackID가 똑같으므로,
-        // 이 함수로는 커스텀 트랙과 공식 트랙을 구분할 수 없다 — 구분에는 IsCustomChartTrack을 써야 한다.
-        private static bool IsStartingPointTrack(object? track)
-        {
-            string? trackId = GetTrackIdText(track);
-            return trackId is not null && trackId.StartsWith(CloneSourceSelection.StartingPointId, StringComparison.OrdinalIgnoreCase);
-        }
-
-        // 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 trackid로 폴백한다.
+        // 복제 원본 선택(CloneSourceSelection.Pick)에만 쓴다. 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 trackid로 폴백한다.
+        // 주의: 커스텀 트랙도 공식 Starting Point의 복제본이라 TrackID가 똑같다 — 커스텀 식별에는 IsCustomChartTrack(포인터)만 쓴다.
         private static string? GetTrackIdText(object? track)
         {
             if (track is null)
@@ -56,23 +48,40 @@ namespace STARGAZER_custom_chart
             return pointer is IntPtr ptr ? ptr : IntPtr.Zero;
         }
 
-        // 새로 주입할 때마다 이전 목록을 버린다. 오래된 포인터를 남겨두면 해제된 주소가 재사용될 때
-        // 엉뚱한 트랙을 커스텀으로 오인할 수 있다.
-        private static void ResetInjectedCustomTracks()
-        {
-            InjectedCustomTrackAlbums.Clear();
-        }
+        // 앨범 -> 그 앨범의 복제본(포인터, 관리 래퍼). 앨범마다 복제는 한 번만 하고 이후 Set에서는 재사용한다
+        // (CustomTrackInjectionLogic 주석 참고). 예전처럼 Set마다 등록표를 비우고 새로 복제하면, 이전 복제본을
+        // 붙잡고 있던 화면/결과 데이터가 그 트랙을 공식 Starting Point로 보게 돼 기록 보호가 빗나갈 수 있었다.
+        // 관리 래퍼(Il2CppObjectBase)를 계속 보관하므로 네이티브 객체가 GC로 해제되지 않아 주소 재사용 걱정도 없다.
+        // CustomAlbum은 CustomAlbumRegistry가 1회 스캔해 캐시한 인스턴스라 참조 동일성으로 키를 삼는다.
+        private static readonly Dictionary<CustomAlbum, (IntPtr Ptr, object TrackRef)> InjectedCloneByAlbum =
+            new Dictionary<CustomAlbum, (IntPtr, object)>(ReferenceEqualityComparer.Instance);
 
-        private static void RegisterInjectedCustomTrack(object track, CustomAlbum album)
+        private static bool RegisterInjectedCustomTrack(object track, CustomAlbum album)
         {
             IntPtr ptr = TryGetIl2CppPointer(track);
             if (ptr == IntPtr.Zero)
             {
                 MelonLogger.Warning($"[TrackSelector.Set] 커스텀 트랙 포인터를 얻지 못해 식별 등록에 실패했습니다: {album.Name}");
-                return;
+                return false;
             }
 
             InjectedCustomTrackAlbums[ptr] = (album, track);
+            InjectedCloneByAlbum[album] = (ptr, track);
+            return true;
+        }
+
+        private static bool TryGetInjectedClone(CustomAlbum album, out IntPtr ptr, out object? track)
+        {
+            if (InjectedCloneByAlbum.TryGetValue(album, out var entry))
+            {
+                ptr = entry.Ptr;
+                track = entry.TrackRef;
+                return true;
+            }
+
+            ptr = IntPtr.Zero;
+            track = null;
+            return false;
         }
 
         private static bool IsCustomChartTrack(object? track) => TryGetAlbumForTrack(track) is not null;

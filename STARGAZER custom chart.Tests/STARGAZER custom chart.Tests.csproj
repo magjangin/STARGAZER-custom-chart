@@ -24,5 +24,6 @@
     <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\Common\PatchResolutionLogic.cs" Link="Source\PatchResolutionLogic.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\Common\SafeTextReader.cs" Link="Source\SafeTextReader.cs" />
     <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\TrackSelector\CloneSourceSelection.cs" Link="Source\CloneSourceSelection.cs" />
+    <Compile Include="..\STARGAZER custom chart\src\Hooks\Support\TrackSelector\CustomTrackInjectionLogic.cs" Link="Source\CustomTrackInjectionLogic.cs" />
   </ItemGroup>
 </Project>

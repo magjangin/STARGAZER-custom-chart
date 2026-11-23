@@ -140,6 +140,26 @@ namespace STARGAZER_custom_chart
                 : SteamBuildState.Different;
         }
 
+        // Steam StateFlags 비트 2(UpdateRequired): 업데이트가 내려와 적용을 기다리는 상태(4 = 설치 완료, 6 = 설치 완료 + 업데이트 필요).
+        private const int SteamStateFlagUpdateRequired = 2;
+
+        // Steam이 업데이트를 대기 중인지(다음 실행 전에 고정 빌드가 깨질 수 있는지) 판정한다.
+        //  - TargetBuildID가 비었거나 "0"이면 "대기 없음"이다. Steam은 대기 중인 업데이트가 없을 때 0을 쓰기도 해서,
+        //    예전처럼 buildid와 다르기만 하면 경고하면 "BuildID 0 으로 업데이트 대기 중"이라는 거짓 경고가 뜰 수 있었다.
+        //  - StateFlags에 UpdateRequired 비트가 있으면 TargetBuildID와 무관하게 대기 중이다.
+        internal static bool IsUpdatePending(string? buildId, string? targetBuildId, string? stateFlags)
+        {
+            string? target = targetBuildId?.Trim();
+            bool targetPending = !string.IsNullOrEmpty(target)
+                && !string.Equals(target, "0", StringComparison.Ordinal)
+                && !string.Equals(target, buildId?.Trim(), StringComparison.Ordinal);
+
+            bool flagPending = int.TryParse(stateFlags?.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int flags)
+                && (flags & SteamStateFlagUpdateRequired) != 0;
+
+            return targetPending || flagPending;
+        }
+
         // Steam AutoUpdateBehavior: 0 = 항상 최신 유지, 1 = 실행할 때만 업데이트, 2 = 높은 우선순위.
         // 고정 빌드를 지키려면 "1"이거나 ACF가 읽기 전용이어야 한다(AGENTS.md §1).
         internal static bool IsAutoUpdateGuarded(string? autoUpdateBehavior, bool acfReadOnly)

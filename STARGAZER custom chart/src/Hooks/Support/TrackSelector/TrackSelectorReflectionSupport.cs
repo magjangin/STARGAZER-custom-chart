@@ -17,6 +17,9 @@ namespace STARGAZER_custom_chart
         private static Type? FindType(string typeName) => ResolveGameType(typeName);
 
         private static readonly string[] ArtistLangCodes = { "KR", "EN", "JP", "CN", "TW" };
+        private static readonly string[] DisplayNameCandidates = { "displayname" };
+        private static readonly string[] DisplayNameEnCandidates = { "displaynameen" };
+        private static readonly string[] ComposerCandidates = { "composer" };
 
         private static readonly ConcurrentDictionary<Type, ConstructorInfo?> IntPtrWrapperCtorCache =
             new ConcurrentDictionary<Type, ConstructorInfo?>();
@@ -72,9 +75,9 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                bool displayNameChanged = TrySetValueByNameCandidates(metaObj, new[] { "displayname" }, displayName);
-                bool displayNameEnChanged = TrySetValueByNameCandidates(metaObj, new[] { "displaynameen" }, displayName);
-                bool composerChanged = TrySetValueByNameCandidates(metaObj, new[] { "composer" }, composer);
+                bool displayNameChanged = TrySetValueByNameCandidates(metaObj, DisplayNameCandidates, displayName);
+                bool displayNameEnChanged = TrySetValueByNameCandidates(metaObj, DisplayNameEnCandidates, displayName);
+                bool composerChanged = TrySetValueByNameCandidates(metaObj, ComposerCandidates, composer);
                 TrySetArtistInfos(metaObj, composer);
                 string actualDisplayName = TryGetMemberValue(metaObj, metaObj.GetType(), "displayName")?.ToString()
                                            ?? TryGetMemberValue(metaObj, metaObj.GetType(), "DisplayName")?.ToString()

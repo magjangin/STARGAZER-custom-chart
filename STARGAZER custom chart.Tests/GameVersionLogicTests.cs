@@ -74,6 +74,25 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal("1:2", GameVersionLogic.TryGetPart(fingerprint, "ga"));
         }
 
+        [Theory]
+        // 실측 ACF(2026-11-23): buildid == TargetBuildID, StateFlags 4 → 대기 없음.
+        [InlineData("21205351", "21205351", "4", false)]
+        // Steam 은 대기 중인 업데이트가 없을 때 TargetBuildID 를 0 으로 쓰기도 한다 → 거짓 경고 금지.
+        [InlineData("21205351", "0", "4", false)]
+        [InlineData("21205351", "", "4", false)]
+        [InlineData("21205351", null, null, false)]
+        // 다른 빌드를 목표로 대기 중.
+        [InlineData("21205351", "22000000", "4", true)]
+        // StateFlags 의 UpdateRequired(2) 비트만으로도 대기 중으로 본다(4|2 = 6).
+        [InlineData("21205351", "0", "6", true)]
+        [InlineData("21205351", "21205351", " 6 ", true)]
+        // 숫자가 아니면 플래그는 무시한다.
+        [InlineData("21205351", "21205351", "abc", false)]
+        public void IsUpdatePending_IgnoresZeroTargetAndReadsStateFlags(string? buildId, string? target, string? flags, bool expected)
+        {
+            Assert.Equal(expected, GameVersionLogic.IsUpdatePending(buildId, target, flags));
+        }
+
         [Fact]
         public void Compare_MissingMetadataOnEitherSide_IsNotTreatedAsUpdate()
         {

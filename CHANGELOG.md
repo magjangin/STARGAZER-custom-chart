@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-23 (복제본 재사용으로 기록 보호 강화 · Steam 업데이트 대기 감지 정밀화 · 전체 감사)
+- **버그 가능성 제거 (기록 보호)**:
+  - `TrackSelector.Set`이 트래블 모드 재진입마다 새 목록으로 불릴 때 등록표를 비우고 재복제하던 동작을 없앴다. 앨범마다 복제본을 1회만 만들어 `InjectedCloneByAlbum`으로 재사용하고, 목록에 이미 든 복제본(정렬된 목록 중간 포함)은 다시 넣지 않는다(`CustomTrackInjectionLogic`, 신규 순수 로직). 이전 복제본이 식별을 잃어 결과 저장 시 공식 Starting Point로 판정될 수 있던 경로와 중복 삽입 경로를 막는다.
+  - 복제 원본 후보에서 이미 주입한 복제본(같은 TrackID)을 제외, 포인터 등록에 실패한 복제본은 목록에 넣지 않음.
+- **업데이트 내성**:
+  - `GameVersionLogic.IsUpdatePending`(신규): `TargetBuildID`가 `0`/빈 값이면 "대기 없음"으로 보고(거짓 경고 방지), ACF `StateFlags`의 UpdateRequired(2) 비트도 대기로 감지. `HookHealth.CheckSteamBuild`가 사용.
+- **병목·로그**:
+  - `TrySetValueByNameCandidates`: 후보가 여럿일 때 호출마다 만들던 `string.Join` 캐시 키를 `ConditionalWeakTable`로 목록 인스턴스당 1회로(BMS 주입 노트 루프의 NoteProperty 폴백 경로 등).
+  - 트랙 메타데이터 덮어쓰기 후보 배열 정적화.
+  - 난이도 표시 세터 실패 경고(곡 선택 커서 이동마다 호출)를 타입별 1회로 억제.
+- **정리**: 미사용 `IsStartingPointTrack` 제거(TrackID 읽기는 `GetTrackIdText`만 유지), 관련 주석 갱신.
+- **테스트**: `CustomTrackInjectionLogicTests` 4건, `IsUpdatePending` 8케이스 추가(총 70건 통과).
+- **실기 검증**: Release 빌드(경고 0, 오류 0) → 게임 기동 `[Health]` 전 기능 정상(공용 훅 6/6·2/2, SaveGuard 1/1, FocusedTrackViewer 4/4, 올 퍼펙트 4/4, 전곡 해금 7/7, BGM 2/2, 자켓 1/1), 업데이트 대기 거짓 경고 없음. **곡 선택 화면 진입 처음 실측**: 첫 진입 `[TrackSelector.Set] … 적용=3/3 (재사용 0) 현재 트랙 수: 90`(복제 원본 정확 일치 — 접두 폴백 경고 없음), 모드 선택으로 나갔다 재진입 시 `적용=3/3 (재사용 3) 현재 트랙 수: 90`(중복 없음), 재사용 복제본에 커스텀 자켓 서빙(`[CustomJacket] Serving …`). 모드 경고/오류 0건. **커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)는 이번에도 미확인**.
+- **문서**: `AGENTS.md`에 복제본 재사용 Rationale, Dead End 18, 람다 해석의 다른 소유 폴백(`anyOwner`) 실제 동작, BGM 첫 로드 실패 한계, Steam 대기 판정 갱신. `docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md` 동기화.
+
 ## 2026-11-22 (복제 원본 선택 정확화 · BMS 헤더 메타데이터 폴백 · 텍스트 파일 상한 · 주입 시간 측정)
 - **버그 가능성 제거**:
   - `CloneSourceSelection`(신규, 순수 로직): 복제 원본 선택 시 ID 정확 일치(`startingpoint`)를 우선하고 접두 일치는 폴백으로만 쓴다. "Starting Point (yomoha Jazz Arrange)"가 목록에서 원곡보다 앞에 와도 원곡이 복제된다. 정확 일치가 없어 폴백하면 `[TrackSelector.Set]` 경고를 1회 남긴다.
