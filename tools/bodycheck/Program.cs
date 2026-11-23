@@ -45,6 +45,9 @@ internal static class Program
         "CS0616", // 특성 클래스가 아님 — 못 찾은 특성 형식에서 연쇄
     };
 
+    // 형식 변환 오류. 원본 형식이 못 찾은 게임 형식이면 연쇄 오류로 본다(IsTaintedByMissingSymbol).
+    private static readonly HashSet<string> ConversionErrorIds = new() { "CS1503", "CS0029", "CS0266", "CS1662" };
+
     // 모드 csproj가 ImplicitUsings=disable 이라 암시적 using 은 넣지 않는다(넣으면 본체 빌드에서만 나는 using 누락을 놓친다).
     private const string ModFolder = "STARGAZER custom chart";
 
@@ -201,6 +204,14 @@ internal static class Program
 
         IEnumerable<SyntaxNode> scope = anchor.DescendantNodesAndSelf(n => n == anchor
             || !(n is StatementSyntax || n is BlockSyntax || n is ArrowExpressionClauseSyntax || n is MemberDeclarationSyntax || n is AccessorListSyntax));
+
+        // 변환 오류(인자/대입)는 오류 위치의 식 자신이 못 찾은 형식이면 연쇄 오류다.
+        // 예: AudioClip(게임 인터롭)이 없으면 'AudioClip?' 지역 변수를 object? 인자로 넘기는 곳이 CS1503으로 나온다.
+        if (ConversionErrorIds.Contains(d.Id) && node is ExpressionSyntax self)
+        {
+            var ti = model.GetTypeInfo(self);
+            if (ContainsError(ti.Type)) return true;
+        }
 
         // 오류가 난 식 자신과 그 바깥 식은 당연히 오류 형식이므로 제외하고, 나머지(수신 식·인자·선언 형식 등)만 본다.
         var own = new HashSet<SyntaxNode>(node.AncestorsAndSelf().TakeWhile(n => n != anchor));
