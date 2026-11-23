@@ -31,8 +31,11 @@ namespace STARGAZER_custom_chart
         private static readonly List<IntPtr> StaleNoteMotionKeys = new List<IntPtr>();
 
         private static int NoteMotionLastPruneFrame;
-        private static int NoteMotionCachedFrame = -1;
-        private static float NoteMotionCachedTime;
+        // 매 프레임 OnUpdate에서 한 번만 읽어 둔 Time.frameCount / Time.time.
+        // 인터롭의 Time.* 게터는 호출마다 IL2CPP 호출이라, 노트마다(Prefix+Postfix) 읽으면 프레임당 노트 수 × 2번이 된다.
+        // OnUpdate가 아직 한 번도 안 돌았으면(-1) 노트 경로가 직접 읽는다.
+        private static int NoteMotionFrame = -1;
+        private static float NoteMotionFrameTime;
         private static bool NoteMotionVelocityLogged;
 
         private static bool NoteMotionEnabled => CustomConfig.NoteSway || CustomConfig.NoteSpeedChaos;
@@ -44,7 +47,6 @@ namespace STARGAZER_custom_chart
             NoteMotionStates.Clear();
             NoteMotionLanes.Clear();
             StaleNoteMotionKeys.Clear();
-            NoteMotionCachedFrame = -1;
             NoteMotionVelocityLogged = false;
         }
 
@@ -64,7 +66,7 @@ namespace STARGAZER_custom_chart
 
                 if (!NoteMotionStates.TryGetValue(note.Pointer, out NoteMotionState? state)
                     || !state.HasBase
-                    || state.LastFrame == Time.frameCount)
+                    || state.LastFrame == CurrentNoteMotionFrame())
                 {
                     return;
                 }
@@ -104,7 +106,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                int frame = Time.frameCount;
+                int frame = CurrentNoteMotionFrame();
                 IntPtr pointer = note.Pointer;
 
                 // 한동안 갱신되지 않았던 항목은 해제된 주소를 재사용한 새 노트일 수 있어 새로 만든다.
@@ -162,7 +164,7 @@ namespace STARGAZER_custom_chart
 
                 if (CustomConfig.NoteSway)
                 {
-                    float sway = ComputeNoteSwayOffset(state.SwayPhase, deltatime, frame);
+                    float sway = ComputeNoteSwayOffset(state.SwayPhase, deltatime);
                     if (state.SwayOnX)
                     {
                         offsetX += sway;
@@ -317,7 +319,7 @@ namespace STARGAZER_custom_chart
             return min + ((float)NoteMotionRandom.NextDouble() * (max - min));
         }
 
-        private static float ComputeNoteSwayOffset(float phase, float deltatime, int frame)
+        private static float ComputeNoteSwayOffset(float phase, float deltatime)
         {
             float amplitude = CustomConfig.NoteSwayAmplitude;
             if (amplitude <= 0f)
@@ -325,7 +327,7 @@ namespace STARGAZER_custom_chart
                 return 0f;
             }
 
-            float wave = MathF.Sin((NoteMotionTime(frame) * CustomConfig.NoteSwaySpeed * 2f * MathF.PI) + phase);
+            float wave = MathF.Sin((NoteMotionTime() * CustomConfig.NoteSwaySpeed * 2f * MathF.PI) + phase);
             if (!CustomConfig.NoteSwayDamping)
             {
                 return amplitude * wave;
@@ -343,15 +345,33 @@ namespace STARGAZER_custom_chart
             return amplitude * wave * damping;
         }
 
-        private static float NoteMotionTime(int frame)
+        // OnUpdate(프레임당 1회)에서 부른다. 노트 연출이 꺼져 있으면 IL2CPP 호출 없이 바로 돌아간다.
+        private static void CacheNoteMotionFrame()
         {
-            if (NoteMotionCachedFrame != frame)
+            if (!NoteMotionEnabled)
             {
-                NoteMotionCachedFrame = frame;
-                NoteMotionCachedTime = Time.time;
+                return;
             }
 
-            return NoteMotionCachedTime;
+            NoteMotionFrame = Time.frameCount;
+            NoteMotionFrameTime = Time.time;
+        }
+
+        private static int CurrentNoteMotionFrame()
+        {
+            if (NoteMotionFrame < 0)
+            {
+                NoteMotionFrame = Time.frameCount;
+                NoteMotionFrameTime = Time.time;
+            }
+
+            return NoteMotionFrame;
+        }
+
+        private static float NoteMotionTime()
+        {
+            CurrentNoteMotionFrame();
+            return NoteMotionFrameTime;
         }
 
         private static RectTransform? TryGetNoteRectTransform(Il2CppObjectBase note)

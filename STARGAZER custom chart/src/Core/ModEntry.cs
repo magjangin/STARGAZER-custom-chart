@@ -51,6 +51,13 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        // 프레임당 1회. 노트 연출 훅이 노트마다 Time.*(IL2CPP 호출)를 읽지 않도록 값을 미리 받아 둔다.
+        // 연출이 꺼져 있으면 아무것도 하지 않는다.
+        public override void OnUpdate()
+        {
+            CacheNoteMotionFrame();
+        }
+
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
             try

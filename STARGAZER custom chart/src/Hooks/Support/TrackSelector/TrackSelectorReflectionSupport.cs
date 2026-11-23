@@ -94,25 +94,46 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        // 영문/중문 클라이언트의 작곡가 표시(artistInfos 사전)를 맞춘다. 실패해도 곡 주입은 계속되지만,
+        // 업데이트로 이름이 바뀌면 다른 언어 화면에서만 원곡 작곡가가 보이는 조용한 고장이 되므로 원인을 1회 남긴다.
         private static void TrySetArtistInfos(object metaObj, string artist)
         {
             try
             {
                 object? dict = TryGetMemberValue(metaObj, "artistInfos", "ArtistInfos");
-                if (dict is null) return;
+                if (dict is null)
+                {
+                    if (LogOnce("TrackSelector.artistInfos.missing"))
+                    {
+                        MelonLogger.Warning($"[TrackSelector.Set] {metaObj.GetType().Name}에서 artistInfos를 찾지 못해 다국어 작곡가 표시를 건너뜁니다(이후 생략).");
+                    }
+                    return;
+                }
 
                 MethodInfo? setItem = ArtistDictSetItemCache.GetOrAdd(
                     dict.GetType(),
                     t => t.GetMethod("set_Item", InstanceMemberFlags));
-                if (setItem is not null)
+                if (setItem is null)
                 {
-                    foreach (string lang in ArtistLangCodes)
+                    if (LogOnce("TrackSelector.artistInfos.setItem"))
                     {
-                        setItem.Invoke(dict, new object[] { lang, artist });
+                        MelonLogger.Warning($"[TrackSelector.Set] artistInfos({dict.GetType().Name})에 set_Item이 없어 다국어 작곡가 표시를 건너뜁니다(이후 생략).");
                     }
+                    return;
+                }
+
+                foreach (string lang in ArtistLangCodes)
+                {
+                    setItem.Invoke(dict, new object[] { lang, artist });
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                if (LogOnce($"TrackSelector.artistInfos.{ex.GetType().Name}"))
+                {
+                    MelonLogger.Warning($"[TrackSelector.Set] 다국어 작곡가 표시(artistInfos) 갱신 실패(이후 생략): {ex.GetType().Name}: {ex.Message}");
+                }
+            }
         }
 
         private static object? GetTrackMetaDataObject(object concreteTrack)
