@@ -38,7 +38,13 @@ Set-Location $root
 function Step($msg) { Write-Host "`n== $msg" -ForegroundColor Cyan }
 function Invoke-Native {
     param([string]$What, [string]$Exe, [string[]]$Arguments)
-    & $Exe @Arguments
+    # Windows PowerShell 5.1 은 $ErrorActionPreference='Stop' 일 때 네이티브 명령의 stderr 한 줄도 오류로 던진다.
+    # git push 는 성공해도 "To https://..." 진행 출력을 stderr 로 내서, 태그 푸시가 성공했는데 실패로 보고되고
+    # 로컬 태그까지 지워졌다(v1.2.0 릴리즈 때 실측). 성공 여부는 종료 코드로만 판단한다.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $Exe @Arguments 2>&1 | ForEach-Object { Write-Host $_ } }
+    finally { $ErrorActionPreference = $prev }
     if ($LASTEXITCODE -ne 0) { throw "$What 실패 (종료 코드 $LASTEXITCODE)" }
 }
 function Write-Utf8NoBom($path, $text) {

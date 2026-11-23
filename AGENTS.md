@@ -229,7 +229,7 @@
   .\tools\release.ps1            # 버전 일치 확인 + Release 빌드(SkipDeploy) + 단위 테스트 + bodycheck(인터롭 포함) → dist\STARGAZER-custom-chart-v<버전>.zip, 노트 초안
   .\tools\release.ps1 -Publish   # 위 + main=origin/main·깨끗한 트리 확인 → 태그 v<버전> 푸시 → gh release create
   ```
-  버전 기준은 csproj `<Version>`이며 `Properties/AssemblyInfo.cs` `MelonInfo`·`CHANGELOG.md` `## [<버전>]`이 다르면 중단한다. 이미 있는 태그면 중단하므로 먼저 세 곳의 버전을 올릴 것. zip에는 DLL 하나만 넣는다. 배포 복사를 건너뛰려면 `-p:SkipDeploy=true`.
+  네이티브 명령 성공 여부는 종료 코드로만 본다(PS 5.1은 `Stop`일 때 git의 stderr 진행 출력도 예외로 던짐 — v1.2.0 때 태그는 푸시됐는데 실패로 보고된 원인). 태그 푸시 후 릴리즈 생성만 실패하면 스크립트가 출력하는 `gh release create …` 명령으로 마무리. 버전 기준은 csproj `<Version>`이며 `Properties/AssemblyInfo.cs` `MelonInfo`·`CHANGELOG.md` `## [<버전>]`이 다르면 중단한다. 이미 있는 태그면 중단하므로 먼저 세 곳의 버전을 올릴 것. zip에는 DLL 하나만 넣는다. 배포 복사를 건너뛰려면 `-p:SkipDeploy=true`.
 - **배포 산출물 위치**:
   - `STARGAZER custom chart\bin\Release\net6.0\STARGAZER custom chart.dll`
   - 배포 경로: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\Mods\STARGAZER custom chart.dll`

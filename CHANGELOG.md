@@ -12,6 +12,9 @@ v1.0.0 이후 첫 공개 릴리즈입니다(v1.1.0은 릴리즈로 게시하지 
 - **도구**: `tools/release.ps1`(릴리즈 — 노트 본문이 아래 날짜 작업 기록까지 섞이던 추출 범위 수정), `tools/bodycheck`(게임 DLL 없이 본체 net6 컴파일 검사, CI).
 - **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)와 노트 연출 프레임 캐시는 실기 미확인. 곡 중 BPM 변경·STOP, 표준 롱노트(`#LNOBJ`/`#LNTYPE`)는 미지원.
 
+## 2026-11-23 (5차: release.ps1 네이티브 stderr 오판 수정)
+- `tools/release.ps1` `Invoke-Native`: Windows PowerShell 5.1에서 `$ErrorActionPreference='Stop'`이면 `git push`의 정상 진행 출력(stderr "To https://…")이 예외로 던져져, v1.2.0 태그 푸시가 실제로는 성공했는데 실패로 보고되고 로컬 태그가 지워졌다(릴리즈는 수동 `gh release create`로 마무리). 호출 동안 `Continue`로 두고 성공 여부는 종료 코드로만 판단.
+
 ## 2026-11-23 (4차: 전체 감사 · 오토플레이 기록 보호 · 복제 형식 폴백, v1.2.0)
 - `SaveGuardLogic`: `autoPlayEnabled` 인자와 `BlockOfficialAutoPlay` 판정 추가. 공식 곡 AllPerfect 차단 다음 순서이며, 결과 없음/트랙 추출 실패(커스텀 플레이 아님)에서도 autoplay면 차단. `TrackRecordSaveGuardPatch`는 1회 로그, 판정 예외 시에도 autoplay면 차단.
 - `TrackSelectorHookSupport`: `INNER_TrackData`/`INNER_TrackMetaData` 이름 해석 실패 시 복제 원본 객체 형식 폴백(`IsConcreteIl2CppClass`로 인터페이스·추상 래퍼 제외, `[HookPatch][resolve]` 1회 경고).
