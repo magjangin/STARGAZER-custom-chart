@@ -16,7 +16,7 @@
 - **Steam ACF 설정**: `H:\steam\steamapps\appmanifest_3446490.acf`
   - 자동 업데이트 방지를 위해 `AutoUpdateBehavior`를 `1`로 고정하거나 읽기 전용 속성 유지.
   - ⚠️ **2026-11-19·11-20 실측: 실제 파일은 `AutoUpdateBehavior=0`(항상 최신 유지), 읽기 전용 아님** — 위 고정이 적용돼 있지 않다. 모드가 기동 시 `[Health] Steam 자동 업데이트가 막혀 있지 않습니다` 경고로 알린다. 사용자가 직접 `1` + 읽기 전용으로 바꿀 것(에이전트는 Steam 파일을 임의로 고치지 않는다).
-  - 런타임 확인: `HookHealth.CheckSteamBuild`가 `buildid`를 `GameVersionLogic.PinnedSteamBuildId`(`21205351`)와 비교하고 `TargetBuildID` 대기 여부도 경고한다. **고정 빌드를 바꾸면 이 상수와 본 문서를 함께 갱신할 것.**
+  - 런타임 확인: `HookHealth.CheckSteamBuild`가 `buildid`를 `GameVersionLogic.PinnedSteamBuildId`(`21205351`)와 비교하고 업데이트 대기 여부(`GameVersionLogic.IsUpdatePending`: `TargetBuildID`가 `0`/빈 값이 아니면서 다르거나 `StateFlags`&2)도 경고한다. 2026-11-23 실측 ACF: `StateFlags=4`, `buildid=TargetBuildID=21205351`. **고정 빌드를 바꾸면 이 상수와 본 문서를 함께 갱신할 것.**
 - **MelonLoader 버전 (2026-11-19 실측)**: `v0.7.3 Open-Beta`, Runtime `net6`, 게임 버전 문자열 `1.0.7.001`.
 - **오프라인 영구 보존 (Goldberg Emulator)**:
   - 플러그인 위치: `Sixtar Gate STARGAZER_Data\Plugins\x86_64\` 및 게임 루트 디렉터리
@@ -58,8 +58,9 @@
 ### IntPtr 기반 객체 동일성 판정 (포인터 1:1 매핑)
 - **표시명 기반 식별 불가**: 사용자가 `info.txt`에서 곡명을 임의로 지정하므로 고정 식별자로 사용 불가.
 - **TrackID 기반 식별 불가**: 복제 원본의 ID인 `startingpoint`를 그대로 유지함. 만약 `StartsWith` 등으로 문자열 비교를 수행할 경우, 공식 수록곡인 `"Starting Point"` 및 `"Starting Point (yomoha Jazz Arrange)"`까지 커스텀으로 오인되어 공식 곡 플레이 시 커스텀 차트와 자켓이 주입되는 버그 발생.
-- **복제 원본 선택은 별개 문제 (2026-11-22)**: `TrackSelector.Set`에서 복제할 공식 트랙은 `CloneSourceSelection.Pick`(순수 로직, xUnit 대상)이 ID **정확 일치 `startingpoint`를 우선**하고 없을 때만 접두 일치로 폴백한다(`IsStartingPointTrack`의 `StartsWith`만 쓰면 목록 순서에 따라 Jazz Arrange가 원본이 될 수 있었음). 커스텀 곡 *식별*에는 여전히 쓰지 않는다.
+- **복제 원본 선택은 별개 문제 (2026-11-22)**: `TrackSelector.Set`에서 복제할 공식 트랙은 `CloneSourceSelection.Pick`(순수 로직, xUnit 대상)이 ID **정확 일치 `startingpoint`를 우선**하고 없을 때만 접두 일치로 폴백한다(`StartsWith`만 쓰면 목록 순서에 따라 Jazz Arrange가 원본이 될 수 있었음). 커스텀 곡 *식별*에는 여전히 쓰지 않는다. 옛 `IsStartingPointTrack`은 2026-11-23 미사용으로 제거했고, TrackID 읽기는 `GetTrackIdText`만 남았다.
 - **해결책**: 주입 시점에 생성된 IL2CPP C++ 인스턴스의 네이티브 포인터(`IntPtr`)와 관리 래퍼 참조(`TrackRef`, GC 수거 및 주소 재사용 방지)를 `Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbums`에 보관하고, 포인터 일치 여부로만 커스텀 곡을 식별함.
+- **복제본 재사용 (2026-11-23)**: 앨범마다 복제는 **한 번만** 하고 `InjectedCloneByAlbum`(앨범 → (포인터, 래퍼))으로 계속 재사용한다. `TrackSelector.Set`은 트래블 모드에 들어올 때마다 **새 목록**으로 불리는데(실측: 재진입마다 호출), 예전엔 그때마다 등록표를 비우고 새로 복제해서 이전 복제본이 식별을 잃었다 — 그 객체를 붙잡은 결과 데이터가 `SaveTrackRecord`에 오면 공식 Starting Point로 판정돼 기록이 오염될 수 있었다. 지금은 목록에 이미 든 복제본(정렬된 목록 중간 포함)은 건너뛰고 빠진 것만 다시 넣는다(`CustomTrackInjectionLogic.FindAlbumsMissingFromList`, xUnit). 복제 원본 후보에서는 이미 주입한 복제본을 뺀다(같은 TrackID). 포인터를 못 얻어 등록에 실패한 복제본은 공식 곡으로 오인되므로 목록에 넣지 않는다. 실기: 첫 진입 `적용=3/3 (재사용 0)`, 재진입 `적용=3/3 (재사용 3) 현재 트랙 수: 90`(중복 없음), 재사용 복제본에 커스텀 자켓 서빙 확인.
 
 ### 기록 보호 (Save Guard)
 - 커스텀 곡의 내부 `TrackID`가 공식 Starting Point와 같으므로, 결과 점수가 그대로 세이브 파일에 기록되면 공식 랭킹 및 로컬 기록이 오염됨.
@@ -72,7 +73,7 @@
 ### 람다 후킹 이중래퍼 & 업데이트 내성 아키텍처
 - **1차 계층 (`PatchTargetSupport.ResolveTargetMethod`, 3단계 해석)**:
   1. 정확 이름(또는 `PatchSpec.AlternateMethodNames`, 예: `LevelSelector.FetchJacektImage` → `"FetchJacketImage"`) + 파라미터 타입명 점수(정확 일치 2점 / 포함 1점) 최고 후보.
-  2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음).
+  2. 람다 이름(`_Owner_b__N_M` / `<Owner>b__N_M`, 정규식 `LambdaNamePattern`)이면 `ResolveLambdaMethod`: 바깥 타입 + 컴파일러 생성 중첩 타입(`__c`, `__c__DisplayClassN_M`)만 탐색, **같은 소유 메서드(Load) + 파라미터 타입명 정확 일치(`Pattern`)** 후보가 유일할 때만 채택. 후보가 여럿이면 바깥 타입 직접 선언분이 유일할 때만 채택하고, 그래도 모호하면 걸지 않음(2차 계층이 받음). 같은 소유 후보가 **하나도 없을 때만**(소유 메서드 개명 의심) 다른 소유 람다 중 시그니처 정확 일치 유일 후보로 폴백한다(`PatchResolutionLogic.ResolveLambdaMethod`의 `anyOwner`) — 잘못 걸려도 BMS 주입은 패턴 포인터 중복 가드·커스텀 플레이 가드를 거치므로 공식 곡엔 영향이 없다.
   3. 이름은 같고 파라미터 개수만 맞는 후보가 **유일**할 때만 경고와 함께 채택.
   4. **(옵트인, 2026-11-20) 타입 개명 폴백 `PatchSpec.WithTypeScanFallback()`**: 위 단계가 모두 실패하면(대상 타입 이름이 통째로 바뀜) 게임 어셈블리 전체(`GetGameTypeIndex`)에서 이름(대체 이름 포함) + 파라미터 타입명 **정확** 일치 + IL2CPP 구체 클래스(`IsConcreteIl2CppClass`)인 메서드가 **유일**할 때만 채택(`PatchResolutionLogic.FindUniqueMethodAcrossTypes`). 현재 기록 보호(`SaveTrackRecord(ITravelResultData)`)에만 켬 — 흔한 시그니처에 켜면 엉뚱한 메서드에 걸릴 수 있으니 파라미터 타입이 고유한 핵심 기능에만 쓸 것.
      - Il2CppInterop은 IL2CPP **인터페이스를 일반 클래스로 생성**한다(`Type.IsInterface == false`). 그래서 `ITrackRecordModule.SaveTrackRecord`도 후보로 보이는데, `Il2CppClassPointerStore<T>.NativeClassPtr` → `IL2CPP.il2cpp_class_is_interface/_is_abstract`로 거른다(Dead End 15).
@@ -90,7 +91,7 @@
   - `CustomBgmSupport.UpdateCustomChartPlayState`(`PlayerBase.Play` 진입부)가 `TravelArgs`에서 `PlayLevel`/`PlayTrack`을 추출할 때 `TryGetMemberByType`(`ELevels`/`ITrackData`)을 사용하여 프로퍼티 이름 변경 시에도 커스텀 곡 판정(`IsCustomChartPlayActive`)이 끊기지 않도록 통일.
   - `CustomBgmLoaderPatch.Prefix`가 런타임 메서드명 대신 `TryGetResolvedTargetLogicalName(__originalMethod)`를 우선 참조하여 `LoadPreviewClip`이 대체 이름(예: `LoadPreviewBGM`)으로 연결돼도 프리뷰 음원을 정확히 서빙.
   - `LevelSelectorDisplaySupport`의 `levels`/`item`/`levelItems`/`targetLevel` 조회를 모두 `TryGetMemberByType`으로 전환하고, `LevelUnit.Set`·`LevelItem.FetchLevelText`·`TextProvider.DoTextSetter`에 대체 세터 이름(`SetLevel`, `SetLevelText`, `SetText` 등) 해석을 추가.
-  - `TrackSelectorCloningSupport.CloneTrackData`가 수동 4개 이름 조회 대신 `GetTrackMetaDataObject`(`INNER_TrackMetaData` 타입 폴백 포함)를 공유하고, `IsStartingPointTrack`도 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 `trackid`로 폴백.
+  - `TrackSelectorCloningSupport.CloneTrackData`가 수동 4개 이름 조회 대신 `GetTrackMetaDataObject`(`INNER_TrackMetaData` 타입 폴백 포함)를 공유하고, `GetTrackIdText`도 트랙 본체에 ID 프로퍼티가 없으면 메타데이터의 `trackid`로 폴백.
   - `FocusedTrackViewerProbe`가 단일 불리언 대신 역할(`PatchedFocusedTrackViewerRoles`)·메서드(`PatchedFocusedTrackViewerMethods`) 집합으로 추적하여 일부만 패치됐을 때 중복 패치 없이 빠진 역할만 재시도하고 대체 이름 연결 시 `[HookPatch][resolve]` 경고를 남김.
 - **2차 계층 (이중래퍼)**: `INNER_PatternLoader.Load` Prefix에서 인스턴스의 `onCompleted`(`Il2CppSystem.Action<Pattern>`, 이름 탐색 실패 시 `Action<Pattern>` 타입 폴백)를 래퍼로 교체. `로더 포인터 → 래퍼 델리게이트 포인터`를 기록해, 현재 onCompleted가 우리 래퍼면 재설치하지 않고 게임이 교체했으면 다시 감싼다. `PlayerBase.Play`마다 초기화.
 - **중복 주입 가드**: 람다 본문이 `onCompleted(=래퍼)`를 먼저 부르고 그 뒤 람다 Postfix가 불리므로 같은 Pattern이 두 번 들어온다. `ProbeNoteArrayMembers`가 **Pattern의 IL2CPP 네이티브 포인터**(`LastProbedPatternPtr`)로 거른다(공식곡 포함 — 같은 패턴 이중 순회 방지).
@@ -99,11 +100,12 @@
 - **리플렉션/생성/콜백 캐시**: `ReflectionSupport.cs` (`MemberAccessorCache`, `TypeFallbackAccessorCache`, `MemberSetterCache`, `InstantiatorCache`, `CallbackInvokeCache`), `HookNoteProbes.Collection.cs` (`CollectionAccessorCache`), `HookNoteProbes.BmsInject.cs` (`Area`/`BeatInfo`/`Note`/`NoteProperty` 메타 캐시), `TrackSelectorCloningSupport.cs` (`TrackMetaCtorCache`, `CopyMemberCache`), `TrackSelectorCollectionSupport.cs` (`InsertMethodCache`, `CastStrategyCache`)로 고빈도 리플렉션 탐색 제거.
 - **BMS/앨범 파싱 최적화**: `BmsChart.TryGetOrParse`가 파일 경로·`LastWriteTimeUtc` 기준으로 파싱 결과를 캐시하며 `ReadOnlySpan<char>` + 정수 채널 필터 + `00` 무음 청크 조기 스킵으로 할당 최소화. `CustomAlbum.TryLoad`는 `Directory.GetFiles` 결과를 파일명/확장자 사전으로 1회 인덱싱.
 - **조기 탈출(Fast-Path Exit)**: `CustomBgmLoaderPatch`/`CustomJacketLoaderPatch`는 `TryGetAlbumForTrack`로 공식 트랙을 즉시 반환하고, `TrackSelectorHookSupport.HandleTrackSelectorSetTracks`는 앨범 유무 및 첫 항목 중복 주입을 전수 열거 전에 검사하며, `ProbeNoteArrayMembers`와 `TryWrapPatternLoaderOnCompleted`는 비커스텀 플레이 시 즉시 복귀함.
+- **커서 이동 경로 로그 억제 (2026-11-23)**: `LevelSelectorDisplaySupport`의 `LevelUnit.Set`/`FetchLevelText`/`DoTextSetter`/`Text` 실패 경고는 타입별 1회(`LogOnce`)만 남긴다. 곡 선택 커서가 움직일 때마다 불리는 경로라 실패가 나면 로그 파일 쓰기가 폭주했다.
 - **FocusedTrackViewer Postfix 전용 훅**: 빈 Prefix를 제거하고 `successCount > 0`일 때만 `_focusedTrackViewerPatched`를 설정하며, `ModEntry`의 `OnLateInitializeMelon`/`OnSceneWasLoaded`에서 지연 재시도를 지원.
 - **훅 단계 분리 (2026-11-15)**: 공용 디스패처 대상은 `PatchSpec.Phase`(`HookPhase.Prefix`/`Postfix`)로 나뉘어 `Hooks/Patches/InvocationPatches.cs`의 `InvocationPrefixPatches`(PlayerBase.Play, PatternLoader.Load) / `InvocationPostfixPatches`(람다, CurrentTrackViewer.Listen, TrackSelector.Set, PlayInfoViewer.ShowPlayInfo, LevelSelector.FetchTrackRecord/FetchJacektImage)에만 걸린다. 예전 Play/TrackSelector/Travel 3개 클래스는 모든 대상에 Prefix+Postfix를 동시에 붙여 호출마다 빈 쪽 트램펄린·`object[]` 박싱이 한 번 더 돌았다. `PrepareTargets`는 다른 패치 클래스가 **다른 논리 이름**으로 이미 등록한 메서드도 거른다(람다 오해석으로 Load가 Prefix/Postfix 양쪽에 걸리는 것 방지).
 - **설정 기반 무(無)패치 (2026-11-15)**: `AllPerfect=false`면 `JudgeAllPerfectPatch`가 판정 핫패스 4개를 아예 걸지 않는다(`UnlockAll`/`NoteMotion`과 같은 방식). 설정은 재시작 시에만 바뀌므로 런타임 토글은 없다. `CustomConfig`는 1회 로드한 `Settings` 스냅샷을 null 검사 1회로 돌려준다.
 - **서빙 경로 경량화 (2026-11-15)**: `CustomBgmLoaderPatch`는 캐시 적중 시 `File.Exists`를 보지 않고, BGM/자켓 "Serving" 로그는 경로별 1회만 남긴다(곡 선택 커서 이동마다 로그 파일 쓰기 제거). `JudgePatch`/`UnlockAllPatch`/`FocusedTrackViewerProbe`의 "못 찾음" 경고도 씬 로드마다 반복하지 않고 키별 1회.
-- **BMS 주입 루프 할당 제거 (2026-11-15)**: `TrySetValueByNameCandidates` 후보 배열을 정적 필드로, `List.Add`/`Note(Area,string,BeatInfo)` 호출 인자 배열을 재사용 버퍼로 바꿨다(메인 스레드 전용, 호출 후 참조 해제).
+- **BMS 주입 루프 할당 제거 (2026-11-15)**: `TrySetValueByNameCandidates` 후보 배열을 정적 필드로, `List.Add`/`Note(Area,string,BeatInfo)` 호출 인자 배열을 재사용 버퍼로 바꿨다(메인 스레드 전용, 호출 후 참조 해제). 2026-11-23: 후보가 여럿일 때 호출마다 `string.Join`으로 만들던 캐시 키도 `ConditionalWeakTable`로 목록 인스턴스당 1회로 줄였다(`ReflectionSupport.GetCandidatesKey` — 임시 배열을 넘겨도 누수 없음).
 - **이름 기반 세터 정확 일치 우선 (2026-11-15)**: `ResolveMemberSetter`는 밑줄 제거·소문자 정규화 이름이 후보와 **완전히 같은** 프로퍼티/필드를 먼저 고르고, 없을 때만 예전의 "포함" 일치로 내려간다. 포함 일치만 쓰면 `displayname`이 선언 순서에 따라 `displayNameEN`에, `targetlayer`가 `<TargetLayer>k__BackingField`에 걸릴 수 있었다.
 - **죽은 프로브·로그 전용 코드 정리**: 미사용·로그 전용 16개 파일(`ExperimentChartSettings`, `AssetBundleLoader`, `SoundInvocation`, `TrackLoaderInvocation`, `TrackListViewerProbe`, `AreaCreate`/`Catalog`/`LinkHold`/`Wipe`/`LongNote`/`Reflection`, `JacketObjectProbe`, `LevelSelectorHookSupport`/`ProbingSupport`, `TrackSelectorMetadataSupport`) 및 빈 폴더 4개 제거.
 
@@ -113,7 +115,7 @@
 - **업데이트 감지**: `HookHealth.CheckGameFingerprint()`가 `GameAssembly.dll` + `global-metadata.dat`의 크기+수정시각을 `savecustomkey/.game-fingerprint`(v2: `v2|ga=…|meta=…`)에 저장하고, 다음 실행에서 달라지면 바뀐 파일 이름과 함께 `[Health] … 이(가) 지난 실행과 다릅니다` 경고 및 확인 순서를 안내. 동작은 바꾸지 않는 힌트 전용이며 파일이 없거나 읽기 실패해도 조용히 넘어간다.
   - 비교 규칙은 순수 로직 `GameVersionLogic`(xUnit 대상). v1 지문(`크기:Ticks`)이나 `meta=none`(파일 못 찾음)은 GameAssembly 부분만 비교해 형식 변경·경로 실패로 인한 거짓 경고를 막는다.
   - **게임 루트 경로**: MelonLoader 0.7.3(net6)에서 `AppDomain.CurrentDomain.BaseDirectory`가 **빈 문자열**이다(실측). 상대 경로는 작업 디렉터리 덕에 우연히 맞지만 `Directory.GetParent("")`는 예외. `HookHealth.ResolveGameDirectory`는 `MelonEnvironment.GameRootDirectory` → `BaseDirectory` → `Environment.CurrentDirectory` 순으로 절대 경로를 만든다. 새 코드에서 게임 폴더 기준 경로가 필요하면 이 순서를 따를 것.
-- **Steam 빌드 감지**: `appmanifest_3446490.acf`의 `buildid`가 고정 빌드와 다르면, `TargetBuildID`가 대기 중이면, 자동 업데이트가 막혀 있지 않으면(`AutoUpdateBehavior≠1` && 읽기 전용 아님) 각각 경고. ACF가 없으면(Steam 밖 보존 사본) 조용히 넘어간다.
+- **Steam 빌드 감지**: `appmanifest_3446490.acf`의 `buildid`가 고정 빌드와 다르면, 업데이트가 대기 중이면(`IsUpdatePending` — `TargetBuildID=0`은 "대기 없음"으로 보고 거짓 경고를 내지 않음, `StateFlags`의 UpdateRequired 비트도 봄), 자동 업데이트가 막혀 있지 않으면(`AutoUpdateBehavior≠1` && 읽기 전용 아님) 각각 경고. ACF가 없으면(Steam 밖 보존 사본) 조용히 넘어간다.
 - **핵심 기능 에스컬레이션 (`HookHealth.CriticalFeatures`)**: 실패 시 데이터가 망가지는 기능(현재 `기록 보호(SaveGuard)` = `HookHealth.SaveGuardFeature`)이 실패/일부거나, `OnLateInitializeMelon`(`MarkStartupComplete`) 이후에도 한 번도 보고되지 않으면(=PatchAll 중단 의심, Dead End 12) `[Health][CRITICAL]` **Error** 로그를 따로 남긴다. 새로 "실패하면 데이터 오염" 성격의 기능을 추가하면 이 표에 등록할 것.
 - **디스패처 표 자가 검사 (`ValidateInvocationHookTable`)**: 시작 시 `InvocationPatchSpecs` ↔ `HookKindsByLogicalName` ↔ `PrefixHookKinds`(Prefix switch 소속) ↔ `FocusedHarmonyInvocationMethods`가 어긋나면 `[HookPatch][table]` Error. 공용 훅을 추가/이름 변경할 때 네 곳을 같이 고치지 않으면 "훅은 걸렸는데 `HookKind.None`이라 아무 일도 안 하는" 조용한 고장이 생기기 때문.
 - **새 패치를 추가할 때 규칙**: `PrepareTargets(…, "기능명")`을 쓰거나, 수동 Patch면 적용 수를 `HookHealth.Report`로 남길 것. 그렇지 않으면 `[Health]`에서 그 기능이 빠진다.
@@ -202,6 +204,10 @@
     - 원인: 모드는 `net6.0`이라 `Stopwatch.GetElapsedTime` 등 .NET 7 이후 API가 없다(`CS0117`). 단위 테스트(`net8.0`)는 통과해도 모드 본체 빌드에서만 깨지는 경우가 있다.
     - 규칙: 시간 측정은 `Stopwatch.GetTimestamp()` 차이 × `1000.0 / Stopwatch.Frequency`로 계산하고, 순수 로직을 테스트와 공유하는 파일(`BmsChart`/`CustomAlbum` 등)에도 .NET 7+ 전용 API를 넣지 말 것. 변경 후엔 테스트와 **모드 본체 빌드를 둘 다** 돌릴 것.
 
+
+18. **`TrackSelector.Set`마다 등록표를 비우고 재복제 (위험, 2026-11-23 제거)**
+    - 원인: Set은 트래블 모드 재진입마다 새 목록으로 불린다. 매번 `InjectedCustomTrackAlbums.Clear()` 후 새로 복제하면 이전 복제본이 식별을 잃어, 그걸 들고 있는 화면/결과 데이터가 공식 Starting Point로 취급된다(기록 보호 우회 가능). 정렬된 목록처럼 복제본이 첫 항목이 아니면 "첫 항목 검사"도 빗나가 중복 삽입됐다.
+    - 규칙: 복제본은 앨범마다 1회 생성·영구 재사용(`InjectedCloneByAlbum`). 등록표는 비우지 않는다(래퍼를 보관하므로 주소 재사용 위험 없음). 목록에 이미 있는 복제본은 포인터 집합으로 걸러 다시 넣지 않는다.
 ---
 
 ## 6. 빌드 및 배포 워크플로
@@ -227,9 +233,10 @@
   3. `[Health]` 가 "일부/실패"면 해당 기능의 `PatchSpec`(PatchTargetSupport.cs) 또는 수동 패치 대상 이름을 `dump_game_reference` 등으로 재확인.
   4. 인터롭 어셈블리(`MelonLoader\Il2CppAssemblies\`)가 재생성됐으면 빌드부터 다시 해서 컴파일 오류(타입/멤버 이동)를 확인. 수동 패치 3종(Judge·UnlockAll·FocusedTrackViewer)은 일부가 컴파일 타임 타입(`typeof`)을 참조하므로 타입 이동 시 여기서 먼저 깨진다.
   5. 커스텀 곡을 실제로 1곡 플레이해 `[BmsInject] 완료`, `[SaveGuard]`, `[CustomLevel][Result]` 확인.
+- **알려진 한계 (BGM 첫 로드 실패, 2026-11-23 감사)**: 커스텀 음원 디코딩이 처음 실패하면 그 사이 대기열에 있던 콜백은 `null` AudioClip을 받는다(원본 로더는 이미 `return false`로 건너뜀). 이후 요청은 `CustomBgmFailedCache`로 원본(공식 Starting Point 음원)에 위임된다. 원본 재호출 폴백(우회 플래그 + `__originalMethod.Invoke`)은 실기 검증 수단이 없어 보류 — `[CustomBgm] 커스텀 BGM 로드에 실패했습니다` 로그가 보이면 음원 파일(ogg/mp3/wav)부터 확인할 것.
 - **알려진 한계**: `JudgeAllPerfectPatch`/`TrackUnlockAllPatch`의 `Initialize()`는 `ResolveGameType`으로 런타임 해석·격리되지만, 개별 훅 핸들러 시그니처는 `EJudgements`/`TickEventData`/`ELockType`을 직접 참조한다. 인터롭에서 해당 enum/이벤트 타입이 이동·삭제되면 재빌드 시 컴파일 오류로 드러난다.
 - **빠른 트러블슈팅 인수인계 맵 (증상 → 로그 태그 → 확인할 파일)**:
-  - **커스텀 곡이 목록에 안 뜸** → `[Album]`, `[TrackSelector.Set]` → `src/Custom/CustomAlbumRegistry.cs`, `src/Hooks/Support/TrackSelector/TrackSelectorHookSupport.cs`, `TrackSelectorCloningSupport.cs`
+  - **커스텀 곡이 목록에 안 뜸** → `[Album]`, `[TrackSelector.Set]` → `src/Custom/CustomAlbumRegistry.cs`, `src/Hooks/Support/TrackSelector/TrackSelectorHookSupport.cs`, `TrackSelectorCloningSupport.cs`, `CustomTrackInjectionLogic.cs` (재진입 때 `재사용 N`이 앨범 수와 같고 `현재 트랙 수`가 늘지 않아야 정상)
   - **자켓/BGM/프리뷰가 원본으로 나옴** → `[CustomJacket]`, `[CustomBgm]` → `src/Hooks/Support/Visual/CustomJacketSupport.cs`, `src/Hooks/Support/Sound/CustomBgmSupport.cs`
   - **BMS 채보가 주입되지 않음** → `[HookPatch][resolve]`, `[DualWrapper]`, `[NoteProbe]`, `[BmsInject]` → `src/Hooks/Support/Common/HookInvocationSupport.cs`, `src/Probes/Notes/HookNoteProbes.cs`, `HookNoteProbes.BmsInject.cs`
   - **난이도 숫자가 원본으로 표시됨** → `[FocusedTrackViewerProbe]`, `[CustomLevel]` → `src/Probes/Track/FocusedTrackViewerProbe.cs`, `src/Hooks/Support/LevelSelector/LevelSelectorDisplaySupport.cs`

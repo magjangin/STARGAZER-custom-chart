@@ -302,6 +302,7 @@ namespace STARGAZER_custom_chart
                 string? buildId = GameVersionLogic.TryReadAcfValue(acf, "buildid");
                 string? targetBuildId = GameVersionLogic.TryReadAcfValue(acf, "TargetBuildID");
                 string? autoUpdate = GameVersionLogic.TryReadAcfValue(acf, "AutoUpdateBehavior");
+                string? stateFlags = GameVersionLogic.TryReadAcfValue(acf, "StateFlags");
                 bool readOnly = (File.GetAttributes(acfPath) & FileAttributes.ReadOnly) != 0;
 
                 switch (GameVersionLogic.ClassifyBuild(buildId))
@@ -315,9 +316,10 @@ namespace STARGAZER_custom_chart
                         break;
                 }
 
-                if (!string.IsNullOrEmpty(targetBuildId) && !string.Equals(targetBuildId, buildId, StringComparison.Ordinal))
+                if (GameVersionLogic.IsUpdatePending(buildId, targetBuildId, stateFlags))
                 {
-                    MelonLogger.Warning($"[Health] Steam 이 BuildID {targetBuildId} 로 업데이트를 대기 중입니다(현재 {buildId}). 다음 실행 전에 업데이트가 적용될 수 있습니다.");
+                    MelonLogger.Warning($"[Health] Steam 이 업데이트를 대기 중입니다(현재 BuildID {buildId ?? "?"}, TargetBuildID {targetBuildId ?? "?"}, StateFlags {stateFlags ?? "?"}). "
+                        + "다음 실행 전에 업데이트가 적용될 수 있습니다 — 고정 빌드를 지키려면 Steam 을 오프라인으로 두고 AutoUpdateBehavior 를 1 로 바꾸세요.");
                 }
 
                 if (!GameVersionLogic.IsAutoUpdateGuarded(autoUpdate, readOnly))

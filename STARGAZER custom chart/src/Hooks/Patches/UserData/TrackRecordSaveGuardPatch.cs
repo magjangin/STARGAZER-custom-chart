@@ -9,7 +9,7 @@ namespace STARGAZER_custom_chart
     public sealed partial class StargazerCustomChartMod
     {
         // 커스텀 트랙은 공식 "Starting Point"의 복제본이라 TrackID가 똑같다
-        // (TrackSelectorCollectionSupport.IsStartingPointTrack 주석 참고).
+        // (TrackSelectorCollectionSupport.GetTrackIdText 주석 참고). 커스텀 식별은 InjectedCustomTrackAlbums 포인터 등록표로만 한다.
         // 저장 기록은 trackID로 조회/저장되므로(UserDataLoader.PlayRecord[trackid]),
         // 막지 않으면 커스텀 곡을 플레이할 때마다 진짜 "Starting Point" 기록을 덮어쓴다.
         [HarmonyPatch]

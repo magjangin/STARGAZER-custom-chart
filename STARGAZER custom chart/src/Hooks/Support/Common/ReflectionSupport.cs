@@ -516,8 +516,7 @@ namespace STARGAZER_custom_chart
             }
 
             Type type = owner.GetType();
-            string candidatesKey = names.Count == 1 ? names[0] : string.Join("|", names);
-            var key = (type, candidatesKey);
+            var key = (type, GetCandidatesKey(names));
 
             if (!MemberSetterCache.TryGetValue(key, out MemberSetter? setter))
             {
@@ -526,6 +525,22 @@ namespace STARGAZER_custom_chart
             }
 
             return !setter.IsEmpty && setter.TrySetValue(owner, value);
+        }
+
+        // 후보 목록 -> 캐시 키 문자열. BMS 주입 루프는 노트마다 같은 정적 배열로 부르므로, 후보가 여럿이면
+        // 매번 string.Join으로 키를 만들던 할당을 목록 인스턴스별 1회로 줄인다. ConditionalWeakTable이라
+        // 호출부가 임시 배열을 넘겨도 배열이 수거될 때 항목도 같이 사라져 누수가 없다.
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<string>, string> CandidatesKeyCache =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<string>, string>();
+
+        private static string GetCandidatesKey(IReadOnlyList<string> names)
+        {
+            if (names.Count == 1)
+            {
+                return names[0];
+            }
+
+            return CandidatesKeyCache.GetValue(names, list => string.Join("|", list));
         }
 
         // 1차: 정규화 이름이 후보와 "완전히 같은" 프로퍼티/필드. 2차: 이름에 후보를 "포함"하는 것(예전 동작).

@@ -48,13 +48,20 @@ Dictionary<IntPtr, (CustomAlbum Album, object TrackRef)> InjectedCustomTrackAlbu
 ```
 
 포인터가 곧 "어느 앨범인가"까지 알려주므로, 자켓·음원·차트·난이도가 모두 이 한 번의 조회로 자기 폴더를 찾습니다.
-관리 래퍼 참조(`TrackRef`)도 함께 보관해 GC 수거로 인한 네이티브 주소 재사용을 막으며,
-주입할 때마다 이전 목록을 비웁니다.
+관리 래퍼 참조(`TrackRef`)도 함께 보관해 GC 수거로 인한 네이티브 주소 재사용을 막습니다.
 
-관련 함수: `IsCustomChartTrack`, `TryGetAlbumForTrack`, `RegisterInjectedCustomTrack`
+**복제본은 앨범마다 한 번만 만들고 계속 재사용합니다(2026-11-23).** 예전에는 `TrackSelector.Set`이 새 목록으로
+불릴 때마다(트래블 모드 재진입 등) 등록표를 비우고 새로 복제했는데, 그러면 이전 복제본을 붙잡고 있던
+화면·결과 데이터가 그 트랙을 공식 Starting Point로 보게 돼 기록 보호가 빗나갈 수 있었습니다. 지금은
+`InjectedCloneByAlbum`(앨범 → 복제본)으로 기존 복제본을 다시 넣고, 목록 중간에 이미 들어 있는 복제본은
+중복 삽입하지 않습니다(`CustomTrackInjectionLogic.FindAlbumsMissingFromList`, xUnit 대상).
+실기 확인: 재진입 시 `[TrackSelector.Set] … 적용=3/3 (재사용 3) 현재 트랙 수: 90`.
+
+관련 함수: `IsCustomChartTrack`, `TryGetAlbumForTrack`, `RegisterInjectedCustomTrack`, `TryGetInjectedClone`
 (`src/Hooks/Support/TrackSelector/TrackSelectorCollectionSupport.cs`)
 
-> `IsStartingPointTrack`은 **복제 원본을 찾는 용도로만** 남아 있습니다. 식별에 쓰면 안 됩니다.
+> `GetTrackIdText`(TrackID 읽기)는 **복제 원본 선택(`CloneSourceSelection.Pick`) 용도로만** 씁니다. 식별에 쓰면 안 됩니다.
+> 복제 원본 후보에서는 이미 주입한 복제본(같은 TrackID)을 뺍니다.
 
 ## 자켓 / 음원
 
@@ -235,7 +242,7 @@ private static IEnumerable<MethodBase> TargetMethods() => Targets;
 - **논리 이름 디스패치**: `PrepareTargets`가 실제 패치된 `MethodBase` → `PatchSpec.LogicalName`을 등록하고, `HookPrefix`/`HookPostfix`는 런타임 메서드명이 아니라 논리 이름으로 `HookKind`를 결정합니다. 따라서 대체 이름(`WithAlternates`, 예: `FetchJacektImage` → `FetchJacketImage`)이나 람다 대체 해석으로 연결된 메서드도 원래 핸들러로 정확히 라우팅됩니다.
 - **안전한 건너뛰기**: 대상을 하나도 못 찾으면 `Prepare()`가 `false`를 돌려줘 **그 클래스만** 건너뜁니다. `TargetMethods()`가 빈 목록을 돌려주면 Harmony가 `"Undefined target method"` 예외를 던져 `PatchAll` 전체가 중단되므로 절대 빈 목록을 반환하면 안 됩니다.
 - **상태 요약 및 업데이트 감지**: 모든 패치(지연 패치 포함) 시도가 끝난 뒤 `HookHealth.LogSummary()`가 `[Health]` 블록으로 전체 기능의 `(적용 수 / 기대 수)`를 한 번 출력하며, `GameAssembly.dll`·`global-metadata.dat`의 크기·수정시각(`savecustomkey/.game-fingerprint`, v2 형식 `v2|ga=…|meta=…`)이 이전 실행과 다르면 바뀐 파일 이름과 함께 게임 업데이트 경고와 확인 순서를 안내합니다. 비교 규칙은 순수 로직 `GameVersionLogic`(단위 테스트 대상)에 있으며, v1 지문(`크기:Ticks`)과 `meta=none`(파일 못 찾음)은 거짓 경고를 막기 위해 GameAssembly 부분만 비교합니다.
-- **Steam 빌드 확인**: `steamapps/appmanifest_3446490.acf`의 `buildid`가 `GameVersionLogic.PinnedSteamBuildId`와 다르면, `TargetBuildID`가 대기 중이면, `AutoUpdateBehavior≠1`이고 읽기 전용도 아니면 각각 경고합니다(ACF가 없으면 Steam 밖 보존 사본으로 보고 조용히 넘어감).
+- **Steam 빌드 확인**: `steamapps/appmanifest_3446490.acf`의 `buildid`가 `GameVersionLogic.PinnedSteamBuildId`와 다르면, 업데이트가 대기 중이면(`TargetBuildID`가 `0`/빈 값이 아니면서 `buildid`와 다르거나 `StateFlags`에 UpdateRequired(2) 비트), `AutoUpdateBehavior≠1`이고 읽기 전용도 아니면 각각 경고합니다(ACF가 없으면 Steam 밖 보존 사본으로 보고 조용히 넘어감).
 - **핵심 기능 에스컬레이션**: `HookHealth.CriticalFeatures`(현재 `기록 보호(SaveGuard)`)가 실패/일부이거나, `OnLateInitializeMelon` 이후에도 한 번도 보고되지 않으면(PatchAll 중단 의심) `[Health][CRITICAL]` Error 로그를 별도로 남깁니다.
 - **디스패처 표 자가 검사**: 시작 시 `ValidateInvocationHookTable`이 `InvocationPatchSpecs` ↔ `HookKindsByLogicalName` ↔ `PrefixHookKinds`(단계) ↔ `FocusedHarmonyInvocationMethods`의 어긋남을 `PatchResolutionLogic.FindDispatchTableMismatches`로 찾아 `[HookPatch][table]` Error로 알립니다(훅은 걸렸는데 핸들러가 `HookKind.None`으로 떨어지는 조용한 고장 방지).
 

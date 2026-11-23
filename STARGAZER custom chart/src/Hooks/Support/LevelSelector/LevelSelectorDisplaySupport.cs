@@ -238,7 +238,11 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[CustomLevel] LevelUnit.Set 호출 실패: {ex.Message}");
+                // 곡 선택 커서 이동마다 불리는 경로라 같은 실패를 반복해 찍지 않는다.
+                if (LogOnce($"CustomLevel.LevelUnitSetFail.{levelUnit.GetType().FullName}"))
+                {
+                    MelonLogger.Warning($"[CustomLevel] LevelUnit.Set 호출 실패(이후 같은 실패는 로그 생략): {ex.Message}");
+                }
                 return false;
             }
         }
@@ -300,7 +304,10 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[CustomLevel][Play] DoTextSetter 실패: {ex.Message}");
+                if (LogOnce($"CustomLevel.DoTextSetterFail.{type.FullName}"))
+                {
+                    MelonLogger.Warning($"[CustomLevel][Play] DoTextSetter 실패(이후 같은 실패는 로그 생략): {ex.Message}");
+                }
             }
 
             try
@@ -313,7 +320,10 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[CustomLevel][Play] Text 프로퍼티 쓰기 실패: {ex.Message}");
+                if (LogOnce($"CustomLevel.TextPropFail.{type.FullName}"))
+                {
+                    MelonLogger.Warning($"[CustomLevel][Play] Text 프로퍼티 쓰기 실패(이후 같은 실패는 로그 생략): {ex.Message}");
+                }
             }
 
             return false;
@@ -389,7 +399,10 @@ namespace STARGAZER_custom_chart
             }
             catch (Exception ex)
             {
-                MelonLogger.Warning($"[CustomLevel] FetchLevelText 호출 실패: {ex.Message}");
+                if (LogOnce($"CustomLevel.FetchLevelTextFail.{levelItem.GetType().FullName}"))
+                {
+                    MelonLogger.Warning($"[CustomLevel] FetchLevelText 호출 실패(이후 같은 실패는 로그 생략): {ex.Message}");
+                }
                 return false;
             }
         }
