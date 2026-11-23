@@ -88,7 +88,7 @@ void = 8
 
 | 키 | 기본값 | 설명 |
 | --- | --- | --- |
-| `autoplay` | `false` | 오토플레이 강제 사용 여부 (`true` = 자동 연주) |
+| `autoplay` | `false` | 오토플레이 강제 사용 여부 (`true` = 자동 연주, 이때 공식 곡 기록은 저장하지 않음) |
 | `AllPerfect` | `false` | 올 퍼펙트 판정 모드 (`true` = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, `false` = 기본 판정 및 판정 훅 미적용) |
 | `AllPerfectCustomOnly` | `true` | `AllPerfect=true`일 때 커스텀 곡에서만 적용할지 여부 (`true` = 커스텀 곡 전용, `false` = 공식 곡에도 적용 및 공식 기록 저장 차단) |
 | `UnlockAll` | `true` | 전곡 해금 및 볼트 제한 해제 (`true` = 볼트/DLC/어드벤처 잠금 없이 모든 공식 수록곡 즉시 플레이 가능 및 999,999 볼트 표시, `false` = 기본 잠금 유지) |

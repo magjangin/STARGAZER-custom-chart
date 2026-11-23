@@ -7,6 +7,14 @@ namespace STARGAZER_custom_chart
 {
     public sealed partial class StargazerCustomChartMod
     {
+        private static void WarnCloneTypeFallback(string expected, Type resolved)
+        {
+            if (LogOnce($"TrackSelector.CloneTypeFallback.{expected}"))
+            {
+                MelonLogger.Warning($"[HookPatch][resolve] {expected} 형식을 이름으로 찾지 못해 복제 원본 객체의 형식 {resolved.FullName} 을(를) 씁니다.");
+            }
+        }
+
         private static void HandleTrackSelectorSetTracks(object tracks)
         {
             try
@@ -120,6 +128,26 @@ namespace STARGAZER_custom_chart
 
                     concreteTrackType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackData");
                     concreteMetaType = FindType("Il2CppStargazer.TrackLoader+INNER_TrackMetaData");
+
+                    // 업데이트 내성: 이름으로 못 찾으면(중첩 타입 개명·이동) 복제 원본 객체의 실제 형식에서 얻는다.
+                    // 목록 항목은 구체 INNER_TrackData 래퍼로 오므로 그 형식과 그 메타데이터 형식이 곧 복제 대상이다.
+                    // 인터페이스(ITrackData) 래퍼로 오면 생성자가 없어 복제가 안 되므로 구체 클래스일 때만 쓴다.
+                    if (source is not null)
+                    {
+                        if (concreteTrackType is null && IsConcreteIl2CppClass(source.GetType()))
+                        {
+                            concreteTrackType = source.GetType();
+                            WarnCloneTypeFallback("INNER_TrackData", concreteTrackType);
+                        }
+
+                        if (concreteMetaType is null && GetTrackMetaDataObject(source) is { } sourceMeta
+                            && IsConcreteIl2CppClass(sourceMeta.GetType()))
+                        {
+                            concreteMetaType = sourceMeta.GetType();
+                            WarnCloneTypeFallback("INNER_TrackMetaData", concreteMetaType);
+                        }
+                    }
+
                     if (source is not null && (concreteTrackType is null || concreteMetaType is null))
                     {
                         MelonLogger.Warning("[TrackSelector.Set] INNER_TrackData/INNER_TrackMetaData 타입을 찾지 못해 새 복제를 건너뜁니다.");

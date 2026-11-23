@@ -29,7 +29,7 @@ namespace STARGAZER_custom_chart
         private static readonly ConfigEntry[] Entries =
         {
             new ConfigEntry("autoplay", "false",
-                "오토플레이 강제 사용 여부 (true = 자동 연주, false = 직접 플레이)"),
+                "오토플레이 강제 사용 여부 (true = 자동 연주 및 공식 기록 저장 차단, false = 직접 플레이)"),
 
             new ConfigEntry("AllPerfect", "false",
                 "올 퍼펙트 판정 모드 (true = 키 입력 시 타이밍 오차 없이 무조건 BLUE 최고 판정 및 결과 100% 반영, false = 기본 판정)"),

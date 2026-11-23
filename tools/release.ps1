@@ -22,8 +22,8 @@
   게임 폴더. 없으면 build.bat 과 같은 순서(환경변수 GAME_PATH → H:\steam\steamapps\common\Sixtar Gate STARGAZER)를 따릅니다.
 
 .EXAMPLE
-  .\tools\release.ps1              # 검증 + dist\STARGAZER-custom-chart-v1.1.0.zip
-  .\tools\release.ps1 -Publish     # 위 + 태그 v1.1.0 푸시 + GitHub 릴리즈
+  .\tools\release.ps1              # 검증 + dist\STARGAZER-custom-chart-v1.2.0.zip
+  .\tools\release.ps1 -Publish     # 위 + 태그 v1.2.0 푸시 + GitHub 릴리즈
 #>
 [CmdletBinding()]
 param(
@@ -64,7 +64,8 @@ if ($asmInfo -notmatch 'MelonInfo\(\s*typeof\([^)]*\)\s*,\s*"[^"]*"\s*,\s*"(?<v>
 if ($Matches['v'] -ne $version) { throw "버전 불일치: csproj $version / AssemblyInfo.cs MelonInfo $($Matches['v'])" }
 
 $changelog = Get-Content (Join-Path $root 'CHANGELOG.md') -Raw -Encoding UTF8
-$entryPattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(?<body>.*?)(?=^## \[|\z)"
+$entryPattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(?<body>.*?)(?=^## |\z)"
+# 본문은 다음 "## " 제목(버전 항목이든 날짜 작업 기록이든)에서 끊는다. "## [" 로만 끊으면 아래 날짜 항목까지 릴리즈 노트에 섞인다.
 $changelogBody = if ($changelog -match $entryPattern) { $Matches['body'].Trim() } else { $null }
 if (-not $changelogBody) {
     if ($Publish) { throw "CHANGELOG.md 에 '## [$version]' 항목이 없습니다." }
