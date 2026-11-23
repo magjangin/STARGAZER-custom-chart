@@ -36,14 +36,15 @@ namespace STARGAZER_custom_chart
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
-            if (!File.Exists(fullPath))
+
+            // 곡 선택 커서 이동마다 불리는 경로라 수정 시각은 경로별로 잠깐 캐시한 값을 쓴다(FileStampSupport).
+            DateTime lastWriteUtc = GetLastWriteTimeUtcThrottled(fullPath);
+            if (lastWriteUtc == MissingFileStamp)
             {
                 EvictJacketCacheEntry(fullPath);
                 CustomJacketFailedCache.Remove(fullPath);
                 return null;
             }
-
-            DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
             if (CustomJacketFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
             {
                 if (failedWriteUtc == lastWriteUtc)
@@ -66,6 +67,8 @@ namespace STARGAZER_custom_chart
 
             try
             {
+                // 실제로 읽을 때는 지금 값을 다시 본다(캐시에 저장되는 수정 시각과 읽은 내용이 어긋나지 않게).
+                lastWriteUtc = GetLastWriteTimeUtcFresh(fullPath);
                 byte[] bytes = File.ReadAllBytes(fullPath);
                 var texture = new Texture2D(2, 2);
                 if (!ImageConversion.LoadImage(texture, bytes))

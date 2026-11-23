@@ -179,14 +179,14 @@ namespace STARGAZER_custom_chart
         private static void StartCustomAudioClipLoad(string filePath)
         {
             string fullPath = Path.GetFullPath(filePath);
-            if (!File.Exists(fullPath))
+            DateTime lastWriteUtc = GetLastWriteTimeUtcFresh(fullPath);
+            if (lastWriteUtc == MissingFileStamp)
             {
                 EvictBgmCacheEntry(fullPath);
                 CustomBgmFailedCache.Remove(fullPath);
                 return;
             }
 
-            DateTime lastWriteUtc = File.GetLastWriteTimeUtc(fullPath);
             if (CustomBgmFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
             {
                 if (failedWriteUtc == lastWriteUtc)
@@ -326,7 +326,7 @@ namespace STARGAZER_custom_chart
             string fullPath = Path.GetFullPath(path);
             if (CustomBgmClipCache.TryGetValue(fullPath, out BgmCacheEntry? cached))
             {
-                if (cached.Clip != null && File.GetLastWriteTimeUtc(fullPath) == cached.LastWriteUtc)
+                if (cached.Clip != null && GetLastWriteTimeUtcThrottled(fullPath) == cached.LastWriteUtc)
                 {
                     cached.LastAccessSeq = ++_bgmAccessSeq;
                     clip = cached.Clip;
@@ -349,7 +349,7 @@ namespace STARGAZER_custom_chart
                 return false;
             }
 
-            if (File.GetLastWriteTimeUtc(fullPath) == failedWriteUtc)
+            if (GetLastWriteTimeUtcThrottled(fullPath) == failedWriteUtc)
             {
                 return true;
             }
@@ -406,7 +406,8 @@ namespace STARGAZER_custom_chart
                         return false;
                     }
 
-                    if (path is not null && !IsKnownFailedAudio(path) && File.Exists(path))
+                    bool fileExists = path is not null && FileExistsThrottled(Path.GetFullPath(path));
+                    if (path is not null && fileExists && !IsKnownFailedAudio(path))
                     {
                         QueueCustomBgmCallback(path, __args[0]);
                         return false;
@@ -414,7 +415,7 @@ namespace STARGAZER_custom_chart
 
                     // 곡 선택 커서가 움직일 때마다(프리뷰) 불리는 경로라 같은 원인은 1회만 남긴다(로그 파일 쓰기 폭주 방지).
                     // 파일을 고치면 IsKnownFailedAudio가 수정 시각으로 실패 캐시를 풀어 다시 시도한다.
-                    string reason = path is null ? "음원 경로 없음" : (File.Exists(path) ? "이전 디코딩 실패" : "파일 없음");
+                    string reason = path is null ? "음원 경로 없음" : (fileExists ? "이전 디코딩 실패" : "파일 없음");
                     if (LogOnce($"CustomBgm.Missing.{album.Name}.{(isPreview ? "preview" : "bgm")}.{reason}"))
                     {
                         MelonLogger.Warning($"[CustomBgm] 커스텀 음원을 쓸 수 없어 원본으로 되돌립니다({album.Name}, {reason}): {path ?? "<none>"}");

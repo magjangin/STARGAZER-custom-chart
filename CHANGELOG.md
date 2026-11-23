@@ -2,6 +2,21 @@
 
 > 릴리즈 버전 항목은 `## [x.y.z] - 날짜` 형식으로 쓴다. `tools/release.ps1`이 이 항목을 찾아 GitHub 릴리즈 노트 본문으로 쓴다(csproj `<Version>`·`AssemblyInfo.cs` MelonInfo와 버전이 같아야 함). 날짜 항목은 작업 기록이다.
 
+## [1.2.1] - 2026-11-24
+v1.2.0 이후 수정·개선입니다.
+
+- **설정 로그가 사라지던 버그 수정**: `config.txt`는 모드 초기화보다 먼저(Harmony 패치 준비 단계에서) 읽히는데, 그때는 로거가 연결되기 전이라 `[Config]` 로그와 **값 해석 경고가 한 줄도 남지 않았다**(예: `autoplay = 켬`처럼 못 읽는 값을 써도 조용히 기본값으로 동작). 이제 로거 연결 전 메시지를 모아 두었다가 내보내고, 로거·게임 폴더 경로를 `OnEarlyInitializeMelon`에서 먼저 연결한다.
+- **설정 오타 감지 (신규)**: `config.txt`에 모르는 키가 있으면 가까운 키를 제안하는 경고를 남긴다(예: `'AllPerfet' … 'AllPerfect' 의 오타인지 확인하세요`). 예전엔 오타 줄이 무시되고 기본값 줄이 따로 추가돼, 켰다고 생각한 기능이 꺼진 채로 돌았다. 예전 버전이 만들던 `EnableNoiseSuppression`은 "더 이상 쓰지 않는 설정" 안내만 한다.
+- **병목**: 곡 선택 커서를 움직일 때마다 자켓·BGM·프리뷰 서빙 훅이 하던 파일 수정 시각 조회(`File.GetLastWriteTimeUtc`/`Exists`)를 경로별 2초에 1번으로 줄였다(파일을 고치면 최대 2초 늦게 반영, 디코딩 시작·이미지 읽기 때는 항상 새로 조회).
+- **알려진 한계**: 곡 선택 화면 서빙 경로 변경과 커스텀 곡 실제 플레이는 실기 미확인(기동 `[Health]`만 확인).
+
+## 2026-11-24 (2차 감사: 설정 로그 유실 수정 · 설정 오타 감지 · 서빙 경로 파일 조회 스로틀, v1.2.1)
+- `CustomConfig`: `LogInfo`/`LogWarning`을 대입 가능한 델리게이트 필드에서 메서드로 바꾸고, 로거가 붙기 전 메시지는 최대 256개까지 모았다가 `AttachLogger`가 내보낸다. `ResolveBaseDirectory` 기본값도 `BaseDirectory`가 비면 `Environment.CurrentDirectory`로 폴백(로거 연결 전 로드 대비).
+- `ModEntry.OnEarlyInitializeMelon`(신규): PatchAll 전에 로거·게임 폴더 경로 연결. 실측: 수정 전 로그엔 `[Config]` 0줄, 수정 후 `[Config] autoplay=… / NoteSway=… / NoteSpeedChaos=…` 출력 및 사용자 파일의 `EnableNoiseSuppression` 감지 확인.
+- `CustomConfig.FindUnknownKeys`(신규, xUnit): 밑줄·공백·하이픈 제거 소문자 이름의 레벤슈타인 거리 2 이하 키 제안. `RetiredKeys`는 오타로 보지 않음.
+- `FileStampSupport`(신규): `GetLastWriteTimeUtcThrottled`(2초 캐시)/`GetLastWriteTimeUtcFresh`(즉시 조회 + 캐시 갱신)/`FileExistsThrottled`. `CustomBgmSupport`의 캐시 적중·실패 캐시·누락 판정과 `CustomJacketSupport`의 캐시 확인에 적용. 디코딩 시작(`StartCustomAudioClipLoad`)과 이미지 읽기 직전에는 Fresh로 조회해, 낡은 값 때문에 방금 만든 캐시 항목을 버리는 일이 없게 했다.
+- 테스트: `CustomConfigTests` 2건 추가(총 73건). Release 빌드 경고·오류 0, bodycheck 통과, 기동 `[Health]` 전 기능 정상.
+
 ## [1.2.0] - 2026-11-23
 v1.0.0 이후 첫 공개 릴리즈입니다(v1.1.0은 릴리즈로 게시하지 않았고, 그 변경분도 모두 포함). 세부 내용은 CHANGELOG.md의 2026-11-23 날짜 항목들을 보세요.
 

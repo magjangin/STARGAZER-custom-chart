@@ -19,11 +19,65 @@ namespace STARGAZER_custom_chart
             "# STARGAZER Custom Chart 설정\n"
             + "# 값을 바꾼 뒤 게임을 다시 시작하면 적용됩니다.\n";
 
-        internal static Action<string> LogInfo = _ => { };
-        internal static Action<string> LogWarning = _ => { };
+        // 설정은 [HarmonyPatch] 클래스의 Prepare(예: NoteMotionPatches → NoteSway)가 처음 읽는데, 그 시점은
+        // ModEntry가 로거를 연결하기 전이다(2026-11-24 실측: [Config] 로그가 한 줄도 남지 않음 — 값 해석 경고까지 버려졌다).
+        // 그래서 로거가 붙기 전 메시지는 모아 두었다가 AttachLogger에서 한꺼번에 내보낸다.
+        private static readonly object PendingLogsLock = new object();
+        private static List<(bool IsWarning, string Message)>? _pendingLogs = new List<(bool, string)>();
+        private static Action<string>? _logInfoSink;
+        private static Action<string>? _logWarningSink;
+
+        internal static void LogInfo(string message) => Emit(false, message);
+
+        internal static void LogWarning(string message) => Emit(true, message);
+
+        private static void Emit(bool isWarning, string message)
+        {
+            lock (PendingLogsLock)
+            {
+                Action<string>? sink = isWarning ? _logWarningSink : _logInfoSink;
+                if (sink is null)
+                {
+                    // 상한: 로거가 끝내 안 붙는 환경(단위 테스트)에서 무한히 쌓이지 않게.
+                    if (_pendingLogs is { Count: < 256 })
+                    {
+                        _pendingLogs.Add((isWarning, message));
+                    }
+
+                    return;
+                }
+
+                sink(message);
+            }
+        }
+
+        internal static void AttachLogger(Action<string> info, Action<string> warning)
+        {
+            lock (PendingLogsLock)
+            {
+                _logInfoSink = info;
+                _logWarningSink = warning;
+                if (_pendingLogs is null)
+                {
+                    return;
+                }
+
+                foreach ((bool isWarning, string message) in _pendingLogs)
+                {
+                    (isWarning ? warning : info)(message);
+                }
+
+                _pendingLogs = null;
+            }
+        }
+
         // MelonLoader 0.7(net6)에서는 AppDomain.BaseDirectory가 빈 문자열이므로 ModEntry에서
-        // HookHealth.ResolveGameDirectory로 연결한다(xUnit 테스트는 기본값 사용).
-        internal static Func<string> ResolveBaseDirectory = () => AppDomain.CurrentDomain.BaseDirectory;
+        // HookHealth.ResolveGameDirectory로 연결한다. 연결 전에 읽혀도 절대 경로가 되도록 현재 디렉터리로 폴백한다
+        // (게임은 게임 폴더를 작업 디렉터리로 시작한다). xUnit 테스트는 LoadFromFolder로 폴더를 직접 넘긴다.
+        internal static Func<string> ResolveBaseDirectory = () =>
+            string.IsNullOrWhiteSpace(AppDomain.CurrentDomain.BaseDirectory)
+                ? Environment.CurrentDirectory
+                : AppDomain.CurrentDomain.BaseDirectory;
 
         // 파일 생성·누락 항목 추가·기본값 조회가 모두 이 단일 정의를 사용한다.
         private static readonly ConfigEntry[] Entries =
@@ -141,6 +195,7 @@ namespace STARGAZER_custom_chart
                 }
 
                 Dictionary<string, string> values = ParseFile(filePath);
+                WarnUnknownKeys(values.Keys);
                 AppendMissingEntries(filePath, values);
 
                 settings.AutoPlay = ReadBool(values, "autoplay", settings.AutoPlay);
@@ -258,6 +313,114 @@ namespace STARGAZER_custom_chart
 
                 entry.AppendTo(builder);
             }
+        }
+
+        // 오타 난 키(예: "AllPerfet")는 조용히 무시되고 AppendMissingEntries가 기본값 줄을 따로 덧붙여,
+        // 사용자는 켰다고 생각하는데 기본값으로 도는 상태가 된다. 모르는 키를 가까운 키 제안과 함께 알린다.
+        // 예전 버전이 만들던 설정. 사용자 파일에 남아 있어도 오타가 아니므로 경고 대신 안내만 한다.
+        private static readonly HashSet<string> RetiredKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "EnableNoiseSuppression", // BmsChart의 미사용 노이즈 억제 옵션(2026-11 제거)
+        };
+
+        private static void WarnUnknownKeys(IEnumerable<string> keys)
+        {
+            foreach (string key in keys)
+            {
+                if (RetiredKeys.Contains(key))
+                {
+                    LogInfo($"[Config] '{key}' 은(는) 더 이상 쓰지 않는 설정입니다(무시됨, 지워도 됩니다).");
+                }
+            }
+
+            foreach ((string key, string? suggestion) in FindUnknownKeys(keys))
+            {
+                LogWarning(suggestion is null
+                    ? $"[Config] 알 수 없는 설정 '{key}' 은(는) 무시합니다."
+                    : $"[Config] 알 수 없는 설정 '{key}' 은(는) 무시합니다 — '{suggestion}' 의 오타인지 확인하세요.");
+            }
+        }
+
+        // 순수 로직(xUnit 대상). 키 비교는 대소문자를 무시하고(ParseFile과 동일), 제안은 밑줄/공백/하이픈을 뺀
+        // 소문자 이름의 편집 거리 2 이하인 알려진 키 중 가장 가까운 것.
+        internal static List<(string Key, string? Suggestion)> FindUnknownKeys(IEnumerable<string> keys)
+        {
+            var result = new List<(string, string?)>();
+            foreach (string key in keys)
+            {
+                if (DefaultsByKey.ContainsKey(key) || RetiredKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                string normalized = NormalizeKey(key);
+                string? best = null;
+                int bestDistance = int.MaxValue;
+                foreach (ConfigEntry entry in Entries)
+                {
+                    int distance = EditDistance(normalized, NormalizeKey(entry.Key), 2);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = entry.Key;
+                    }
+                }
+
+                result.Add((key, bestDistance <= 2 ? best : null));
+            }
+
+            return result;
+        }
+
+        private static string NormalizeKey(string key)
+        {
+            var builder = new StringBuilder(key.Length);
+            foreach (char c in key)
+            {
+                if (c != '_' && c != '-' && !char.IsWhiteSpace(c))
+                {
+                    builder.Append(char.ToLowerInvariant(c));
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        // 레벤슈타인 거리. limit를 넘으면 limit + 1을 돌려준다(키가 짧아 단순 구현으로 충분).
+        private static int EditDistance(string a, string b, int limit)
+        {
+            if (Math.Abs(a.Length - b.Length) > limit)
+            {
+                return limit + 1;
+            }
+
+            var previous = new int[b.Length + 1];
+            var current = new int[b.Length + 1];
+            for (int j = 0; j <= b.Length; j++)
+            {
+                previous[j] = j;
+            }
+
+            for (int i = 1; i <= a.Length; i++)
+            {
+                current[0] = i;
+                int rowMin = current[0];
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    current[j] = Math.Min(Math.Min(previous[j] + 1, current[j - 1] + 1), previous[j - 1] + cost);
+                    rowMin = Math.Min(rowMin, current[j]);
+                }
+
+                if (rowMin > limit)
+                {
+                    return limit + 1;
+                }
+
+                (previous, current) = (current, previous);
+            }
+
+            return Math.Min(previous[b.Length], limit + 1);
         }
 
         // 모드를 업데이트해서 설정이 늘어나도 사용자가 파일을 지웠다 다시 만들지 않아도 되게 한다.
