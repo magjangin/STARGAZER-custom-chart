@@ -17,3 +17,9 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Run unit tests
         run: dotnet test "STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj" -c Release
+      # 게임 DLL 없이 모드 본체(net6.0)를 컴파일해 .NET 7+ API(Dead End 17)·모드 내부 오타를 잡는다.
+      # 게임 인터롭에 걸린 오류는 거르므로 게임 API 사용 검사는 PC의 로컬 빌드 몫이다.
+      - name: Check mod body compiles against net6.0 (without game DLLs)
+        run: dotnet run --project tools/bodycheck -c Release
+      - name: Self-test the body check (it must catch planted errors)
+        run: dotnet run --project tools/bodycheck -c Release --no-build -- --self-test

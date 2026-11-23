@@ -3,6 +3,8 @@
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>STARGAZER_custom_chart</RootNamespace>
     <AssemblyName>STARGAZER custom chart</AssemblyName>
+    <!-- 릴리즈 버전의 기준. Properties/AssemblyInfo.cs 의 MelonInfo, CHANGELOG.md 의 "## [버전]" 과 같아야 한다(tools/release.ps1 이 확인). -->
+    <Version>1.1.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -62,7 +64,8 @@
     </Reference>
   </ItemGroup>
 
-  <Target Name="DeployModToGame" AfterTargets="Build" Condition="Exists('$(GamePath)')">
+  <!-- 복사 생략: -p:SkipDeploy=true (tools/release.ps1 이 사용 — 게임 실행 중 DLL 잠금, 검증 빌드가 설치본을 바꾸지 않게) -->
+  <Target Name="DeployModToGame" AfterTargets="Build" Condition="Exists('$(GamePath)') And '$(SkipDeploy)' != 'true'">
     <MakeDir Directories="$(GamePath)\Mods" Condition="!Exists('$(GamePath)\Mods')" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GamePath)\Mods" ContinueOnError="WarnAndContinue" />
     <Message Importance="high" Text="[Deploy] Deployed $(TargetFileName) to $(GamePath)\Mods" />

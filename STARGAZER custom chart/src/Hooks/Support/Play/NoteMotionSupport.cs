@@ -69,12 +69,14 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
+                // 매 프레임·매 노트 경로: 캐시 확인은 관리 비교(is null)로 한다. Unity == null은 op_Equality IL2CPP 호출이다.
+                // 캐시한 RectTransform은 노트 자신의 것이라, 노트가 살아서 Behaviour가 불리는 동안은 파괴되지 않는다.
                 RectTransform? transform = state.RectTransform;
-                if (transform == null)
+                if (transform is null)
                 {
                     transform = TryGetNoteRectTransform(note);
                     state.RectTransform = transform;
-                    if (transform == null)
+                    if (transform is null)
                     {
                         return;
                     }
@@ -115,10 +117,10 @@ namespace STARGAZER_custom_chart
                 }
 
                 RectTransform? transform = !isNewNote ? known!.RectTransform : null;
-                if (transform == null)
+                if (transform is null)
                 {
                     transform = TryGetNoteRectTransform(note);
-                    if (transform == null)
+                    if (transform is null)
                     {
                         return;
                     }
@@ -354,6 +356,7 @@ namespace STARGAZER_custom_chart
 
         private static RectTransform? TryGetNoteRectTransform(Il2CppObjectBase note)
         {
+            // 새 노트를 처음 볼 때만 불린다. 파괴된 객체를 거르려면 여기서는 Unity 비교가 필요하다.
             Component? component = note.TryCast<Component>();
             if (component == null)
             {
@@ -361,7 +364,9 @@ namespace STARGAZER_custom_chart
             }
 
             Transform? transform = component.transform;
-            return transform == null ? null : transform.TryCast<RectTransform>();
+            RectTransform? rect = transform == null ? null : transform.TryCast<RectTransform>();
+            // 캐시 쪽은 is null로만 보므로, 파괴된 Unity 객체 래퍼가 남지 않게 null로 정규화한다.
+            return rect == null ? null : rect;
         }
 
         private static void PruneNoteMotionStates(int frame)

@@ -412,7 +412,13 @@ namespace STARGAZER_custom_chart
                         return false;
                     }
 
-                    MelonLogger.Warning($"[CustomBgm] 음원을 찾지 못했습니다({album.Name}): {path ?? "<none>"}. 기본값으로 되돌립니다.");
+                    // 곡 선택 커서가 움직일 때마다(프리뷰) 불리는 경로라 같은 원인은 1회만 남긴다(로그 파일 쓰기 폭주 방지).
+                    // 파일을 고치면 IsKnownFailedAudio가 수정 시각으로 실패 캐시를 풀어 다시 시도한다.
+                    string reason = path is null ? "음원 경로 없음" : (File.Exists(path) ? "이전 디코딩 실패" : "파일 없음");
+                    if (LogOnce($"CustomBgm.Missing.{album.Name}.{(isPreview ? "preview" : "bgm")}.{reason}"))
+                    {
+                        MelonLogger.Warning($"[CustomBgm] 커스텀 음원을 쓸 수 없어 원본으로 되돌립니다({album.Name}, {reason}): {path ?? "<none>"}");
+                    }
                 }
                 catch (Exception ex)
                 {

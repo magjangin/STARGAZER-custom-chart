@@ -60,6 +60,9 @@ STARGAZER custom chart/
 ├── AGENTS.md / CLAUDE.md                # 에이전트 인수인계 및 아키텍처·Dead Ends 가이드
 ├── README.md                            # 본 문서
 ├── build.bat                            # 모드 빌드 및 Mods 폴더 배포 스크립트
+├── tools/
+│   ├── bodycheck/                       # 게임 DLL 없이 모드 본체 net6 컴파일 검사 (CI)
+│   └── release.ps1                      # 릴리즈: 버전 확인·빌드·테스트·zip·태그·GitHub 릴리즈
 ├── scripts/
 │   ├── dump_il2cpp.ps1                  # Il2CppDumper 자동 실행
 │   ├── decompile.ps1                    # 게임 어셈블리를 decompiled/로 디컴파일
@@ -93,6 +96,8 @@ STARGAZER custom chart/
 1. Visual Studio를 통해 `STARGAZER custom chart.slnx` 솔루션을 열거나 루트의 `build.bat`를 실행합니다.
 2. 빌드 후 `STARGAZER custom chart.csproj`의 배포 타깃이 게임 디렉토리 내 `Mods/` 폴더로 DLL을 자동 복사합니다.
 3. 게임 의존성이 없는 단위 테스트는 `dotnet test "STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj"`로 실행할 수 있습니다.
+4. 게임 DLL 없이 모드 본체가 net6.0으로 컴파일되는지는 `dotnet run --project tools/bodycheck -c Release`로 봅니다(CI에서도 실행).
+5. 릴리즈는 게임이 설치된 PC에서 `.\tools\release.ps1`(검증 + `dist/` zip) → `.\tools\release.ps1 -Publish`(태그·GitHub 릴리즈). 버전은 csproj `<Version>`, `Properties/AssemblyInfo.cs`, `CHANGELOG.md`의 `## [버전]` 세 곳을 같이 올립니다. Mods 폴더 복사를 건너뛰려면 `-p:SkipDeploy=true`.
 
 빌드에는 게임 폴더의 `MelonLoader/Il2CppAssemblies/`(MelonLoader가 게임 실행 시 생성하는 인터롭 DLL)가 필요합니다.
 이 폴더가 없으면 게임을 MelonLoader와 함께 한 번 실행한 뒤 빌드하세요.
