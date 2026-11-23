@@ -13,7 +13,13 @@ v1.0.0 이후 변경 모음입니다. 세부 내용은 아래 2026-11-23 항목�
   - `tools/bodycheck`(신규): 게임 DLL 없이 모드 본체를 net6.0으로 컴파일해 .NET 7+ API(Dead End 17)·모드 내부 오타를 잡는다. GitHub Actions에서 단위 테스트 뒤에 실행(자체 검사 포함).
   - `tools/release.ps1`(신규): 버전 3곳 일치 확인 → Release 빌드(배포 복사 생략) → 단위 테스트 → 본체 검사(게임 인터롭 포함) → `dist/STARGAZER-custom-chart-v<버전>.zip` → `-Publish` 시 태그·GitHub 릴리즈.
   - csproj `<Version>`(릴리즈 기준), `-p:SkipDeploy=true`(Mods 폴더 복사 생략) 추가.
+- **병목 (3차)**: 노트 연출이 노트마다 읽던 `Time.frameCount`/`Time.time`(IL2CPP 호출)을 프레임당 1회(`OnUpdate`)로 줄였다.
+- **업데이트 내성 (3차)**: 다국어 작곡가 표시(`artistInfos`)를 갱신하지 못하면 빈 `catch`로 조용히 넘어가던 것을 원인별 1회 경고로 남긴다.
 - **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)는 이번 변경분에서도 실기 미확인. 곡 중 BPM 변경·STOP, 표준 롱노트(`#LNOBJ`/`#LNTYPE`)는 미지원.
+
+## 2026-11-23 (3차: 노트 연출 프레임 값 캐시 · artistInfos 실패 경고)
+- `NoteMotionSupport`: `Time.frameCount`/`Time.time`을 `ModEntry.OnUpdate`에서 프레임당 1회 캐시(`CacheNoteMotionFrame`). 노트마다 Prefix·Postfix에서 두 번씩 하던 IL2CPP 호출 제거. 연출이 꺼져 있으면 `OnUpdate`는 즉시 반환. 실기 미확인(클라우드엔 게임 DLL이 없어 본체 빌드 불가, CI의 bodycheck로 net6 컴파일만 확인).
+- `TrySetArtistInfos`: `artistInfos`/`set_Item`을 못 찾거나 예외가 나면 `[TrackSelector.Set]` 경고를 원인별 1회(예전엔 빈 `catch`).
 
 ## 2026-11-23 (2차: 릴리즈 도구 · 본체 컴파일 검사 · 로그/핫패스 정리)
 - `tools/bodycheck`, `tools/release.ps1`, csproj `<Version>`/`SkipDeploy` 추가, CI에 본체 검사 단계.
