@@ -8,6 +8,21 @@ namespace STARGAZER_custom_chart
     {
         private static readonly HarmonyLib.Harmony RuntimeHarmonyInstance = new HarmonyLib.Harmony("com.hwayoungwang.stargazer.customchart");
 
+        // MelonLoader는 OnEarlyInitializeMelon → [HarmonyPatch] PatchAll(각 Prepare) → OnInitializeMelon 순으로 부른다.
+        // Prepare가 설정을 처음 읽으므로 로거와 게임 폴더 경로를 여기서 먼저 연결한다(OnInitializeMelon에서도 다시 연결 — 무해).
+        public override void OnEarlyInitializeMelon()
+        {
+            try
+            {
+                CustomConfig.ResolveBaseDirectory = HookHealth.ResolveGameDirectory;
+                CustomConfig.AttachLogger(MelonLogger.Msg, MelonLogger.Warning);
+            }
+            catch (Exception ex)
+            {
+                LoggerInstance.Warning($"[Mod] OnEarlyInitializeMelon failed: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         public override void OnInitializeMelon()
         {
             try
@@ -15,9 +30,9 @@ namespace STARGAZER_custom_chart
                 LoggerInstance.Msg("[Mod] OnInitialize called.");
 
                 SafeTextReader.EnsureInitialized();
-                CustomConfig.LogInfo = MelonLogger.Msg;
-                CustomConfig.LogWarning = MelonLogger.Warning;
                 CustomConfig.ResolveBaseDirectory = HookHealth.ResolveGameDirectory;
+                // 이 전에 Harmony Prepare가 설정을 읽었다면 그때 남긴 [Config] 메시지가 여기서 한꺼번에 나온다.
+                CustomConfig.AttachLogger(MelonLogger.Msg, MelonLogger.Warning);
                 EnsureAlbumRootExists();
 
                 // 여기서 한 번 읽어 두면 savecustomkey 폴더와 기본 config.txt가 없을 때 만들어진다.

@@ -102,6 +102,8 @@
 - **리플렉션/생성/콜백 캐시**: `ReflectionSupport.cs` (`MemberAccessorCache`, `TypeFallbackAccessorCache`, `MemberSetterCache`, `InstantiatorCache`, `CallbackInvokeCache`), `HookNoteProbes.Collection.cs` (`CollectionAccessorCache`), `HookNoteProbes.BmsInject.cs` (`Area`/`BeatInfo`/`Note`/`NoteProperty` 메타 캐시), `TrackSelectorCloningSupport.cs` (`TrackMetaCtorCache`, `CopyMemberCache`), `TrackSelectorCollectionSupport.cs` (`InsertMethodCache`, `CastStrategyCache`)로 고빈도 리플렉션 탐색 제거.
 - **BMS/앨범 파싱 최적화**: `BmsChart.TryGetOrParse`가 파일 경로·`LastWriteTimeUtc` 기준으로 파싱 결과를 캐시하며 `ReadOnlySpan<char>` + 정수 채널 필터 + `00` 무음 청크 조기 스킵으로 할당 최소화. `CustomAlbum.TryLoad`는 `Directory.GetFiles` 결과를 파일명/확장자 사전으로 1회 인덱싱.
 - **조기 탈출(Fast-Path Exit)**: `CustomBgmLoaderPatch`/`CustomJacketLoaderPatch`는 `TryGetAlbumForTrack`로 공식 트랙을 즉시 반환하고, `TrackSelectorHookSupport.HandleTrackSelectorSetTracks`는 앨범 유무 및 첫 항목 중복 주입을 전수 열거 전에 검사하며, `ProbeNoteArrayMembers`와 `TryWrapPatternLoaderOnCompleted`는 비커스텀 플레이 시 즉시 복귀함.
+- **서빙 경로 파일 조회 스로틀 (2026-11-24, v1.2.1)**: 자켓·BGM·프리뷰 서빙 훅은 곡 선택 커서 이동마다 불려 매번 `File.GetLastWriteTimeUtc`/`Exists`를 했다. `FileStampSupport`가 경로별 2초 동안 마지막 값을 재사용한다(핫리로드는 최대 2초 지연). 디코딩 시작·이미지 읽기 직전엔 `GetLastWriteTimeUtcFresh`로 새로 보고 캐시도 갱신한다 — Fresh 없이 throttled만 쓰면 방금 만든 캐시 항목의 수정 시각이 낡은 값과 달라 즉시 버려지고 재디코딩이 반복될 수 있다. **곡 선택 화면 실기 미확인.**
+- **설정 오타 감지 (2026-11-24, v1.2.1)**: `CustomConfig.FindUnknownKeys`가 모르는 키를 편집 거리 2 이하 알려진 키 제안과 함께 경고한다. 설정을 없앨 때는 `RetiredKeys`에 넣어 사용자 파일에 남은 옛 키가 오타 경고로 뜨지 않게 할 것.
 - **커서 이동 경로 로그 억제 (2026-11-23)**: `LevelSelectorDisplaySupport`의 `LevelUnit.Set`/`FetchLevelText`/`DoTextSetter`/`Text` 실패 경고는 타입별 1회(`LogOnce`)만 남긴다. 곡 선택 커서가 움직일 때마다 불리는 경로라 실패가 나면 로그 파일 쓰기가 폭주했다.
 - **FocusedTrackViewer Postfix 전용 훅**: 빈 Prefix를 제거하고 `successCount > 0`일 때만 `_focusedTrackViewerPatched`를 설정하며, `ModEntry`의 `OnLateInitializeMelon`/`OnSceneWasLoaded`에서 지연 재시도를 지원.
 - **훅 단계 분리 (2026-11-15)**: 공용 디스패처 대상은 `PatchSpec.Phase`(`HookPhase.Prefix`/`Postfix`)로 나뉘어 `Hooks/Patches/InvocationPatches.cs`의 `InvocationPrefixPatches`(PlayerBase.Play, PatternLoader.Load) / `InvocationPostfixPatches`(람다, CurrentTrackViewer.Listen, TrackSelector.Set, PlayInfoViewer.ShowPlayInfo, LevelSelector.FetchTrackRecord/FetchJacektImage)에만 걸린다. 예전 Play/TrackSelector/Travel 3개 클래스는 모든 대상에 Prefix+Postfix를 동시에 붙여 호출마다 빈 쪽 트램펄린·`object[]` 박싱이 한 번 더 돌았다. `PrepareTargets`는 다른 패치 클래스가 **다른 논리 이름**으로 이미 등록한 메서드도 거른다(람다 오해석으로 Load가 Prefix/Postfix 양쪽에 걸리는 것 방지).
@@ -211,6 +213,10 @@
 18. **`TrackSelector.Set`마다 등록표를 비우고 재복제 (위험, 2026-11-23 제거)**
     - 원인: Set은 트래블 모드 재진입마다 새 목록으로 불린다. 매번 `InjectedCustomTrackAlbums.Clear()` 후 새로 복제하면 이전 복제본이 식별을 잃어, 그걸 들고 있는 화면/결과 데이터가 공식 Starting Point로 취급된다(기록 보호 우회 가능). 정렬된 목록처럼 복제본이 첫 항목이 아니면 "첫 항목 검사"도 빗나가 중복 삽입됐다.
     - 규칙: 복제본은 앨범마다 1회 생성·영구 재사용(`InjectedCloneByAlbum`). 등록표는 비우지 않는다(래퍼를 보관하므로 주소 재사용 위험 없음). 목록에 이미 있는 복제본은 포인터 집합으로 걸러 다시 넣지 않는다.
+
+19. **모드 초기화(`OnInitializeMelon`)에서 설정 로거 연결 (로그 유실, 2026-11-24 수정)**
+    - 원인: MelonLoader는 `[HarmonyPatch]` 클래스의 `Prepare`를 `OnInitializeMelon`보다 먼저 부르고, `NoteMotionPatches.Prepare` 등이 `CustomConfig`를 처음 읽는다. 그때 로거가 빈 람다라 `[Config]` 로그와 값 해석 경고가 전부 버려졌다(실측: 로그에 `[Config]` 0줄).
+    - 규칙: 정적 설정·로거 연결은 `OnEarlyInitializeMelon`에서 하고, 그보다 먼저 쓰일 수 있는 로그는 `CustomConfig`처럼 모아 두었다 내보낼 것. 새 `[HarmonyPatch]`의 `Prepare`에서 읽는 정적 상태는 이 순서를 전제로 할 것.
 ---
 
 ## 6. 빌드 및 배포 워크플로

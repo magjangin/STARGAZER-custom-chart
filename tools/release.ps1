@@ -22,8 +22,8 @@
   게임 폴더. 없으면 build.bat 과 같은 순서(환경변수 GAME_PATH → H:\steam\steamapps\common\Sixtar Gate STARGAZER)를 따릅니다.
 
 .EXAMPLE
-  .\tools\release.ps1              # 검증 + dist\STARGAZER-custom-chart-v1.2.0.zip
-  .\tools\release.ps1 -Publish     # 위 + 태그 v1.2.0 푸시 + GitHub 릴리즈
+  .\tools\release.ps1              # 검증 + dist\STARGAZER-custom-chart-v1.2.1.zip
+  .\tools\release.ps1 -Publish     # 위 + 태그 v1.2.1 푸시 + GitHub 릴리즈
 #>
 [CmdletBinding()]
 param(

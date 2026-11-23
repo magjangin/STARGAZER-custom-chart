@@ -54,5 +54,25 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal(0.05f, settings.NoteSpeedChaosMin, 3);
             Assert.Equal(2.5f, settings.NoteSpeedChaosMax, 3);
         }
+    
+        [Fact]
+        public void FindUnknownKeys_SuggestsNearestKnownKeyForTypos()
+        {
+            var unknown = CustomConfig.FindUnknownKeys(new[] { "AllPerfet", "auto_play", "UnlockAll", "autoplay", "Note Sway", "TotallyUnrelatedSetting" });
+
+            Assert.Equal(4, unknown.Count);
+            Assert.Contains(("AllPerfet", (string?)"AllPerfect"), unknown);
+            Assert.Contains(("auto_play", (string?)"autoplay"), unknown);
+            Assert.Contains(("Note Sway", (string?)"NoteSway"), unknown);
+            Assert.Contains(("TotallyUnrelatedSetting", (string?)null), unknown);
+        }
+
+        [Fact]
+        public void FindUnknownKeys_KnownKeysAreCaseInsensitive()
+        {
+            Assert.Empty(CustomConfig.FindUnknownKeys(new[] { "AUTOPLAY", "allperfect", "bgmcachemaxentries" }));
+            // 예전 버전이 만들던 설정은 오타로 보지 않는다.
+            Assert.Empty(CustomConfig.FindUnknownKeys(new[] { "EnableNoiseSuppression" }));
+        }
     }
 }
