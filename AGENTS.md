@@ -220,6 +220,13 @@
   .\build.bat Release
   dotnet test "STARGAZER custom chart.Tests/STARGAZER custom chart.Tests.csproj" -c Release
   ```
+- **모드 본체 net6 컴파일 검사 (게임 DLL 불필요, CI 연동)**: `dotnet run --project tools/bodycheck -c Release` (`--self-test`로 검사기 자체 확인, `--interop "<게임>\MelonLoader\Il2CppAssemblies"`로 로컬 전체 검사). 단위 테스트(net8)는 통과하는데 본체(net6)만 깨지는 Dead End 17 유형과 모드 내부 오타를 CI에서 잡는다. 게임 인터롭에 걸린 오류는 거르므로 게임 API 이름 검사는 못 한다(PC 빌드 몫).
+- **릴리즈 (`tools/release.ps1`, 게임 설치 PC에서 실행 — 빌드에 게임 DLL이 필요해 GitHub Actions에서는 불가)**:
+  ```powershell
+  .\tools\release.ps1            # 버전 일치 확인 + Release 빌드(SkipDeploy) + 단위 테스트 + bodycheck(인터롭 포함) → dist\STARGAZER-custom-chart-v<버전>.zip, 노트 초안
+  .\tools\release.ps1 -Publish   # 위 + main=origin/main·깨끗한 트리 확인 → 태그 v<버전> 푸시 → gh release create
+  ```
+  버전 기준은 csproj `<Version>`이며 `Properties/AssemblyInfo.cs` `MelonInfo`·`CHANGELOG.md` `## [<버전>]`이 다르면 중단한다. 이미 있는 태그면 중단하므로 먼저 세 곳의 버전을 올릴 것. zip에는 DLL 하나만 넣는다. 배포 복사를 건너뛰려면 `-p:SkipDeploy=true`.
 - **배포 산출물 위치**:
   - `STARGAZER custom chart\bin\Release\net6.0\STARGAZER custom chart.dll`
   - 배포 경로: `H:\steam\steamapps\common\Sixtar Gate STARGAZER\Mods\STARGAZER custom chart.dll`

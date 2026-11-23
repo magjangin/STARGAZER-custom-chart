@@ -1,5 +1,25 @@
 # Changelog
 
+> 릴리즈 버전 항목은 `## [x.y.z] - 날짜` 형식으로 쓴다. `tools/release.ps1`이 이 항목을 찾아 GitHub 릴리즈 노트 본문으로 쓴다(csproj `<Version>`·`AssemblyInfo.cs` MelonInfo와 버전이 같아야 함). 날짜 항목은 작업 기록이다.
+
+## [1.1.0] - 2026-11-23
+v1.0.0 이후 변경 모음입니다. 세부 내용은 아래 2026-11-23 항목들을 보세요.
+
+- **기록 보호 강화**: 트래블 모드를 나갔다 다시 들어와도 커스텀 곡 복제본을 새로 만들지 않고 재사용한다. 예전엔 재진입 때마다 복제본을 새로 만들어, 이전 복제본을 들고 있던 결과 데이터가 공식 Starting Point로 취급돼 기록이 섞일 수 있었다. 정렬된 목록에서 커스텀 곡이 중복으로 들어가던 경로도 막았다.
+- **업데이트 감지 정밀화**: Steam 업데이트 대기 판정이 `TargetBuildID=0`을 "대기 없음"으로 보고(거짓 경고 제거) `StateFlags`의 업데이트 필요 비트도 본다.
+- **로그 폭주 억제**: 커스텀 음원을 못 쓰는 곡(파일 없음/디코딩 실패)에서 곡 선택 커서를 움직일 때마다 찍히던 `[CustomBgm]` 경고를 원인별 1회로 줄였다. 난이도 표시 세터 실패 경고도 타입별 1회.
+- **병목**: 노트 연출(흔들림·속도 카오스)을 켰을 때 매 프레임·매 노트마다 하던 Unity `== null`(IL2CPP 호출) 캐시 확인을 관리 비교로 바꿨다. BMS 주입의 후보 캐시 키 생성도 목록당 1회로.
+- **빌드·배포 도구**:
+  - `tools/bodycheck`(신규): 게임 DLL 없이 모드 본체를 net6.0으로 컴파일해 .NET 7+ API(Dead End 17)·모드 내부 오타를 잡는다. GitHub Actions에서 단위 테스트 뒤에 실행(자체 검사 포함).
+  - `tools/release.ps1`(신규): 버전 3곳 일치 확인 → Release 빌드(배포 복사 생략) → 단위 테스트 → 본체 검사(게임 인터롭 포함) → `dist/STARGAZER-custom-chart-v<버전>.zip` → `-Publish` 시 태그·GitHub 릴리즈.
+  - csproj `<Version>`(릴리즈 기준), `-p:SkipDeploy=true`(Mods 폴더 복사 생략) 추가.
+- **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)는 이번 변경분에서도 실기 미확인. 곡 중 BPM 변경·STOP, 표준 롱노트(`#LNOBJ`/`#LNTYPE`)는 미지원.
+
+## 2026-11-23 (2차: 릴리즈 도구 · 본체 컴파일 검사 · 로그/핫패스 정리)
+- `tools/bodycheck`, `tools/release.ps1`, csproj `<Version>`/`SkipDeploy` 추가, CI에 본체 검사 단계.
+- `CustomBgmLoaderPatch`: 커스텀 음원을 못 쓸 때의 경고를 앨범·역할(본 음원/프리뷰)·원인(경로 없음/파일 없음/이전 디코딩 실패)별 1회로.
+- `NoteMotionSupport`: 캐시한 `RectTransform` 확인을 `is null`로(매 프레임·매 노트 `op_Equality` 제거). 새 노트에서 처음 얻을 때만 Unity 비교로 파괴 객체를 거르고 null로 정규화.
+
 ## 2026-11-23 (복제본 재사용으로 기록 보호 강화 · Steam 업데이트 대기 감지 정밀화 · 전체 감사)
 - **버그 가능성 제거 (기록 보호)**:
   - `TrackSelector.Set`이 트래블 모드 재진입마다 새 목록으로 불릴 때 등록표를 비우고 재복제하던 동작을 없앴다. 앨범마다 복제본을 1회만 만들어 `InjectedCloneByAlbum`으로 재사용하고, 목록에 이미 든 복제본(정렬된 목록 중간 포함)은 다시 넣지 않는다(`CustomTrackInjectionLogic`, 신규 순수 로직). 이전 복제본이 식별을 잃어 결과 저장 시 공식 Starting Point로 판정될 수 있던 경로와 중복 삽입 경로를 막는다.

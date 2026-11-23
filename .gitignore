@@ -24,3 +24,6 @@ goldberg/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# 릴리즈 산출물 (tools/release.ps1)
+dist/
