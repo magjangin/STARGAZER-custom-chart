@@ -291,9 +291,8 @@ namespace STARGAZER_custom_chart
             }
         }
 
-        private static void QueueCustomBgmCallback(string path, object callback)
+        private static void QueueCustomBgmCallback(string fullPath, object callback)
         {
-            string fullPath = Path.GetFullPath(path);
             if (!PendingCustomBgmCallbacks.TryGetValue(fullPath, out List<object>? callbacks))
             {
                 callbacks = new List<object>();
@@ -320,10 +319,9 @@ namespace STARGAZER_custom_chart
             MelonLogger.Msg($"[CustomBgm] Completed pending callbacks: {path} count={callbacks.Count} clipReady={clip != null}");
         }
 
-        // 캐시 조회 전용. 파일 수정 시각이 바뀌었으면 캐시를 무효화해 핫리로드를 지원한다.
-        private static bool TryGetCachedCustomBgm(string path, out AudioClip? clip)
+        // 캐시 조회 전용(fullPath는 Path.GetFullPath로 정규화된 값). 파일 수정 시각이 바뀌었으면 캐시를 무효화해 핫리로드를 지원한다.
+        private static bool TryGetCachedCustomBgm(string fullPath, out AudioClip? clip)
         {
-            string fullPath = Path.GetFullPath(path);
             if (CustomBgmClipCache.TryGetValue(fullPath, out BgmCacheEntry? cached))
             {
                 if (cached.Clip != null && GetLastWriteTimeUtcThrottled(fullPath) == cached.LastWriteUtc)
@@ -341,9 +339,8 @@ namespace STARGAZER_custom_chart
             return false;
         }
 
-        private static bool IsKnownFailedAudio(string path)
+        private static bool IsKnownFailedAudio(string fullPath)
         {
-            string fullPath = Path.GetFullPath(path);
             if (!CustomBgmFailedCache.TryGetValue(fullPath, out DateTime failedWriteUtc))
             {
                 return false;
@@ -393,23 +390,24 @@ namespace STARGAZER_custom_chart
                         ? logicalName.EndsWith(".LoadPreviewClip", StringComparison.Ordinal)
                         : __originalMethod.Name.IndexOf("Preview", StringComparison.OrdinalIgnoreCase) >= 0;
                     string? path = isPreview ? album.PreviewPath : album.MusicPath;
+                    string? fullPath = path is null ? null : Path.GetFullPath(path);
 
                     // 캐시 적중 시에는 수정 시각(핫리로드)만 확인하고 즉시 서빙한다.
-                    if (path is not null && TryGetCachedCustomBgm(path, out AudioClip? clip) && clip is not null)
+                    if (fullPath is not null && TryGetCachedCustomBgm(fullPath, out AudioClip? clip) && clip is not null)
                     {
-                        if (LogOnce($"CustomBgm.Serve.{__originalMethod.Name}.{path}"))
+                        if (LogOnce($"CustomBgm.Serve.{__originalMethod.Name}.{fullPath}"))
                         {
-                            MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{album.DisplayName}': {path} (이후 같은 요청은 로그 생략)");
+                            MelonLogger.Msg($"[CustomBgm] Serving cached {__originalMethod.Name} for '{album.DisplayName}': {fullPath} (이후 같은 요청은 로그 생략)");
                         }
 
                         TryInvokeSingleArgCallback(__args[0], clip, "CustomBgm");
                         return false;
                     }
 
-                    bool fileExists = path is not null && FileExistsThrottled(Path.GetFullPath(path));
-                    if (path is not null && fileExists && !IsKnownFailedAudio(path))
+                    bool fileExists = fullPath is not null && FileExistsThrottled(fullPath);
+                    if (fullPath is not null && fileExists && !IsKnownFailedAudio(fullPath))
                     {
-                        QueueCustomBgmCallback(path, __args[0]);
+                        QueueCustomBgmCallback(fullPath, __args[0]);
                         return false;
                     }
 

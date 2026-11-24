@@ -49,6 +49,14 @@ namespace STARGAZER_custom_chart.Tests
                 SaveGuardLogic.Evaluate(true, true, false, false, true, false, false));
             Assert.Equal(SaveGuardDecision.Allow,
                 SaveGuardLogic.Evaluate(true, true, false, false, false, false, false));
+            // 결과·트랙 추출에 실패해도 공식 곡 AllPerfect가 켜져 있으면 치트 점수가 저장되지 않게 막는다.
+            Assert.Equal(SaveGuardDecision.BlockOfficialAllPerfect,
+                SaveGuardLogic.Evaluate(false, false, false, false, true, false, false));
+            Assert.Equal(SaveGuardDecision.BlockOfficialAllPerfect,
+                SaveGuardLogic.Evaluate(true, false, false, false, true, false, false));
+            // 커스텀 전용 AllPerfect(AllPerfectCustomOnly=true)는 공식 곡 추출 실패 시 막지 않는다.
+            Assert.Equal(SaveGuardDecision.Allow,
+                SaveGuardLogic.Evaluate(true, false, false, false, true, true, false));
         }
     
         // autoplay는 곡 구분 없이 켜지므로 공식 곡 자동 연주 결과도 기록에 남지 않게 막는다.

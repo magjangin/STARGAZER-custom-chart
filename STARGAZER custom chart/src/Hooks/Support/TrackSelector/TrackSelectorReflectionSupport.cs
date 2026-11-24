@@ -100,7 +100,7 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                object? dict = TryGetMemberValue(metaObj, "artistInfos", "ArtistInfos");
+                object? dict = TryGetMemberByType(metaObj, "Dictionary<String,String>", "artistInfos", "ArtistInfos");
                 if (dict is null)
                 {
                     if (LogOnce("TrackSelector.artistInfos.missing"))

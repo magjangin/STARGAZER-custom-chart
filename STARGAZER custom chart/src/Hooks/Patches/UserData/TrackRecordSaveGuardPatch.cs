@@ -87,6 +87,12 @@ namespace STARGAZER_custom_chart
                         return false;
                     }
 
+                    if (CustomConfig.AllPerfect && !CustomConfig.AllPerfectCustomOnly)
+                    {
+                        MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 중 예외가 발생했지만 공식 곡 AllPerfect가 활성 상태라 기록 저장을 막습니다: {ex.GetType().Name}: {ex.Message}");
+                        return false;
+                    }
+
                     if (CustomConfig.AutoPlay)
                     {
                         MelonLogger.Warning($"[SaveGuard] 저장 차단 판정 중 예외가 발생했지만 autoplay=true라 자동 연주 결과 저장을 막습니다: {ex.GetType().Name}: {ex.Message}");

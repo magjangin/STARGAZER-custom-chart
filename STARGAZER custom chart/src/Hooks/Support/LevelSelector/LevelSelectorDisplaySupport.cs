@@ -194,6 +194,22 @@ namespace STARGAZER_custom_chart
         private static PropertyInfo? _cachedTextProviderTextProp;
         private static Type? _cachedTextProviderType;
 
+        // 곡 선택 커서 이동마다 불리는 UI 세터 호출에서 매번 object[1]을 할당하지 않도록 재사용한다(메인 스레드 전용).
+        private static readonly object?[] LevelDisplayArgBuffer = new object?[1];
+
+        private static void InvokeSingleStringSetter(MethodInfo method, object target, string value)
+        {
+            LevelDisplayArgBuffer[0] = value;
+            try
+            {
+                method.Invoke(target, LevelDisplayArgBuffer);
+            }
+            finally
+            {
+                LevelDisplayArgBuffer[0] = null;
+            }
+        }
+
         private static MethodInfo? ResolveSingleStringSetterMethod(Type type, IReadOnlyList<string> candidates)
         {
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -233,7 +249,7 @@ namespace STARGAZER_custom_chart
                     return false;
                 }
 
-                _cachedLevelUnitSetMethod.Invoke(levelUnit, new object[] { levelValue });
+                InvokeSingleStringSetter(_cachedLevelUnitSetMethod, levelUnit, levelValue);
                 return true;
             }
             catch (Exception ex)
@@ -298,7 +314,7 @@ namespace STARGAZER_custom_chart
             {
                 if (_cachedDoTextSetterMethod is not null)
                 {
-                    _cachedDoTextSetterMethod.Invoke(textProvider, new object[] { value });
+                    InvokeSingleStringSetter(_cachedDoTextSetterMethod, textProvider, value);
                     return true;
                 }
             }
@@ -394,7 +410,7 @@ namespace STARGAZER_custom_chart
                     return false;
                 }
 
-                _cachedFetchLevelTextMethod.Invoke(levelItem, new object[] { levelValue });
+                InvokeSingleStringSetter(_cachedFetchLevelTextMethod, levelItem, levelValue);
                 return true;
             }
             catch (Exception ex)

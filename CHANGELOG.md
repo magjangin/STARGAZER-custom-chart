@@ -2,6 +2,22 @@
 
 > 릴리즈 버전 항목은 `## [x.y.z] - 날짜` 형식으로 쓴다. `tools/release.ps1`이 이 항목을 찾아 GitHub 릴리즈 노트 본문으로 쓴다(csproj `<Version>`·`AssemblyInfo.cs` MelonInfo와 버전이 같아야 함). 날짜 항목은 작업 기록이다.
 
+## [1.2.2] - 2026-11-24
+v1.2.1 이후 전수 감사·기록 보호 보강·업데이트 내성·병목 개선입니다.
+
+- **기록 보호 버그 수정 (SaveGuard)**: 공식 곡에도 `AllPerfect`를 켠 상태(`AllPerfect=true`, `AllPerfectCustomOnly=false`)에서 결과 객체(`result`)나 `PlayTrack` 추출이 실패하거나 `SaveGuard` 판정 중 예외가 나면 저장이 통과되던 구멍을 막았다(`BlockOfficialAllPerfect`로 fail-closed, `autoplay=true`와 동일 기준).
+- **업데이트 내성 강화**:
+  - `TrackSelectorCloningSupport`: v1.2.0에서 추가한 메타데이터 형식 폴백이 발동해 `INNER_TrackMetaData` 이름이 바뀐 빌드에서도 `CopyFieldsAndProperties`가 실제 `metaType` 멤버를 정확히 제외하도록 수정(독립 복제된 메타데이터가 원본으로 덮어씌워지는 회귀 방지).
+  - `TrackSelectorReflectionSupport.TrySetArtistInfos`: 다국어 작곡가 사전(`artistInfos`) 조회에 `Dictionary<String,String>` 타입 폴백 추가.
+  - `PatchTargetSupport.ResolveTargetMethodInType`: 3단계 개수 일치 폴백에서 깨진 인터롭 메서드의 `GetParameters()` 예외를 격리(`SafeGetParameterCount`).
+- **병목·할당 개선**:
+  - `BmsChart.TryParse`: 데이터 줄의 마디/채널 번호 중복 파싱을 1회 스캔으로 통합하고, 마디 길이 분수(`ToFraction`)를 줄마다가 아닌 마디당 1회만 계산.
+  - `CustomBgmSupport`: 곡 선택 커서 이동 경로(`CustomBgmLoaderPatch.Prefix`)에서 호출당 최대 4회 반복되던 `Path.GetFullPath`를 1회로 통합.
+  - `LevelSelectorDisplaySupport`: 곡 선택·난이도 UI 세터 호출마다 할당되던 `new object[] { value }`를 재사용 버퍼(`LevelDisplayArgBuffer`)로 제거.
+- **문서 정합성**: `docs/GUIDE_CUSTOM_ALBUM.md`에 남아 있던 모순 문구("아래 표에 없는 키는 읽지 않습니다(경고도 없음)")를 v1.2.1 오타 경고 동작에 맞게 수정, `AGENTS.md`·`docs/REFERENCE_CUSTOM_TRACK_PIPELINE.md` 동기화.
+- **검증**: Release 빌드(경고 0·오류 0), 단위 테스트 73건(SaveGuard 공식 AllPerfect 추출 실패 회귀 검증 추가) 통과, `tools/bodycheck`(게임 인터롭 포함·자체 검사) 통과, 실기 기동 `[Health]` 전 기능 정상(공용 훅 6/6·2/2, SaveGuard 1/1, FocusedTrackViewer 4/4, 올 퍼펙트 4/4, 전곡 해금 7/7, BGM 2/2, 자켓 1/1).
+- **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard 차단 로그)와 노트 연출 프레임 캐시는 실기 미확인.
+
 ## [1.2.1] - 2026-11-24
 v1.2.0 이후 수정·개선입니다.
 
