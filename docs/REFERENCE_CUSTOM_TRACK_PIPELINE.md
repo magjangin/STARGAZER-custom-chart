@@ -214,7 +214,7 @@ P(t·f) = P(t) + v·t·(f-1)            (f = 속도 배율)
 | `UserDataLoader+INNER_TrackRecordModule.SaveTrackRecord(ITravelResultData)` | Prefix에서 `PlayData.PlayTrack`이 우리가 주입한 객체면 `return false`로 저장을 건너뜀 |
 
 - `result`에서 `PlayData`(`TravelArgs`) → `PlayTrack`(`ITrackData`) 추출은 `TryGetMemberByType`을 사용해 프로퍼티 이름이 바뀌어도 동작합니다.
-- 만약 게임 업데이트로 `result` 또는 `PlayTrack` 추출 자체가 실패하더라도, 현재 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태라면 **방어적으로 저장을 차단(`return false`)**하여 공식 Starting Point 기록이 오염되는 것을 막습니다.
+- 만약 게임 업데이트로 `result` 또는 `PlayTrack` 추출 자체가 실패하더라도, 현재 `IsCustomChartPlayActive && CurrentPlayAlbum is not null` 상태라면 **방어적으로 저장을 차단(`return false`)**하여 공식 Starting Point 기록이 오염되는 것을 막습니다. 커스텀 플레이가 아니더라도 공식 곡 `AllPerfect`(`AllPerfect=true && AllPerfectCustomOnly=false`)나 `autoplay=true`가 켜져 있으면 마찬가지로 차단합니다(`TrackRecordSaveGuardPatch` 예외 발생 시에도 동일하게 fail-closed, v1.2.2).
 - `PlayTrack`은 꺼냈지만 주입 객체로 식별되지 않는데 플레이 시작 시엔 커스텀 곡이었다면(업데이트로 결과 데이터가 트랙을 복사·래핑하는 경우) `BlockDefensiveTrackMismatch`로 역시 차단합니다(2026-11-20).
 - 저장 모듈 클래스 이름이 통째로 바뀌어도 `PatchSpec.WithTypeScanFallback()`이 게임 전체에서 `SaveTrackRecord(ITravelResultData)`(대체 이름 포함) 구체 메서드가 **유일**하면 그것에 겁니다. Il2CppInterop이 인터페이스 `ITrackRecordModule`을 일반 클래스로 노출하므로 네이티브 클래스 플래그로 인터페이스/추상 클래스를 걸러 냅니다(실기 검증 완료, `AGENTS.md` 1차 계층 4단계).
 - 판정 규칙은 순수 로직 `SaveGuardLogic.Evaluate`(단위 테스트 대상)에 있습니다.

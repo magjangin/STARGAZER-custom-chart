@@ -300,16 +300,17 @@ namespace STARGAZER_custom_chart
             chart.Warnings.AddRange(warnings);
             var measuresByIndex = new Dictionary<int, BmsMeasure>();
             var measureLengthRatios = new Dictionary<int, double>();
+            var noteDataLines = new List<(int LineIdx, int MeasureIndex, int Channel)>(dataLineIndices.Count);
             bool hasBpmChange = false;
             bool hasStop = false;
 
-            // 1차 스캔: 채널 02(마디 길이 배율)를 먼저 수집해야 노트 박자 계산 시 해당 마디 길이를 반영할 수 있다.
+            // 1차 스캔: 마디/채널 번호를 한 번만 파싱해 채널 02(마디 길이 배율)와 미지원 채널을 먼저 분류하고,
+            // 노트 데이터 줄만 추려 둔다(중복 Trim/int.TryParse 제거).
             foreach (int lineIdx in dataLineIndices)
             {
                 ReadOnlySpan<char> line = rawLines[lineIdx].AsSpan().Trim();
                 ReadOnlySpan<char> measureSpan = line.Slice(1, 3);
                 ReadOnlySpan<char> channelSpan = line.Slice(4, 2);
-                ReadOnlySpan<char> dataSpan = line.Slice(7);
 
                 if (!int.TryParse(measureSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int measureIndex)
                     || measureIndex < 0
@@ -320,28 +321,15 @@ namespace STARGAZER_custom_chart
 
                 if (channel == 2)
                 {
+                    ReadOnlySpan<char> dataSpan = line.Slice(7);
                     if (double.TryParse(dataSpan.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double ratio) && ratio > 0)
                     {
                         measureLengthRatios[measureIndex] = ratio;
                     }
-                }
-            }
-
-            foreach (int lineIdx in dataLineIndices)
-            {
-                ReadOnlySpan<char> line = rawLines[lineIdx].AsSpan().Trim();
-                ReadOnlySpan<char> measureSpan = line.Slice(1, 3);
-                ReadOnlySpan<char> channelSpan = line.Slice(4, 2);
-                ReadOnlySpan<char> dataSpan = line.Slice(7);
-
-                if (!int.TryParse(measureSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int measureIndex)
-                    || measureIndex < 0
-                    || !int.TryParse(channelSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int channel))
-                {
                     continue;
                 }
 
-                if (channel is 1 or 2)
+                if (channel == 1)
                 {
                     continue;
                 }
@@ -358,6 +346,20 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
+                noteDataLines.Add((lineIdx, measureIndex, channel));
+            }
+
+            // 마디 길이 분수는 같은 마디의 여러 채널 줄에서 공유하므로 마디당 1회만 계산한다.
+            var measureRatioFractions = new Dictionary<int, (int Num, int Denom)>(measureLengthRatios.Count);
+            foreach (KeyValuePair<int, double> pair in measureLengthRatios)
+            {
+                measureRatioFractions[pair.Key] = ToFraction(pair.Value);
+            }
+
+            foreach ((int lineIdx, int measureIndex, int channel) in noteDataLines)
+            {
+                ReadOnlySpan<char> line = rawLines[lineIdx].AsSpan().Trim();
+                ReadOnlySpan<char> dataSpan = line.Slice(7);
                 if (dataSpan.IsEmpty || dataSpan.Length % chunkWidth != 0)
                 {
                     continue;
@@ -370,7 +372,7 @@ namespace STARGAZER_custom_chart
                     measuresByIndex[measureIndex] = targetMeasure;
                 }
 
-                (int ratioNum, int ratioDenom) = ToFraction(lengthRatio);
+                (int ratioNum, int ratioDenom) = measureRatioFractions.TryGetValue(measureIndex, out var frac) ? frac : (1, 1);
                 int slotCount = dataSpan.Length / chunkWidth;
 
                 for (int slot = 0; slot < slotCount; slot++)

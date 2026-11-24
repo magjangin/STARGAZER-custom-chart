@@ -358,7 +358,7 @@ namespace STARGAZER_custom_chart
             }
 
             MethodInfo[] sameNameSameArity = allMethods
-                .Where(m => string.Equals(m.Name, spec.MethodName, StringComparison.Ordinal) && m.GetParameters().Length == spec.ParameterCount)
+                .Where(m => string.Equals(m.Name, spec.MethodName, StringComparison.Ordinal) && SafeGetParameterCount(m) == spec.ParameterCount)
                 .ToArray();
             if (sameNameSameArity.Length == 1)
             {
@@ -369,7 +369,7 @@ namespace STARGAZER_custom_chart
             foreach (string alternateName in spec.AlternateMethodNames)
             {
                 MethodInfo[] altSameArity = allMethods
-                    .Where(m => string.Equals(m.Name, alternateName, StringComparison.Ordinal) && m.GetParameters().Length == spec.ParameterCount)
+                    .Where(m => string.Equals(m.Name, alternateName, StringComparison.Ordinal) && SafeGetParameterCount(m) == spec.ParameterCount)
                     .ToArray();
                 if (altSameArity.Length == 1)
                 {
@@ -379,6 +379,18 @@ namespace STARGAZER_custom_chart
             }
 
             return null;
+        }
+
+        private static int SafeGetParameterCount(MethodInfo method)
+        {
+            try
+            {
+                return method.GetParameters().Length;
+            }
+            catch
+            {
+                return -1;
+            }
         }
 
         private static MethodInfo[] GetAllMethods(Type type)

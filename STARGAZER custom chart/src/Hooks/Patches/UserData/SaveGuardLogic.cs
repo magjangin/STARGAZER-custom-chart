@@ -22,17 +22,29 @@ namespace STARGAZER_custom_chart
             bool allPerfectCustomOnly,
             bool autoPlayEnabled)
         {
+            bool blockOfficialAllPerfect = allPerfectEnabled && !allPerfectCustomOnly;
+
             if (!hasResult)
             {
-                return isCustomPlayActive
-                    ? SaveGuardDecision.BlockDefensiveNullResult
+                if (isCustomPlayActive)
+                {
+                    return SaveGuardDecision.BlockDefensiveNullResult;
+                }
+
+                return blockOfficialAllPerfect
+                    ? SaveGuardDecision.BlockOfficialAllPerfect
                     : (autoPlayEnabled ? SaveGuardDecision.BlockOfficialAutoPlay : SaveGuardDecision.Allow);
             }
 
             if (!hasPlayTrack)
             {
-                return isCustomPlayActive
-                    ? SaveGuardDecision.BlockDefensiveMissingTrack
+                if (isCustomPlayActive)
+                {
+                    return SaveGuardDecision.BlockDefensiveMissingTrack;
+                }
+
+                return blockOfficialAllPerfect
+                    ? SaveGuardDecision.BlockOfficialAllPerfect
                     : (autoPlayEnabled ? SaveGuardDecision.BlockOfficialAutoPlay : SaveGuardDecision.Allow);
             }
 
@@ -49,7 +61,7 @@ namespace STARGAZER_custom_chart
                 return SaveGuardDecision.BlockDefensiveTrackMismatch;
             }
 
-            if (allPerfectEnabled && !allPerfectCustomOnly)
+            if (blockOfficialAllPerfect)
             {
                 return SaveGuardDecision.BlockOfficialAllPerfect;
             }

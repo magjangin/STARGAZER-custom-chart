@@ -40,7 +40,7 @@ namespace STARGAZER_custom_chart
                     return null;
                 }
 
-                CopyFieldsAndProperties(sourceTrack, newTrack, skipMetaDataMembers: true);
+                CopyFieldsAndProperties(sourceTrack, newTrack, skipMetaDataMembers: true, metaType: metaType);
 
                 object? assignedMeta = GetTrackMetaDataObject(newTrack);
                 if (assignedMeta is null
@@ -86,8 +86,8 @@ namespace STARGAZER_custom_chart
         private static readonly ConcurrentDictionary<(Type TrackType, Type MetaType), ConstructorInfo?> TrackMetaCtorCache =
             new ConcurrentDictionary<(Type, Type), ConstructorInfo?>();
 
-        private static readonly ConcurrentDictionary<Type, CopyMemberSet> CopyMemberCache =
-            new ConcurrentDictionary<Type, CopyMemberSet>();
+        private static readonly ConcurrentDictionary<(Type TrackType, Type? MetaType), CopyMemberSet> CopyMemberCache =
+            new ConcurrentDictionary<(Type, Type?), CopyMemberSet>();
 
         private static object? CreateTrackDataFromMetaData(Type trackType, Type metaType, object newMeta)
         {
@@ -181,16 +181,19 @@ namespace STARGAZER_custom_chart
                 || string.Equals(name, "ObjectClass", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsTrackMetaDataMember(string memberName, Type memberType)
+        private static bool IsTrackMetaDataMember(string memberName, Type memberType, Type? metaType)
         {
             return NameMatchesAny(memberName, MetaMemberNameCandidates)
+                || (metaType is not null && memberType == metaType)
                 || MatchesShortTypeName(memberType, "INNER_TrackMetaData", matchGenericArgs: false);
         }
 
-        private static CopyMemberSet GetCopyMemberSet(Type type)
+        private static CopyMemberSet GetCopyMemberSet(Type type, Type? metaType)
         {
-            return CopyMemberCache.GetOrAdd(type, t =>
+            return CopyMemberCache.GetOrAdd((type, metaType), key =>
             {
+                Type t = key.TrackType;
+                Type? mt = key.MetaType;
                 var allFields = new List<FieldInfo>();
                 var nonMetaFields = new List<FieldInfo>();
                 foreach (FieldInfo field in t.GetFields(InstanceMemberFlags))
@@ -201,7 +204,7 @@ namespace STARGAZER_custom_chart
                     }
 
                     allFields.Add(field);
-                    if (!IsTrackMetaDataMember(field.Name, field.FieldType))
+                    if (!IsTrackMetaDataMember(field.Name, field.FieldType, mt))
                     {
                         nonMetaFields.Add(field);
                     }
@@ -217,7 +220,7 @@ namespace STARGAZER_custom_chart
                     }
 
                     allProps.Add(prop);
-                    if (!IsTrackMetaDataMember(prop.Name, prop.PropertyType))
+                    if (!IsTrackMetaDataMember(prop.Name, prop.PropertyType, mt))
                     {
                         nonMetaProps.Add(prop);
                     }
@@ -231,10 +234,10 @@ namespace STARGAZER_custom_chart
             });
         }
 
-        private static void CopyFieldsAndProperties(object source, object target, bool skipMetaDataMembers = false)
+        private static void CopyFieldsAndProperties(object source, object target, bool skipMetaDataMembers = false, Type? metaType = null)
         {
             if (source is null || target is null) return;
-            CopyMemberSet members = GetCopyMemberSet(source.GetType());
+            CopyMemberSet members = GetCopyMemberSet(source.GetType(), skipMetaDataMembers ? metaType : null);
 
             FieldInfo[] fields = skipMetaDataMembers ? members.NonMetaFields : members.AllFields;
             for (int i = 0; i < fields.Length; i++)

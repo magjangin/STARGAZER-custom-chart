@@ -4,7 +4,7 @@
     <RootNamespace>STARGAZER_custom_chart</RootNamespace>
     <AssemblyName>STARGAZER custom chart</AssemblyName>
     <!-- 릴리즈 버전의 기준. Properties/AssemblyInfo.cs 의 MelonInfo, CHANGELOG.md 의 "## [버전]" 과 같아야 한다(tools/release.ps1 이 확인). -->
-    <Version>1.2.1</Version>
+    <Version>1.2.2</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
