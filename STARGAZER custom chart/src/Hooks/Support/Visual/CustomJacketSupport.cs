@@ -35,7 +35,8 @@ namespace STARGAZER_custom_chart
 
         private static Sprite? LoadCustomJacketSprite(string filePath)
         {
-            string fullPath = Path.GetFullPath(filePath);
+            // CustomAlbum.TryLoad가 경로를 이미 절대 경로로 정규화해 둔다(호출마다 GetFullPath 생략).
+            string fullPath = ToServePath(filePath);
 
             // 곡 선택 커서 이동마다 불리는 경로라 수정 시각은 경로별로 잠깐 캐시한 값을 쓴다(FileStampSupport).
             DateTime lastWriteUtc = GetLastWriteTimeUtcThrottled(fullPath);

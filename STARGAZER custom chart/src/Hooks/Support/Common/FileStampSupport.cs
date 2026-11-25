@@ -40,6 +40,11 @@ namespace STARGAZER_custom_chart
             return stamp;
         }
 
+        // 서빙 캐시 키. 앨범 경로는 CustomAlbum.TryLoad에서 이미 정규화돼 있어 보통 그대로 돌려준다
+        // (Path.GetFullPath는 문자열 정규화·할당이 있어 커서 이동마다 반복할 필요가 없다).
+        private static string ToServePath(string path) =>
+            Path.IsPathFullyQualified(path) ? path : Path.GetFullPath(path);
+
         private static bool FileExistsThrottled(string fullPath) => GetLastWriteTimeUtcThrottled(fullPath) != MissingFileStamp;
     }
 }
