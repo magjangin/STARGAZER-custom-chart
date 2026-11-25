@@ -103,6 +103,8 @@
 - **BMS/앨범 파싱 최적화**: `BmsChart.TryGetOrParse`가 파일 경로·`LastWriteTimeUtc` 기준으로 파싱 결과를 캐시하며 `ReadOnlySpan<char>` + 정수 채널 필터 + `00` 무음 청크 조기 스킵으로 할당 최소화. `CustomAlbum.TryLoad`는 `Directory.GetFiles` 결과를 파일명/확장자 사전으로 1회 인덱싱.
 - **조기 탈출(Fast-Path Exit)**: `CustomBgmLoaderPatch`/`CustomJacketLoaderPatch`는 `TryGetAlbumForTrack`로 공식 트랙을 즉시 반환하고, `TrackSelectorHookSupport.HandleTrackSelectorSetTracks`는 앨범 유무 및 첫 항목 중복 주입을 전수 열거 전에 검사하며, `ProbeNoteArrayMembers`와 `TryWrapPatternLoaderOnCompleted`는 비커스텀 플레이 시 즉시 복귀함.
 - **서빙 경로 파일 조회 스로틀 (2026-11-24, v1.2.1)**: 자켓·BGM·프리뷰 서빙 훅은 곡 선택 커서 이동마다 불려 매번 `File.GetLastWriteTimeUtc`/`Exists`를 했다. `FileStampSupport`가 경로별 2초 동안 마지막 값을 재사용한다(핫리로드는 최대 2초 지연). 디코딩 시작·이미지 읽기 직전엔 `GetLastWriteTimeUtcFresh`로 새로 보고 캐시도 갱신한다 — Fresh 없이 throttled만 쓰면 방금 만든 캐시 항목의 수정 시각이 낡은 값과 달라 즉시 버려지고 재디코딩이 반복될 수 있다. **곡 선택 화면 실기 미확인.**
+- **BGM 대기 콜백 고아 방지 (2026-11-25, v1.2.3)**: `CustomBgmLoaderPatch`는 캐시 미스면 콜백을 대기열에 걸고 원본 로더를 건너뛴다(`return false`). 예전엔 콜백을 **먼저** 걸고 `StartCustomAudioClipLoad`를 불렀는데, 존재 확인은 스로틀된 값(최대 2초 묵음)이라 실제로는 파일이 지워졌거나 같은 파일로 이미 디코딩 실패한 상태면 로드가 시작되지 않아 콜백이 영원히 불리지 않았다(게임이 음원을 기다리며 무한 로딩). 이제 `StartCustomAudioClipLoad`가 `CustomAudioLoadState`(`Loading`/`Ready`/`Unavailable`)를 돌려주고, `TryQueueCustomBgmCallback`은 `Loading`일 때만 콜백을 건다 — `Ready`면 즉시 서빙, `Unavailable`이면 원본 로더로 되돌린다. 코루틴 시작 예외 시 `CustomBgmLoadsInProgress`도 되돌려 "영원히 진행 중" 상태를 막는다. **곡 선택·플레이 실기 미확인.**
+- **서빙 경로 정규화 1회 (2026-11-25, v1.2.3)**: `CustomAlbum.TryLoad`가 폴더 경로를 `Path.GetFullPath`로 한 번 정규화해 모든 파일 경로가 절대 경로가 된다(xUnit `TryLoad_NormalizesPathsOnce`). 자켓·BGM 서빙 훅은 `ToServePath`(이미 절대 경로면 그대로)로 캐시 키를 만들어 커서 이동마다의 `GetFullPath` 문자열 정규화·할당을 없앴다. 캐시 키는 앨범 경로 문자열과 같아야 하므로, 서빙 경로에 다른 출처의 경로를 넣을 땐 같은 함수를 거칠 것.
 - **설정 오타 감지 (2026-11-24, v1.2.1)**: `CustomConfig.FindUnknownKeys`가 모르는 키를 편집 거리 2 이하 알려진 키 제안과 함께 경고한다. 설정을 없앨 때는 `RetiredKeys`에 넣어 사용자 파일에 남은 옛 키가 오타 경고로 뜨지 않게 할 것.
 - **커서 이동 경로 로그 억제 (2026-11-23)**: `LevelSelectorDisplaySupport`의 `LevelUnit.Set`/`FetchLevelText`/`DoTextSetter`/`Text` 실패 경고는 타입별 1회(`LogOnce`)만 남긴다. 곡 선택 커서가 움직일 때마다 불리는 경로라 실패가 나면 로그 파일 쓰기가 폭주했다.
 - **FocusedTrackViewer Postfix 전용 훅**: 빈 Prefix를 제거하고 `successCount > 0`일 때만 `_focusedTrackViewerPatched`를 설정하며, `ModEntry`의 `OnLateInitializeMelon`/`OnSceneWasLoaded`에서 지연 재시도를 지원.
@@ -217,6 +219,10 @@
 19. **모드 초기화(`OnInitializeMelon`)에서 설정 로거 연결 (로그 유실, 2026-11-24 수정)**
     - 원인: MelonLoader는 `[HarmonyPatch]` 클래스의 `Prepare`를 `OnInitializeMelon`보다 먼저 부르고, `NoteMotionPatches.Prepare` 등이 `CustomConfig`를 처음 읽는다. 그때 로거가 빈 람다라 `[Config]` 로그와 값 해석 경고가 전부 버려졌다(실측: 로그에 `[Config]` 0줄).
     - 규칙: 정적 설정·로거 연결은 `OnEarlyInitializeMelon`에서 하고, 그보다 먼저 쓰일 수 있는 로그는 `CustomConfig`처럼 모아 두었다 내보낼 것. 새 `[HarmonyPatch]`의 `Prepare`에서 읽는 정적 상태는 이 순서를 전제로 할 것.
+
+20. **비동기 로드 대기열에 콜백을 먼저 걸고 로드 시작 (무한 대기, 2026-11-25 수정)**
+    - 원인: 원본 로더를 `return false`로 건너뛴 뒤 콜백을 대기열에만 두면, 로드가 실제로 시작되지 않은 경우(파일 삭제·실패 캐시·코루틴 시작 예외) 그 콜백을 부를 주체가 없다. 스로틀된 파일 존재 확인은 몇 초 묵은 값이라 이 어긋남이 실제로 생긴다.
+    - 규칙: "로드 시작/진행 중"이 확인된 뒤에만 콜백을 걸고, 아니면 원본 로더로 되돌릴 것(`CustomAudioLoadState`). 원본을 건너뛰는 Prefix는 콜백이 반드시 불리는 경로가 있는지부터 확인할 것.
 ---
 
 ## 6. 빌드 및 배포 워크플로

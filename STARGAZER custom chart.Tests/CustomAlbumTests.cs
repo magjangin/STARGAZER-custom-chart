@@ -23,6 +23,27 @@ namespace STARGAZER_custom_chart.Tests
         }
 
         [Fact]
+        public void TryLoad_NormalizesPathsOnce()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "chart.bms"), "#BPM 120");
+            File.WriteAllText(Path.Combine(_tempDir, "music.ogg"), "dummy");
+            File.WriteAllText(Path.Combine(_tempDir, "jacket.png"), "dummy");
+
+            // 작업 디렉터리를 바꾸면 병렬 테스트에 영향을 주므로 ".." 세그먼트로 정규화 여부를 본다.
+            string unnormalized = Path.Combine(_tempDir, "..", Path.GetFileName(_tempDir));
+            CustomAlbum? album = CustomAlbum.TryLoad(unnormalized);
+
+            Assert.NotNull(album);
+            Assert.Equal(Path.GetFullPath(_tempDir), album!.DirectoryPath);
+            foreach (string? path in new[] { album.MusicPath, album.PreviewPath, album.JacketPath, album.BmsPath })
+            {
+                Assert.NotNull(path);
+                Assert.Equal(Path.GetFullPath(path!), path);
+                Assert.DoesNotContain("..", path!);
+            }
+        }
+
+        [Fact]
         public void TryLoad_ResolvesDifficultySpecificBmsWithFallback()
         {
             File.WriteAllText(Path.Combine(_tempDir, "default.bms"), "#BPM 120");

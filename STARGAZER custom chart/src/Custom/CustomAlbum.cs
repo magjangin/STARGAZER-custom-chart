@@ -109,6 +109,17 @@ namespace STARGAZER_custom_chart
                 return null;
             }
 
+            // 경로를 여기서 한 번 절대 경로로 정규화해 둔다. 자켓·BGM 서빙 훅(곡 선택 커서 이동마다 호출)은
+            // 이 경로를 캐시 키로 그대로 쓰므로 호출마다 Path.GetFullPath를 다시 하지 않는다.
+            try
+            {
+                directoryPath = Path.GetFullPath(directoryPath);
+            }
+            catch
+            {
+                return null;
+            }
+
             var album = new CustomAlbum(directoryPath);
             string[] files;
             try
