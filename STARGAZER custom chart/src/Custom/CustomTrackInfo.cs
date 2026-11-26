@@ -43,7 +43,7 @@ namespace STARGAZER_custom_chart
             }
 
             var info = new CustomTrackInfo();
-            foreach (string rawLine in SafeTextReader.ReadAllLines(filePath))
+            foreach (string rawLine in SafeTextReader.EnumerateLines(filePath))
             {
                 string line = rawLine.Trim();
                 if (line.Length == 0 || line[0] == '#')

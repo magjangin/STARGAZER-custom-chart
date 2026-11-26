@@ -64,6 +64,21 @@ namespace STARGAZER_custom_chart.Tests
         }
 
         [Fact]
+        public void ReadHeaderMetadata_StopsEarlyOnMeasureDataLine()
+        {
+            string path = Write("early_break.bms", string.Join("\n",
+                "#TITLE First Title",
+                "#00111:010203",
+                "#TITLE Ignored Title",
+                "#ARTIST Ignored Artist"));
+
+            (string? title, string? artist) = BmsChart.ReadHeaderMetadata(path);
+
+            Assert.Equal("First Title", title);
+            Assert.Null(artist);
+        }
+
+        [Fact]
         public void Album_UsesBmsHeaderWhenInfoTxtIsMissing()
         {
             Write("chart.bms", "#TITLE BMS Title\n#ARTIST BMS Artist\n#BPM 120");

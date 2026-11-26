@@ -143,6 +143,7 @@ namespace STARGAZER_custom_chart
                 || fileName.IndexOf("start", StringComparison.OrdinalIgnoreCase) >= 0
                 || fileName.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0
                 || fileName.IndexOf("开始", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("開始", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("起始", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("起点", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("头", StringComparison.Ordinal) >= 0
@@ -155,6 +156,7 @@ namespace STARGAZER_custom_chart
                 || fileName.IndexOf("end", StringComparison.OrdinalIgnoreCase) >= 0
                 || fileName.IndexOf("tail", StringComparison.OrdinalIgnoreCase) >= 0
                 || fileName.IndexOf("结束", StringComparison.Ordinal) >= 0
+                || fileName.IndexOf("終了", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("终止", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("终点", StringComparison.Ordinal) >= 0
                 || fileName.IndexOf("尾", StringComparison.Ordinal) >= 0)
@@ -168,17 +170,24 @@ namespace STARGAZER_custom_chart
         // BMS 헤더의 #TITLE / #ARTIST만 가볍게 읽는다. info.txt가 없는 앨범이 곡 제목·아티스트를 BMS 파일에서
         // 폴백으로 얻는 데 쓴다. 노트 데이터는 파싱하지 않으므로 앨범 스캔 시점에 불러도 부담이 없다.
         // "#TITLE"만 인정하고 "#SUBTITLE" 같은 접두 변형은 무시한다(대소문자 무시, 키 뒤에 공백/탭 필요).
+        // 지연 열거(EnumerateLines)를 사용하고 마디 데이터(#mmmcc:)가 시작되면 즉시 탈출해 대용량 차트 스캔 비용을 최소화한다.
         public static (string? Title, string? Artist) ReadHeaderMetadata(string filePath)
         {
             string? title = null;
             string? artist = null;
 
-            foreach (string rawLine in SafeTextReader.ReadAllLines(filePath))
+            foreach (string rawLine in SafeTextReader.EnumerateLines(filePath))
             {
                 ReadOnlySpan<char> line = rawLine.AsSpan().Trim();
                 if (line.Length < 7 || line[0] != '#')
                 {
                     continue;
+                }
+
+                // 마디 데이터(#mmmcc:)가 시작되면 헤더 영역이 끝난 것이므로 조기 탈출
+                if (line.Length >= 7 && line[6] == ':' && char.IsDigit(line[1]) && char.IsDigit(line[2]) && char.IsDigit(line[3]))
+                {
+                    break;
                 }
 
                 if (title is null && TryReadHeaderValue(line, "#TITLE", out string? titleValue))

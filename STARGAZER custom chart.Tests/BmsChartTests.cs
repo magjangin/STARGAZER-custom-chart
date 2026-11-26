@@ -40,9 +40,12 @@ namespace STARGAZER_custom_chart.Tests
                 "#WAV003 hold 끝.wav",
                 "#WAV004 hold 开始.wav",
                 "#WAV005 hold 结束.wav",
+                "#WAV006 hold 開始.wav",
+                "#WAV007 hold 終了.wav",
                 "#00016:001000000",
                 "#00112:002003",
-                "#00113:004005"));
+                "#00113:004005",
+                "#00114:006007"));
 
             BmsChart? chart = BmsChart.TryParse(path);
 
@@ -53,12 +56,14 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal(BmsNoteKind.HoldEnd, chart.SoundKinds["03"]);
             Assert.Equal(BmsNoteKind.HoldStart, chart.SoundKinds["04"]);
             Assert.Equal(BmsNoteKind.HoldEnd, chart.SoundKinds["05"]);
+            Assert.Equal(BmsNoteKind.HoldStart, chart.SoundKinds["06"]);
+            Assert.Equal(BmsNoteKind.HoldEnd, chart.SoundKinds["07"]);
 
             Assert.Equal(2, chart.Measures.Count);
             Assert.Single(chart.Measures[0].Notes);
             Assert.Equal("01", chart.Measures[0].Notes[0].SoundId);
             Assert.Equal(0, chart.Measures[0].Notes[0].BeatNumerator);
-            Assert.Equal(4, chart.Measures[1].Notes.Count);
+            Assert.Equal(6, chart.Measures[1].Notes.Count);
         }
 
         [Fact]

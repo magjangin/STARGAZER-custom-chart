@@ -77,5 +77,45 @@ namespace STARGAZER_custom_chart.Tests
             string[] lines = SafeTextReader.ReadAllLines(Path.Combine(_tempDir, "missing.txt"));
             Assert.Empty(lines);
         }
+
+        [Fact]
+        public void EnumerateLines_YieldsLinesLazilyAndStopsEarly()
+        {
+            string path = Path.Combine(_tempDir, "lazy.txt");
+            File.WriteAllText(path, "line1\nline2\nline3\nline4\nline5");
+
+            var read = new System.Collections.Generic.List<string>();
+            foreach (string line in SafeTextReader.EnumerateLines(path))
+            {
+                read.Add(line);
+                if (read.Count >= 2)
+                {
+                    break;
+                }
+            }
+
+            Assert.Equal(2, read.Count);
+            Assert.Equal("line1", read[0]);
+            Assert.Equal("line2", read[1]);
+        }
+
+        [Fact]
+        public void EnumerateLines_Utf8Bom_StripsBomFromFirstLine()
+        {
+            string path = Path.Combine(_tempDir, "lazy_bom.bms");
+            byte[] utf8Bytes = Encoding.UTF8.GetBytes("#TITLE Star\n#ARTIST Hwa");
+            byte[] withBom = new byte[3 + utf8Bytes.Length];
+            withBom[0] = 0xEF;
+            withBom[1] = 0xBB;
+            withBom[2] = 0xBF;
+            Buffer.BlockCopy(utf8Bytes, 0, withBom, 3, utf8Bytes.Length);
+            File.WriteAllBytes(path, withBom);
+
+            var lines = new System.Collections.Generic.List<string>(SafeTextReader.EnumerateLines(path));
+
+            Assert.Equal(2, lines.Count);
+            Assert.Equal("#TITLE Star", lines[0]);
+            Assert.Equal("#ARTIST Hwa", lines[1]);
+        }
     }
 }

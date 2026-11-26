@@ -12,17 +12,32 @@ namespace STARGAZER_custom_chart
     {
         // INNER_TrackData.LoadJacketSprite(Action<Sprite>)는 LoadBGMClip/LoadPreviewClip과
         // 시그니처가 동일한 트랙별 콜백 로더다(decompiled/Assembly-CSharp/Il2CppStargazer/TrackLoader.cs).
+        private sealed class JacketCacheEntry
+        {
+            public JacketCacheEntry(Sprite sprite, DateTime lastWriteUtc, long lastAccessSeq)
+            {
+                Sprite = sprite;
+                LastWriteUtc = lastWriteUtc;
+                LastAccessSeq = lastAccessSeq;
+            }
+
+            public Sprite Sprite { get; }
+            public DateTime LastWriteUtc { get; }
+            public long LastAccessSeq { get; set; }
+        }
+
         // TryGetAlbumForTrack(객체 동일성 기준)으로 그 트랙이 어느 앨범(hwa 하위 폴더)인지 찾아
         // 그 앨범의 자켓 이미지를 서빙한다 — BGM 서빙과 같은 방식.
         // 메인 스레드 전용
-        private static readonly Dictionary<string, (Sprite Sprite, DateTime LastWriteUtc)> CustomJacketCache =
-            new Dictionary<string, (Sprite, DateTime)>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, JacketCacheEntry> CustomJacketCache =
+            new Dictionary<string, JacketCacheEntry>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, DateTime> CustomJacketFailedCache =
             new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        private static long _jacketAccessSeq;
 
         private static void EvictJacketCacheEntry(string fullPath)
         {
-            if (CustomJacketCache.Remove(fullPath, out var cached) && cached.Sprite != null)
+            if (CustomJacketCache.Remove(fullPath, out JacketCacheEntry? cached) && cached.Sprite != null)
             {
                 Texture2D? tex = cached.Sprite.texture;
                 UnityEngine.Object.Destroy(cached.Sprite);
@@ -30,6 +45,41 @@ namespace STARGAZER_custom_chart
                 {
                     UnityEngine.Object.Destroy(tex);
                 }
+            }
+        }
+
+        private static void EnforceJacketCacheLimit(string keepPath)
+        {
+            int maxEntries = CustomConfig.JacketCacheMaxEntries;
+            if (maxEntries <= 0)
+            {
+                return;
+            }
+
+            while (CustomJacketCache.Count >= maxEntries)
+            {
+                string? oldestKey = null;
+                long oldestSeq = long.MaxValue;
+                foreach (var kvp in CustomJacketCache)
+                {
+                    if (string.Equals(kvp.Key, keepPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (kvp.Value.LastAccessSeq < oldestSeq)
+                    {
+                        oldestSeq = kvp.Value.LastAccessSeq;
+                        oldestKey = kvp.Key;
+                    }
+                }
+
+                if (oldestKey is null)
+                {
+                    break;
+                }
+
+                EvictJacketCacheEntry(oldestKey);
             }
         }
 
@@ -56,10 +106,11 @@ namespace STARGAZER_custom_chart
                 CustomJacketFailedCache.Remove(fullPath);
             }
 
-            if (CustomJacketCache.TryGetValue(fullPath, out var cached))
+            if (CustomJacketCache.TryGetValue(fullPath, out JacketCacheEntry? cached))
             {
                 if (cached.Sprite != null && cached.LastWriteUtc == lastWriteUtc)
                 {
+                    cached.LastAccessSeq = ++_jacketAccessSeq;
                     return cached.Sprite;
                 }
 
@@ -84,8 +135,10 @@ namespace STARGAZER_custom_chart
                 var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
                 sprite.name = "CustomJacket_" + Path.GetFileNameWithoutExtension(fullPath);
                 sprite.hideFlags |= HideFlags.DontUnloadUnusedAsset;
+                EvictJacketCacheEntry(fullPath);
+                EnforceJacketCacheLimit(fullPath);
                 CustomJacketFailedCache.Remove(fullPath);
-                CustomJacketCache[fullPath] = (sprite, lastWriteUtc);
+                CustomJacketCache[fullPath] = new JacketCacheEntry(sprite, lastWriteUtc, ++_jacketAccessSeq);
                 MelonLogger.Msg($"[CustomJacket] Cached custom jacket: {fullPath} ({texture.width}x{texture.height})");
                 return sprite;
             }

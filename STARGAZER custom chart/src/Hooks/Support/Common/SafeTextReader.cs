@@ -54,6 +54,49 @@ namespace STARGAZER_custom_chart
             }
         }
 
+        private static string DecodeBytes(byte[] bytes)
+        {
+            string content;
+
+            // 1. UTF-8 BOM 감지
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                content = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+            }
+            // 2. UTF-16 LE BOM 감지
+            else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                content = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            // 3. UTF-16 BE BOM 감지
+            else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            {
+                content = Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            else
+            {
+                // 4. 엄격한 UTF-8 디코딩 시도 (잘못된 바이트 시 예외 발생)
+                try
+                {
+                    content = Utf8Strict.GetString(bytes);
+                }
+                catch (DecoderFallbackException)
+                {
+                    // 5. UTF-8이 아닌 ANSI(중국어 GB18030/GBK 또는 시스템 기본 인코딩) 폴백
+                    if (_chineseEncoding != null)
+                    {
+                        content = _chineseEncoding.GetString(bytes);
+                    }
+                    else
+                    {
+                        content = Encoding.Default.GetString(bytes);
+                    }
+                }
+            }
+
+            return content.TrimStart('\uFEFF');
+        }
+
         /// <summary>
         /// 파일의 바이트와 BOM을 분석하여 최적의 인코딩으로 전체 라인을 읽어옵니다.
         /// 첫 줄의 UTF-8 BOM(\uFEFF)은 자동으로 제거되어 #WAV, #BPM, 제목 등의 헤더 파싱이 누락되지 않습니다.
@@ -73,45 +116,7 @@ namespace STARGAZER_custom_chart
                     return Array.Empty<string>();
                 }
 
-                string content;
-
-                // 1. UTF-8 BOM 감지
-                if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                {
-                    content = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
-                }
-                // 2. UTF-16 LE BOM 감지
-                else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-                {
-                    content = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
-                }
-                // 3. UTF-16 BE BOM 감지
-                else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-                {
-                    content = Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
-                }
-                else
-                {
-                    // 4. 엄격한 UTF-8 디코딩 시도 (잘못된 바이트 시 예외 발생)
-                    try
-                    {
-                        content = Utf8Strict.GetString(bytes);
-                    }
-                    catch (DecoderFallbackException)
-                    {
-                        // 5. UTF-8이 아닌 ANSI(중국어 GB18030/GBK 또는 시스템 기본 인코딩) 폴백
-                        if (_chineseEncoding != null)
-                        {
-                            content = _chineseEncoding.GetString(bytes);
-                        }
-                        else
-                        {
-                            content = Encoding.Default.GetString(bytes);
-                        }
-                    }
-                }
-
-                content = content.TrimStart('\uFEFF');
+                string content = DecodeBytes(bytes);
 
                 var lines = new List<string>();
                 using (var reader = new StringReader(content))
@@ -134,6 +139,63 @@ namespace STARGAZER_custom_chart
                 catch
                 {
                     return Array.Empty<string>();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 텍스트 파일을 한 줄씩 지연 열거합니다. 헤더만 읽고 중간에 break할 때 전체 라인 배열/리스트를
+        /// 메모리에 할당하지 않으므로, 대용량 BMS 차트의 메타데이터 조회 등에 유용합니다.
+        /// </summary>
+        public static IEnumerable<string> EnumerateLines(string filePath)
+        {
+            if (!File.Exists(filePath) || IsTooLarge(filePath))
+            {
+                yield break;
+            }
+
+            string? content = null;
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(filePath);
+                if (bytes.Length == 0)
+                {
+                    yield break;
+                }
+
+                content = DecodeBytes(bytes);
+            }
+            catch
+            {
+                content = null;
+            }
+
+            if (content is not null)
+            {
+                using var reader = new StringReader(content);
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    yield return line;
+                }
+                yield break;
+            }
+
+            IEnumerable<string>? fallbackLines = null;
+            try
+            {
+                fallbackLines = File.ReadLines(filePath);
+            }
+            catch
+            {
+                yield break;
+            }
+
+            if (fallbackLines is not null)
+            {
+                foreach (string fallbackLine in fallbackLines)
+                {
+                    yield return fallbackLine;
                 }
             }
         }

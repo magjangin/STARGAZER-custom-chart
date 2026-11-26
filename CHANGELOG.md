@@ -2,6 +2,18 @@
 
 > 릴리즈 버전 항목은 `## [x.y.z] - 날짜` 형식으로 쓴다. `tools/release.ps1`이 이 항목을 찾아 GitHub 릴리즈 노트 본문으로 쓴다(csproj `<Version>`·`AssemblyInfo.cs` MelonInfo와 버전이 같아야 함). 날짜 항목은 작업 기록이다.
 
+## [1.2.5] - 2026-11-26
+v1.2.4 이후 전수 감사·자켓 LRU 캐시 관리·지연 스트리밍 최적화·업데이트 내성 강화입니다.
+
+- **자켓 메모리 누수 방지 (LRU 캐시 관리 & 설정 추가)**: BGM 캐시(`BgmCacheMaxEntries`)와 마찬가지로 자켓 스프라이트/텍스처에도 LRU 캐시 관리(`JacketCacheMaxEntries`, 기본값 32)를 도입했다. 커스텀 곡이 수십~수백 개일 때 곡 선택 화면을 탐색해도 사용하지 않는 자켓 Texture2D/Sprite가 메모리에 무한 누적되지 않고 가장 오래 접근되지 않은 자켓부터 안전하게 파괴·해제된다.
+- **BMS 헤더 및 설정 파싱 병목/할당 제거 (SafeTextReader 지연 스트리밍)**: `SafeTextReader.EnumerateLines`를 추가해, 메타데이터 조회 시 대용량 BMS 전체를 `string[]`으로 일괄 쪼개던 수천~수만 개의 문자열 할당을 제거했다. `BmsChart.ReadHeaderMetadata`는 `#TITLE`/`#ARTIST` 탐색 또는 마디 데이터(`#mmmcc:`) 진입 시 즉시 탈출하도록 최적화되어 수십 개 앨범 초기 스캔 시의 CPU/메모리 부하를 대폭 줄였다.
+- **업데이트 내성 강화 (결과 화면 난이도 표시)**: `HandleResultPlayInfoLevelDisplay`에서 게임 업데이트로 `ITravelResultData`의 `PlayData` 또는 `PlayTrack` 구조가 변경·래핑되어도, 플레이 진입 시 저장된 `CurrentPlayAlbum`과 `CustomChartPlayLevelKey`로 방어적 폴백하여 결과 씬의 커스텀 난이도 배지가 누락되지 않도록 내성을 강화했다.
+- **포맷 및 다국어 지원 확장**:
+  - `CustomAlbum`: 자켓 후보에 `illust.png`/`illust.jpg`/`illustration.png`/`일러스트.png` 추가, 음원 후보에 한국어/중국어(`음원`, `음악`, `音乐`) 및 프리뷰 후보(`미리듣기`, `프리뷰`, `试听`) 추가.
+  - `BmsChart`: 일본어 BMS 롱노트 키워드(`開始`, `終了`) 인식 추가.
+- **검증**: Release 빌드(경고 0·오류 0), 단위 테스트 79건(신규 지연 스트리밍, 자켓 캐시 설정, 확장 후보, 헤더 조기 탈출 등 5건 추가) 전원 통과, `tools/bodycheck`(게임 인터롭 제외 본체 net6 검사) 통과.
+- **알려진 한계**: 커스텀 곡 실제 플레이(BMS 주입·SaveGuard·래퍼 재사용)와 곡 선택 화면 서빙 경로는 실기 미확인.
+
 ## [1.2.4] - 2026-11-26
 v1.2.3 이후 2차 전수 감사입니다.
 
