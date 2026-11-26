@@ -74,5 +74,21 @@ namespace STARGAZER_custom_chart.Tests
             Assert.EndsWith("art.png", album.JacketPath);
             Assert.Single(album.Warnings);
         }
+
+        [Fact]
+        public void TryLoad_RecognizesExtendedJacketAndAudioCandidates()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "illust.png"), "illust");
+            File.WriteAllText(Path.Combine(_tempDir, "음원.ogg"), "music");
+            File.WriteAllText(Path.Combine(_tempDir, "미리듣기.ogg"), "preview");
+            File.WriteAllText(Path.Combine(_tempDir, "chart.bms"), "#BPM 130");
+
+            CustomAlbum? album = CustomAlbum.TryLoad(_tempDir);
+
+            Assert.NotNull(album);
+            Assert.EndsWith("illust.png", album!.JacketPath);
+            Assert.EndsWith("음원.ogg", album.MusicPath);
+            Assert.EndsWith("미리듣기.ogg", album.PreviewPath);
+        }
     }
 }

@@ -14,7 +14,9 @@ namespace STARGAZER_custom_chart
             "jacket.png", "jacket.jpg", "jacket.jpeg",
             "cover.png", "cover.jpg", "cover.jpeg",
             "thumbnail.png", "thumbnail.jpg", "thumbnail.jpeg",
-            "자켓.png", "커버.png", "썸네일.png",
+            "illust.png", "illust.jpg", "illust.jpeg",
+            "illustration.png", "illustration.jpg", "illustration.jpeg",
+            "자켓.png", "커버.png", "썸네일.png", "일러스트.png",
             "封面.png", "封面.jpg", "封面.jpeg",
             "封套.png", "封套.jpg", "封套.jpeg",
             "曲绘.png", "曲绘.jpg", "曲绘.jpeg",
@@ -28,6 +30,9 @@ namespace STARGAZER_custom_chart
             "audio.ogg", "audio.mp3", "audio.wav",
             "song.ogg", "song.mp3", "song.wav",
             "track.ogg", "track.mp3", "track.wav",
+            "음원.ogg", "음원.mp3", "음원.wav",
+            "음악.ogg", "음악.mp3", "음악.wav",
+            "音乐.ogg", "音乐.mp3", "音乐.wav",
         };
 
         private static readonly string[] PreviewNameCandidates =
@@ -35,6 +40,9 @@ namespace STARGAZER_custom_chart
             "music_preview.ogg", "music_preview.mp3", "music_preview.wav",
             "preview.ogg", "preview.mp3", "preview.wav",
             "bgm_preview.ogg", "bgm_preview.mp3", "bgm_preview.wav",
+            "미리듣기.ogg", "미리듣기.mp3", "미리듣기.wav",
+            "프리뷰.ogg", "프리뷰.mp3", "프리뷰.wav",
+            "试听.ogg", "试听.mp3", "试听.wav",
         };
 
         private static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg" };

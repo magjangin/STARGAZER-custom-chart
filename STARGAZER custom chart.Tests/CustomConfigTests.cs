@@ -34,6 +34,19 @@ namespace STARGAZER_custom_chart.Tests
             Assert.True(settings.UnlockAll);
             Assert.False(settings.VerboseInvocationLogging);
             Assert.True(settings.FocusedHarmonyInvocationLogging);
+            Assert.Equal(24, settings.BgmCacheMaxEntries);
+            Assert.Equal(32, settings.JacketCacheMaxEntries);
+        }
+
+        [Fact]
+        public void LoadFromFolder_ParsesJacketCacheMaxEntries()
+        {
+            File.WriteAllText(Path.Combine(_tempDir, "config.txt"), "JacketCacheMaxEntries = 64\nBgmCacheMaxEntries = 12");
+
+            CustomConfig.Settings settings = CustomConfig.LoadFromFolder(_tempDir);
+
+            Assert.Equal(64, settings.JacketCacheMaxEntries);
+            Assert.Equal(12, settings.BgmCacheMaxEntries);
         }
 
         [Fact]
@@ -70,7 +83,7 @@ namespace STARGAZER_custom_chart.Tests
         [Fact]
         public void FindUnknownKeys_KnownKeysAreCaseInsensitive()
         {
-            Assert.Empty(CustomConfig.FindUnknownKeys(new[] { "AUTOPLAY", "allperfect", "bgmcachemaxentries" }));
+            Assert.Empty(CustomConfig.FindUnknownKeys(new[] { "AUTOPLAY", "allperfect", "bgmcachemaxentries", "jacketcachemaxentries" }));
             // 예전 버전이 만들던 설정은 오타로 보지 않는다.
             Assert.Empty(CustomConfig.FindUnknownKeys(new[] { "EnableNoiseSuppression" }));
         }

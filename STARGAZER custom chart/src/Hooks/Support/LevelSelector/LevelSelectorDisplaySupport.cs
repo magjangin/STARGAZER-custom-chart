@@ -371,19 +371,17 @@ namespace STARGAZER_custom_chart
                 }
 
                 object? playData = TryGetMemberByType(resultData, "TravelArgs", "PlayData", "playData");
-                if (playData is null)
-                {
-                    return;
-                }
-
-                object? playTrack = TryGetMemberByType(playData, "ITrackData", "PlayTrack", "playTrack");
-                CustomTrackInfo? info = TryGetAlbumForTrack(playTrack)?.Info;
+                object? playTrack = playData is null ? null : TryGetMemberByType(playData, "ITrackData", "PlayTrack", "playTrack");
+                CustomAlbum? album = (playTrack is not null ? TryGetAlbumForTrack(playTrack) : null)
+                    ?? (IsCustomChartPlayActive ? CurrentPlayAlbum : null);
+                CustomTrackInfo? info = album?.Info;
                 if (info is null || info.Levels.Count == 0)
                 {
                     return;
                 }
 
-                string? levelKey = TryGetMemberByType(playData, "ELevels", "PlayLevel", "playLevel")?.ToString();
+                string? levelKey = (playData is not null ? TryGetMemberByType(playData, "ELevels", "PlayLevel", "playLevel")?.ToString() : null)
+                    ?? CustomChartPlayLevelKey;
                 if (levelKey is null || !info.Levels.TryGetValue(levelKey, out string? levelValue))
                 {
                     return;

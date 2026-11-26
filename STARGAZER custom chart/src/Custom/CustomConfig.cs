@@ -127,6 +127,8 @@ namespace STARGAZER_custom_chart
 
             new ConfigEntry("BgmCacheMaxEntries", "24",
                 "메모리에 유지할 커스텀 BGM AudioClip 최대 개수 (0 = 무제한, 초과 시 가장 오래 안 쓴 클립부터 해제)"),
+            new ConfigEntry("JacketCacheMaxEntries", "32",
+                "메모리에 유지할 커스텀 자켓 Sprite/Texture2D 최대 개수 (0 = 무제한, 초과 시 가장 오래 안 쓴 자켓부터 메모리 해제)"),
         };
 
         private static readonly Dictionary<string, string> DefaultsByKey = BuildDefaultsMap();
@@ -165,6 +167,7 @@ namespace STARGAZER_custom_chart
         public static bool RuntimeProbeLogging => Current.RuntimeProbeLogging;
         public static bool TrackSelectorVerboseLogging => Current.TrackSelectorVerboseLogging;
         public static int BgmCacheMaxEntries => Current.BgmCacheMaxEntries;
+        public static int JacketCacheMaxEntries => Current.JacketCacheMaxEntries;
 
         public static string FolderPath => Path.Combine(ResolveBaseDirectory(), FolderName);
 
@@ -220,6 +223,7 @@ namespace STARGAZER_custom_chart
                 settings.RuntimeProbeLogging = ReadBool(values, "RuntimeProbeLogging", settings.RuntimeProbeLogging);
                 settings.TrackSelectorVerboseLogging = ReadBool(values, "TrackSelectorVerboseLogging", settings.TrackSelectorVerboseLogging);
                 settings.BgmCacheMaxEntries = Math.Max(0, ReadInt(values, "BgmCacheMaxEntries", settings.BgmCacheMaxEntries));
+                settings.JacketCacheMaxEntries = Math.Max(0, ReadInt(values, "JacketCacheMaxEntries", settings.JacketCacheMaxEntries));
 
                 LogInfo($"[Config] autoplay={settings.AutoPlay} AllPerfect={settings.AllPerfect}(customOnly={settings.AllPerfectCustomOnly}) UnlockAll={settings.UnlockAll}");
                 LogInfo($"[Config] NoteSway={settings.NoteSway} amplitude={settings.NoteSwayAmplitude} speed={settings.NoteSwaySpeed} damping={settings.NoteSwayDamping}/{settings.NoteSwayDampingTime}s");
@@ -255,6 +259,7 @@ namespace STARGAZER_custom_chart
                 RuntimeProbeLogging = GetDefaultBool("RuntimeProbeLogging"),
                 TrackSelectorVerboseLogging = GetDefaultBool("TrackSelectorVerboseLogging"),
                 BgmCacheMaxEntries = GetDefaultInt("BgmCacheMaxEntries"),
+                JacketCacheMaxEntries = GetDefaultInt("JacketCacheMaxEntries"),
             };
         }
 
@@ -483,7 +488,7 @@ namespace STARGAZER_custom_chart
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string rawLine in SafeTextReader.ReadAllLines(path))
+            foreach (string rawLine in SafeTextReader.EnumerateLines(path))
             {
                 string line = rawLine.Trim();
                 if (line.Length == 0 || line[0] == '#')
@@ -606,6 +611,7 @@ namespace STARGAZER_custom_chart
             public bool RuntimeProbeLogging;
             public bool TrackSelectorVerboseLogging;
             public int BgmCacheMaxEntries;
+            public int JacketCacheMaxEntries;
         }
 
         private sealed class ConfigEntry
