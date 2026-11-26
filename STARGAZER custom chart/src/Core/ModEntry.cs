@@ -103,6 +103,8 @@ namespace STARGAZER_custom_chart
             TryApplyFocusedTrackViewerPatches();
             JudgeAllPerfectPatch.Initialize(RuntimeHarmonyInstance);
             TrackUnlockAllPatch.Initialize(RuntimeHarmonyInstance);
+            // [HarmonyPatch] 클래스(공용 훅)는 OnInitializeMelon 전에 PatchAll로 이미 걸려 있다.
+            ReportBmsInjectPathHealth();
 
             // 상태가 바뀐 경우에만 [Health] 요약이 다시 찍힌다(HookHealth.LogSummary 참고).
             HookHealth.LogSummary();

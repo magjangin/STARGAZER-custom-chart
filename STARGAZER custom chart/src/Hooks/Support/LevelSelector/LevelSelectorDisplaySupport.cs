@@ -23,6 +23,17 @@ namespace STARGAZER_custom_chart
         private static CustomAlbum? CurrentPlayAlbum;
         private static string? CustomChartPlayLevelKey;
 
+        // 로그 1회 판정용(메인 스레드 전용). LogOnce($"…{applied}") 형태는 호출마다 키 문자열을 할당했다.
+        private static readonly HashSet<int> LoggedLevelDisplayCounts = new HashSet<int>();
+        private static readonly HashSet<int> LoggedFocusedLevelDisplayCounts = new HashSet<int>();
+
+        // TryGetMemberByType의 params 후보 배열을 호출마다 만들지 않도록 커서 이동 경로의 후보를 정적으로 둔다.
+        private static readonly string[] FocusedCurrentTrackNames = { "currentTrack", "CurrentFocused", "selectedTrack", "focusedTrack" };
+        private static readonly string[] FocusedLevelUnitListNames = { "levelItems", "LevelItems", "_levelItems", "levels", "Levels" };
+        private static readonly string[] LevelUnitTargetLevelNames = { "targetLevel", "TargetLevel", "level", "Level" };
+        private static readonly string[] LevelSelectorLevelsNames = { "levels", "Levels", "_levels", "levelItems", "LevelItems" };
+        private static readonly string[] SelectionLevelItemNames = { "item", "Item", "_item", "levelItem", "LevelItem" };
+
         private static void HandleLevelSelectorRefresh(object? instance)
         {
             // 게임이 표시를 다시 채운 뒤 불리는 훅에서 매번 재적용한다.
@@ -47,7 +58,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? levels = TryGetMemberByType(levelSelector, "List<SelectionLevel>", "levels", "Levels", "_levels", "levelItems", "LevelItems");
+                object? levels = TryGetMemberByType(levelSelector, "List<SelectionLevel>", LevelSelectorLevelsNames);
                 if (levels is null)
                 {
                     if (LogOnce("CustomLevelDisplay.noLevels"))
@@ -66,7 +77,7 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    object? levelItem = TryGetMemberByType(selectionLevel, "LevelItem", "item", "Item", "_item", "levelItem", "LevelItem");
+                    object? levelItem = TryGetMemberByType(selectionLevel, "LevelItem", SelectionLevelItemNames);
                     if (levelItem is null)
                     {
                         seen++;
@@ -99,7 +110,8 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                if (LogOnce($"CustomLevelDisplay.{applied}/{seen}"))
+                // 리프레시마다 불리는 경로라 문자열 키를 만들지 않고 (적용, 본 수) 조합별로 1회만 남긴다.
+                if (LoggedLevelDisplayCounts.Add((applied << 8) | (seen & 0xFF)))
                 {
                     string summary = string.Join(", ", info.Levels.Select(kvp => $"{kvp.Key}={kvp.Value}"));
                     MelonLogger.Msg($"[CustomLevel][LevelSelector] 난이도 표시 덮어쓰기: 적용={applied}/{seen} ({summary})");
@@ -118,7 +130,7 @@ namespace STARGAZER_custom_chart
         {
             try
             {
-                object? currentTrack = TryGetMemberByType(viewer, "ITrackData", "currentTrack", "CurrentFocused", "selectedTrack", "focusedTrack");
+                object? currentTrack = TryGetMemberByType(viewer, "ITrackData", FocusedCurrentTrackNames);
                 CustomAlbum? album = TryGetAlbumForTrack(currentTrack);
 
                 // 난이도 선택 화면(LevelSelector)은 지금 포커스된 곡으로만 열리므로, 여기서 확정된 판정을
@@ -131,7 +143,7 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
-                object? levelUnits = TryGetMemberByType(viewer, "List<LevelUnit>", "levelItems", "LevelItems", "_levelItems", "levels", "Levels");
+                object? levelUnits = TryGetMemberByType(viewer, "List<LevelUnit>", FocusedLevelUnitListNames);
                 if (levelUnits is null)
                 {
                     return;
@@ -146,7 +158,7 @@ namespace STARGAZER_custom_chart
                         continue;
                     }
 
-                    string? levelKey = TryGetMemberByType(levelUnit, "ELevels", "targetLevel", "TargetLevel", "level", "Level")?.ToString();
+                    string? levelKey = TryGetMemberByType(levelUnit, "ELevels", LevelUnitTargetLevelNames)?.ToString();
                     if (levelKey is null || !info.Levels.ContainsKey(levelKey))
                     {
                         levelKey = TryGetMemberValue(levelUnit, levelUnit.GetType(), "name")?.ToString()?.Trim();
@@ -170,7 +182,8 @@ namespace STARGAZER_custom_chart
                     }
                 }
 
-                if (applied > 0 && LogOnce($"CustomLevelDisplay.Focused.{applied}"))
+                // 곡 선택 커서 이동마다 불리는 경로라 문자열 키를 만들지 않는다.
+                if (applied > 0 && LoggedFocusedLevelDisplayCounts.Add(applied))
                 {
                     string summary = string.Join(", ", info.Levels.Select(kvp => $"{kvp.Key}={kvp.Value}"));
                     MelonLogger.Msg($"[CustomLevel] 곡 선택 화면 난이도 표시를 덮어썼습니다(표시 전용): {summary}");
