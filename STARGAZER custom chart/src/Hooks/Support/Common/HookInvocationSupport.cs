@@ -355,6 +355,14 @@ namespace STARGAZER_custom_chart
         // PatternLoader 인스턴스 포인터 -> 우리가 onCompleted에 넣은 래퍼 델리게이트 포인터.
         // PlayerBase.Play마다 비운다(UpdateCustomChartPlayState).
         private static readonly Dictionary<IntPtr, IntPtr> WrappedPatternLoaders = new Dictionary<IntPtr, IntPtr>();
+
+        // 우리가 만든 래퍼 델리게이트 전부(네이티브 포인터 -> 관리 래퍼). 플레이마다 비우지 않는다.
+        // WrappedPatternLoaders는 Play마다 비워지므로, 게임이 PatternLoader를 재사용하면서 onCompleted를 다시
+        // 대입하지 않으면 다음 커스텀 플레이에서 "지난번 우리 래퍼"를 또 감싸 래퍼가 플레이마다 한 겹씩 쌓였다
+        // (중복 주입은 패턴 포인터 가드가 막지만 호출 깊이와 "[NoteProbe] 이미 처리한 패턴" 로그가 계속 늘어남).
+        // 관리 래퍼를 붙잡아 두므로 네이티브 델리게이트가 GC로 해제돼 주소가 재사용될 걱정은 없다.
+        private static readonly Dictionary<IntPtr, object> OwnPatternLoaderWrappers = new Dictionary<IntPtr, object>();
+        private const int OwnPatternLoaderWrappersLimit = 64;
         private static PropertyInfo? _patternLoaderOnCompletedProperty;
         private static FieldInfo? _patternLoaderOnCompletedField;
         private static Type? _patternLoaderOnCompletedOwner;
@@ -415,6 +423,50 @@ namespace STARGAZER_custom_chart
             _patternLoaderOnCompletedOwner = loaderType;
         }
 
+        public const string BmsInjectPathFeature = "BMS 채보 주입 경로";
+        private static bool _bmsInjectPathReported;
+
+        // 시작 시 1회: BMS 채보 주입의 두 경로가 살아 있는지 [Health]에 남긴다.
+        //  1차 = 람다(_Load_b__5_0) Postfix가 실제로 걸렸는가, 2차 = Load Prefix가 걸렸고 onCompleted(또는 타입 일치 멤버)를 찾을 수 있는가.
+        // 예전엔 둘 다 끊겨도 커스텀 곡을 실제로 플레이해야 "[NoteProbe]/[BmsInject]가 안 찍힌다"로만 알 수 있었다.
+        // 둘 중 하나만 살아 있어도 주입은 동작한다(일부 = 업데이트로 한쪽이 어긋났다는 신호).
+        private static void ReportBmsInjectPathHealth()
+        {
+            if (_bmsInjectPathReported)
+            {
+                return;
+            }
+
+            _bmsInjectPathReported = true;
+            try
+            {
+                bool lambdaHooked = false;
+                bool loadHooked = false;
+                lock (ResolvedTargetLock)
+                {
+                    foreach (string logicalName in ResolvedTargetLogicalNames.Values)
+                    {
+                        lambdaHooked |= string.Equals(logicalName, PatternLoaderTypeName + "." + PatternLoaderLambdaName, StringComparison.Ordinal);
+                        loadHooked |= string.Equals(logicalName, PatternLoaderTypeName + ".Load", StringComparison.Ordinal);
+                    }
+                }
+
+                bool wrapperAvailable = false;
+                if (loadHooked && ResolveGameType(PatternLoaderTypeName) is { } loaderType)
+                {
+                    ResolvePatternLoaderOnCompletedMember(loaderType);
+                    wrapperAvailable = _patternLoaderOnCompletedProperty is not null || _patternLoaderOnCompletedField is not null;
+                }
+
+                string note = $"1차 람다 {(lambdaHooked ? "연결" : "끊김")}, 2차 onCompleted 래퍼 {(wrapperAvailable ? "가능" : "불가")}";
+                HookHealth.Report(BmsInjectPathFeature, (lambdaHooked ? 1 : 0) + (wrapperAvailable ? 1 : 0), 2, note);
+            }
+            catch (Exception ex)
+            {
+                HookHealth.Report(BmsInjectPathFeature, 0, 2, $"점검 실패: {ex.GetType().Name}");
+            }
+        }
+
         private static void TryWrapPatternLoaderOnCompleted(object? instance)
         {
             if (!IsCustomChartPlayActive || instance is null)
@@ -453,6 +505,16 @@ namespace STARGAZER_custom_chart
                     return;
                 }
 
+                // 지난 플레이에서 설치한 우리 래퍼가 그대로 남아 있으면 다시 감싸지 않는다(겹겹이 쌓임 방지).
+                if (origAction.Pointer != IntPtr.Zero && OwnPatternLoaderWrappers.ContainsKey(origAction.Pointer))
+                {
+                    if (loaderPtr != IntPtr.Zero)
+                    {
+                        WrappedPatternLoaders[loaderPtr] = origAction.Pointer;
+                    }
+                    return;
+                }
+
                 Action<Il2CppMikazuki.Pattern> managedDelegate = pattern =>
                 {
                     try
@@ -483,6 +545,17 @@ namespace STARGAZER_custom_chart
                 if (loaderPtr != IntPtr.Zero)
                 {
                     WrappedPatternLoaders[loaderPtr] = wrapper.Pointer;
+                }
+
+                if (wrapper.Pointer != IntPtr.Zero)
+                {
+                    // 상한을 넘으면 비운다(최악의 경우 한 겹 더 감싸질 뿐이고, 무한히 커지지 않는다).
+                    if (OwnPatternLoaderWrappers.Count >= OwnPatternLoaderWrappersLimit)
+                    {
+                        OwnPatternLoaderWrappers.Clear();
+                    }
+
+                    OwnPatternLoaderWrappers[wrapper.Pointer] = wrapper;
                 }
 
                 if (LogOnce("dualwrapper.installed"))
