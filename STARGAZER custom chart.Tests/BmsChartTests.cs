@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace STARGAZER_custom_chart.Tests
@@ -171,6 +172,39 @@ namespace STARGAZER_custom_chart.Tests
             Assert.Equal(BmsNoteKind.HoldStart, startNote.Kind);
             Assert.Equal(16, endNote.Channel);
             Assert.Equal(BmsNoteKind.HoldEnd, endNote.Kind);
+        }
+
+        [Fact]
+        public void TryParse_7KeyAnd2PChannels_NormalizesToCoreGameLanes()
+        {
+            string path = WriteBms("channels_7k_2p.bms", string.Join("\n",
+                "#BPM 160",
+                "#WAV01 tap.wav",
+                "#00014:01",  // 1P 4번 건반 -> 16 (위)
+                "#00015:01",  // 1P 5번 건반 -> 12 (오른쪽)
+                "#00018:01",  // 1P 6번 건반 -> 11 (왼쪽)
+                "#00019:01",  // 1P 7번 건반 -> 13 (아래)
+                "#00026:01",  // 2P 스크래치 -> 16 (위)
+                "#00022:01",  // 2P 2번 건반 -> 12 (오른쪽)
+                "#00066:01000100")); // 2P LN 26 -> 16 홀드 페어
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Single(chart!.Measures);
+            Assert.Equal(8, chart.Measures[0].Notes.Count);
+
+            // 1P 확장 건반 검증
+            Assert.Contains(chart.Measures[0].Notes, n => n.Channel == 16 && n.Kind == BmsNoteKind.Normal);
+            Assert.Contains(chart.Measures[0].Notes, n => n.Channel == 12 && n.Kind == BmsNoteKind.Normal);
+            Assert.Contains(chart.Measures[0].Notes, n => n.Channel == 11 && n.Kind == BmsNoteKind.Normal);
+            Assert.Contains(chart.Measures[0].Notes, n => n.Channel == 13 && n.Kind == BmsNoteKind.Normal);
+
+            // 2P LN 검증 (66 -> 26 -> 16)
+            var lnNotes = chart.Measures[0].Notes.Where(n => n.Channel == 16 && n.Kind != BmsNoteKind.Normal).ToList();
+            Assert.Equal(2, lnNotes.Count);
+            Assert.Equal(BmsNoteKind.HoldStart, lnNotes[0].Kind);
+            Assert.Equal(BmsNoteKind.HoldEnd, lnNotes[1].Kind);
         }
 
         [Fact]

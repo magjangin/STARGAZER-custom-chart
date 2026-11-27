@@ -10,11 +10,26 @@ namespace STARGAZER_custom_chart
     // 난이도 표시 등 여러 훅이 매번 호출하므로 파일 IO를 반복하지 않는다.
     internal static class CustomAlbumRegistry
     {
+        private static readonly object ScanLock = new object();
         private static List<CustomAlbum>? _albums;
 
         public static string RootPath => Path.Combine(HookHealth.ResolveGameDirectory(), "hwa");
 
-        public static IReadOnlyList<CustomAlbum> GetAlbums() => _albums ??= Scan();
+        public static IReadOnlyList<CustomAlbum> GetAlbums()
+        {
+            lock (ScanLock)
+            {
+                return _albums ??= Scan();
+            }
+        }
+
+        public static void Invalidate()
+        {
+            lock (ScanLock)
+            {
+                _albums = null;
+            }
+        }
 
         private static List<CustomAlbum> Scan()
         {

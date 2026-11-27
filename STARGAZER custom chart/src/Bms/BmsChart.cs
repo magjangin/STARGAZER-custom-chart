@@ -54,6 +54,33 @@ namespace STARGAZER_custom_chart
         // 기본 마디 길이(4/4 = 4비트). 채널 02(#mmm02)가 있는 마디는 LengthRatio 배율로 스케일한다.
         private const int MeasureBeats = 4;
 
+        // BMS 채널을 게임의 4개 레인(0=16/위, 1=12/오른쪽, 2=13/아래, 3=11/왼쪽)에 매핑하기 위한 정규화.
+        // 1P 7키/5키: 11(스크래치)->11, 12->12, 13->13, 14->16, 15->12, 16(스크래치)->16, 18->11, 19->13
+        // 2P 채널(21~29)도 1P와 동일한 레인 순환 규칙으로 11~16 기본 채널로 정규화한다.
+        internal static int NormalizeToCoreChannel(int channel)
+        {
+            return channel switch
+            {
+                // 1P 기본 레인 채널 (11=왼쪽, 12=오른쪽, 13=아래, 16=위)
+                11 or 12 or 13 or 16 => channel,
+                // 1P 7K/9K 확장 건반 및 턴테이블
+                14 => 16, // 위
+                15 => 12, // 오른쪽
+                18 => 11, // 왼쪽
+                19 => 13, // 아래
+                // 2P 1P 대응 (21~29)
+                26 => 16,
+                22 => 12,
+                23 => 13,
+                21 => 11,
+                24 => 16,
+                25 => 12,
+                28 => 11,
+                29 => 13,
+                _ => channel
+            };
+        }
+
         private static readonly object CacheLock = new object();
         private static readonly Dictionary<string, (DateTime LastWriteUtc, BmsChart Chart)> ChartCache =
             new Dictionary<string, (DateTime, BmsChart)>(StringComparer.OrdinalIgnoreCase);
@@ -439,7 +466,7 @@ namespace STARGAZER_custom_chart
                 measureRatioFractions[pair.Key] = ToFraction(pair.Value);
             }
 
-            // 채널 51~59 (LNTYPE 1 / 롱노트 채널)의 시작/끝 상태 추적 (키: 매핑된 채널 번호 11~19)
+            // 채널 51~69 (LNTYPE 1 / 롱노트 채널)의 시작/끝 상태 추적 (키: 매핑된 정규 채널 번호 11~19)
             var lnChannelHoldActive = new Dictionary<int, bool>();
 
             foreach ((int lineIdx, int measureIndex, int channel) in noteDataLines)
@@ -461,9 +488,10 @@ namespace STARGAZER_custom_chart
                 (int ratioNum, int ratioDenom) = measureRatioFractions.TryGetValue(measureIndex, out var frac) ? frac : (1, 1);
                 int slotCount = dataSpan.Length / chunkWidth;
 
-                // 채널 51~59는 표준 롱노트 채널 -> 일반 노트 채널(11~19)로 매핑하고 시작/끝 교대 적용
-                bool isLnChannel = channel is >= 51 and <= 59;
-                int effectiveChannel = isLnChannel ? channel - 40 : channel;
+                // 채널 51~59 (1P LN) 및 61~69 (2P LN) -> 일반 노트 채널(11~19 / 21~29)로 매핑하고 시작/끝 교대 적용
+                bool isLnChannel = (channel is >= 51 and <= 59) || (channel is >= 61 and <= 69);
+                int rawEffectiveChannel = isLnChannel ? channel - 40 : channel;
+                int effectiveChannel = NormalizeToCoreChannel(rawEffectiveChannel);
 
                 for (int slot = 0; slot < slotCount; slot++)
                 {
