@@ -27,23 +27,25 @@ namespace STARGAZER_custom_chart
             Kind = kind;
         }
 
-        public int Channel { get; }
+        public int Channel { get; internal set; }
         public int BeatNumerator { get; }
         public int BeatDenominator { get; }
         public string SoundId { get; }
-        public BmsNoteKind Kind { get; }
+        public BmsNoteKind Kind { get; internal set; }
     }
 
     internal sealed class BmsMeasure
     {
-        public BmsMeasure(int index, double lengthRatio = 1.0)
+        public BmsMeasure(int index, double lengthRatio = 1.0, double bpm = 120.0)
         {
             Index = index;
             LengthRatio = lengthRatio;
+            Bpm = bpm;
         }
 
         public int Index { get; }
         public double LengthRatio { get; internal set; }
+        public double Bpm { get; internal set; }
         public List<BmsNoteEvent> Notes { get; } = new List<BmsNoteEvent>();
     }
 
@@ -239,6 +241,8 @@ namespace STARGAZER_custom_chart
             string[] rawLines = SafeTextReader.ReadAllLines(filePath);
             var dataLineIndices = new List<int>(rawLines.Length);
             var wavDefinitions = new List<(string RawId, string FileName)>();
+            var bpmDefinitions = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            string? lnObjRawId = null;
             var warnings = new List<string>();
             double bpm = 120;
             bool warnedNoSpaceBpm = false;
@@ -261,8 +265,17 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                // 곡 BPM 헤더는 "#BPM 140" 형태만이다. "#BPM01 180"처럼 번호가 붙은 줄은 채널 08(BPM 변경)이
-                // 참조하는 정의라, 같이 읽으면 마지막 정의 값이 곡 전체 BPM을 덮어쓴다.
+                if (line.Length > 6 && line.Slice(0, 6).Equals("#LNOBJ".AsSpan(), StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadOnlySpan<char> rest = line.Slice(6).Trim();
+                    if (!rest.IsEmpty)
+                    {
+                        lnObjRawId = rest.ToString();
+                    }
+                    continue;
+                }
+
+                // 곡 BPM 헤더(#BPM 140) 및 채널 08용 인덱스 BPM 정의(#BPM01 180) 파싱
                 if (line.Length > 4 && line.Slice(0, 4).Equals("#BPM".AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     if (char.IsWhiteSpace(line[4]))
@@ -276,8 +289,19 @@ namespace STARGAZER_custom_chart
                     }
 
                     ReadOnlySpan<char> afterBpm = line.Slice(4);
-                    if (afterBpm.IndexOfAny(' ', '\t') < 0
-                        && double.TryParse(afterBpm, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
+                    int spaceIndex = afterBpm.IndexOfAny(' ', '\t');
+                    if (spaceIndex > 0)
+                    {
+                        string bpmId = afterBpm.Slice(0, spaceIndex).Trim().ToString();
+                        ReadOnlySpan<char> bpmValSpan = afterBpm.Slice(spaceIndex + 1).Trim();
+                        if (double.TryParse(bpmValSpan, NumberStyles.Float, CultureInfo.InvariantCulture, out double indexedBpm) && indexedBpm > 0)
+                        {
+                            bpmDefinitions[bpmId] = indexedBpm;
+                        }
+                        continue;
+                    }
+
+                    if (double.TryParse(afterBpm, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
                         && !warnedNoSpaceBpm)
                     {
                         warnedNoSpaceBpm = true;
@@ -296,6 +320,7 @@ namespace STARGAZER_custom_chart
             // 사용자 규칙: #WAV 헤더의 ID 부분이 3글자면 확장(3자리) 사운드ID 포맷으로 판단한다.
             bool extended = wavDefinitions.Any(def => def.RawId.Length == 3);
             int chunkWidth = extended ? 3 : 2;
+            string? lnObjNormalizedId = lnObjRawId is not null ? NormalizeSoundId(lnObjRawId.AsSpan(), extended) : null;
 
             // 사운드 ID -> 노트 종류. 롱노트 여부는 ID 번호가 아니라 #WAV 파일명으로 판단한다
             // (예: "hold 시작.wav" / "hold 끝.wav"). 번호를 바꿔도 의미가 유지되도록.
@@ -309,11 +334,11 @@ namespace STARGAZER_custom_chart
             chart.Warnings.AddRange(warnings);
             var measuresByIndex = new Dictionary<int, BmsMeasure>();
             var measureLengthRatios = new Dictionary<int, double>();
+            var measureBpmChanges = new Dictionary<int, List<double>>();
             var noteDataLines = new List<(int LineIdx, int MeasureIndex, int Channel)>(dataLineIndices.Count);
-            bool hasBpmChange = false;
             bool hasStop = false;
 
-            // 1차 스캔: 마디/채널 번호를 한 번만 파싱해 채널 02(마디 길이 배율)와 미지원 채널을 먼저 분류하고,
+            // 1차 스캔: 마디/채널 번호를 한 번만 파싱해 채널 02(마디 길이 배율), 채널 03/08(BPM 변경)과 미지원 채널을 먼저 분류하고,
             // 노트 데이터 줄만 추려 둔다(중복 Trim/int.TryParse 제거).
             foreach (int lineIdx in dataLineIndices)
             {
@@ -343,9 +368,58 @@ namespace STARGAZER_custom_chart
                     continue;
                 }
 
-                if (channel is 3 or 8)
+                if (channel == 3)
                 {
-                    hasBpmChange = true;
+                    ReadOnlySpan<char> dataSpan = line.Slice(7);
+                    if (!dataSpan.IsEmpty && dataSpan.Length % 2 == 0)
+                    {
+                        int slots = dataSpan.Length / 2;
+                        for (int s = 0; s < slots; s++)
+                        {
+                            ReadOnlySpan<char> hexSpan = dataSpan.Slice(s * 2, 2);
+                            if (IsZeroSoundChunk(hexSpan))
+                            {
+                                continue;
+                            }
+                            if (int.TryParse(hexSpan, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int hexBpm) && hexBpm > 0)
+                            {
+                                if (!measureBpmChanges.TryGetValue(measureIndex, out var bpmList))
+                                {
+                                    bpmList = new List<double>();
+                                    measureBpmChanges[measureIndex] = bpmList;
+                                }
+                                bpmList.Add(hexBpm);
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if (channel == 8)
+                {
+                    ReadOnlySpan<char> dataSpan = line.Slice(7);
+                    if (!dataSpan.IsEmpty && dataSpan.Length % 2 == 0)
+                    {
+                        int slots = dataSpan.Length / 2;
+                        for (int s = 0; s < slots; s++)
+                        {
+                            ReadOnlySpan<char> refSpan = dataSpan.Slice(s * 2, 2);
+                            if (IsZeroSoundChunk(refSpan))
+                            {
+                                continue;
+                            }
+                            string refKey = refSpan.ToString();
+                            if (bpmDefinitions.TryGetValue(refKey, out double refBpm) && refBpm > 0)
+                            {
+                                if (!measureBpmChanges.TryGetValue(measureIndex, out var bpmList))
+                                {
+                                    bpmList = new List<double>();
+                                    measureBpmChanges[measureIndex] = bpmList;
+                                }
+                                bpmList.Add(refBpm);
+                            }
+                        }
+                    }
                     continue;
                 }
 
@@ -365,6 +439,9 @@ namespace STARGAZER_custom_chart
                 measureRatioFractions[pair.Key] = ToFraction(pair.Value);
             }
 
+            // 채널 51~59 (LNTYPE 1 / 롱노트 채널)의 시작/끝 상태 추적 (키: 매핑된 채널 번호 11~19)
+            var lnChannelHoldActive = new Dictionary<int, bool>();
+
             foreach ((int lineIdx, int measureIndex, int channel) in noteDataLines)
             {
                 ReadOnlySpan<char> line = rawLines[lineIdx].AsSpan().Trim();
@@ -377,12 +454,16 @@ namespace STARGAZER_custom_chart
                 double lengthRatio = measureLengthRatios.TryGetValue(measureIndex, out double r) ? r : 1.0;
                 if (!measuresByIndex.TryGetValue(measureIndex, out BmsMeasure? targetMeasure))
                 {
-                    targetMeasure = new BmsMeasure(measureIndex, lengthRatio);
+                    targetMeasure = new BmsMeasure(measureIndex, lengthRatio, bpm);
                     measuresByIndex[measureIndex] = targetMeasure;
                 }
 
                 (int ratioNum, int ratioDenom) = measureRatioFractions.TryGetValue(measureIndex, out var frac) ? frac : (1, 1);
                 int slotCount = dataSpan.Length / chunkWidth;
+
+                // 채널 51~59는 표준 롱노트 채널 -> 일반 노트 채널(11~19)로 매핑하고 시작/끝 교대 적용
+                bool isLnChannel = channel is >= 51 and <= 59;
+                int effectiveChannel = isLnChannel ? channel - 40 : channel;
 
                 for (int slot = 0; slot < slotCount; slot++)
                 {
@@ -400,17 +481,36 @@ namespace STARGAZER_custom_chart
                     numerator /= gcd;
                     denominator /= gcd;
 
-                    BmsNoteKind kind = kindBySoundId.TryGetValue(normalized, out BmsNoteKind found)
-                        ? found
-                        : BmsNoteKind.Normal;
+                    BmsNoteKind kind;
+                    if (isLnChannel)
+                    {
+                        bool currentlyHolding = lnChannelHoldActive.TryGetValue(effectiveChannel, out bool holding) && holding;
+                        if (!currentlyHolding)
+                        {
+                            kind = BmsNoteKind.HoldStart;
+                            lnChannelHoldActive[effectiveChannel] = true;
+                        }
+                        else
+                        {
+                            kind = BmsNoteKind.HoldEnd;
+                            lnChannelHoldActive[effectiveChannel] = false;
+                        }
+                    }
+                    else
+                    {
+                        kind = kindBySoundId.TryGetValue(normalized, out BmsNoteKind found)
+                            ? found
+                            : BmsNoteKind.Normal;
+                    }
 
-                    targetMeasure.Notes.Add(new BmsNoteEvent(channel, (int)numerator, (int)denominator, normalized, kind));
+                    targetMeasure.Notes.Add(new BmsNoteEvent(effectiveChannel, (int)numerator, (int)denominator, normalized, kind));
                 }
             }
 
-            if (hasBpmChange)
+            // #LNOBJ 후처리: 지정된 사운드 ID 노트를 HoldEnd로, 해당 레인에서 바로 앞 선행 노트를 HoldStart로 변환
+            if (!string.IsNullOrEmpty(lnObjNormalizedId))
             {
-                chart.Warnings.Add("곡 중 BPM 변경(채널 03/08)은 지원하지 않아 초기 #BPM으로 고정 처리됩니다.");
+                ApplyLnObjConversion(measuresByIndex.Values, lnObjNormalizedId);
             }
 
             if (hasStop)
@@ -426,23 +526,89 @@ namespace STARGAZER_custom_chart
 
             // 중간에 비어있는 마디(노트가 없는 마디)가 누락되면 타임라인 영역(Area) 순서가 당겨져
             // 노트가 곡보다 일찍 끝나고 박자가 어긋나게 된다. 0부터 maxIndex까지 모든 마디를 순서대로 채운다.
+            // 채널 03/08에서 추출한 마디별 BPM 변경도 순차적으로 전파(누적) 적용한다.
             int maxMeasureIndex = Math.Max(
                 measuresByIndex.Keys.Max(),
-                measureLengthRatios.Count > 0 ? measureLengthRatios.Keys.Max() : 0);
+                Math.Max(
+                    measureLengthRatios.Count > 0 ? measureLengthRatios.Keys.Max() : 0,
+                    measureBpmChanges.Count > 0 ? measureBpmChanges.Keys.Max() : 0));
+
+            double currentBpm = bpm;
+            bool warnedMultiBpmInMeasure = false;
+
             for (int i = 0; i <= maxMeasureIndex; i++)
             {
+                if (measureBpmChanges.TryGetValue(i, out List<double>? bpms) && bpms.Count > 0)
+                {
+                    if (bpms.Count > 1 && !warnedMultiBpmInMeasure)
+                    {
+                        warnedMultiBpmInMeasure = true;
+                        chart.Warnings.Add("마디 내 다중 BPM 변경은 지원하지 않아 해당 마디의 마지막 BPM으로 근사 적용됩니다.");
+                    }
+                    currentBpm = bpms[bpms.Count - 1];
+                }
+
                 if (measuresByIndex.TryGetValue(i, out BmsMeasure? measure))
                 {
+                    measure.Bpm = currentBpm;
                     chart.Measures.Add(measure);
                 }
                 else
                 {
                     double ratio = measureLengthRatios.TryGetValue(i, out double r) ? r : 1.0;
-                    chart.Measures.Add(new BmsMeasure(i, ratio));
+                    chart.Measures.Add(new BmsMeasure(i, ratio, currentBpm));
                 }
             }
 
             return chart;
+        }
+
+        // #LNOBJ 후처리: 모든 마디의 노트를 순회하며 SoundId == lnObjNormalizedId인 노트를 HoldEnd로,
+        // 동일 채널에서 바로 앞선 Normal 노트를 HoldStart로 승격한다.
+        private static void ApplyLnObjConversion(IEnumerable<BmsMeasure> measures, string lnObjNormalizedId)
+        {
+            var notesByChannel = new Dictionary<int, List<BmsNoteEvent>>();
+            var orderedMeasures = measures.OrderBy(m => m.Index).ToList();
+
+            foreach (BmsMeasure measure in orderedMeasures)
+            {
+                // 각 마디 내 노트 정렬: 박자 오름차순
+                var sortedNotes = measure.Notes
+                    .OrderBy(n => (double)n.BeatNumerator / Math.Max(1, n.BeatDenominator))
+                    .ToList();
+
+                foreach (BmsNoteEvent note in sortedNotes)
+                {
+                    if (!notesByChannel.TryGetValue(note.Channel, out var list))
+                    {
+                        list = new List<BmsNoteEvent>();
+                        notesByChannel[note.Channel] = list;
+                    }
+                    list.Add(note);
+                }
+            }
+
+            foreach (KeyValuePair<int, List<BmsNoteEvent>> kvp in notesByChannel)
+            {
+                List<BmsNoteEvent> channelNotes = kvp.Value;
+                for (int i = 0; i < channelNotes.Count; i++)
+                {
+                    BmsNoteEvent current = channelNotes[i];
+                    if (string.Equals(current.SoundId, lnObjNormalizedId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        current.Kind = BmsNoteKind.HoldEnd;
+                        // 직전 선행 Normal 노트를 찾아 HoldStart로 변환
+                        for (int prev = i - 1; prev >= 0; prev--)
+                        {
+                            if (channelNotes[prev].Kind == BmsNoteKind.Normal)
+                            {
+                                channelNotes[prev].Kind = BmsNoteKind.HoldStart;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         internal static (int Numerator, int Denominator) ToFraction(double value, int maxDenominator = 192)

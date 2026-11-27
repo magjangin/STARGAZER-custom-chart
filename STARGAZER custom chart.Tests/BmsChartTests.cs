@@ -115,7 +115,6 @@ namespace STARGAZER_custom_chart.Tests
             string path = WriteBms("warn.bms", string.Join("\n",
                 "#BPM140",
                 "#WAV01 tap.wav",
-                "#00003:80",
                 "#00009:01",
                 "#00016:0100"));
 
@@ -123,7 +122,79 @@ namespace STARGAZER_custom_chart.Tests
 
             Assert.NotNull(chart);
             Assert.Equal(120d, chart!.Bpm);
-            Assert.Equal(3, chart.Warnings.Count);
+            Assert.Equal(2, chart.Warnings.Count);
+        }
+
+        [Fact]
+        public void TryParse_LnObj_ConvertsToHoldStartAndEnd()
+        {
+            string path = WriteBms("lnobj.bms", string.Join("\n",
+                "#BPM 150",
+                "#WAV01 normal.wav",
+                "#WAV02 dummy.wav",
+                "#LNOBJ 02",
+                "#00016:01000200"));
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Single(chart!.Measures);
+            Assert.Equal(2, chart.Measures[0].Notes.Count);
+
+            BmsNoteEvent startNote = chart.Measures[0].Notes[0];
+            BmsNoteEvent endNote = chart.Measures[0].Notes[1];
+
+            Assert.Equal(BmsNoteKind.HoldStart, startNote.Kind);
+            Assert.Equal("01", startNote.SoundId);
+            Assert.Equal(BmsNoteKind.HoldEnd, endNote.Kind);
+            Assert.Equal("02", endNote.SoundId);
+        }
+
+        [Fact]
+        public void TryParse_LnChannels_ConvertsToMappedChannelHoldPairs()
+        {
+            string path = WriteBms("lnchannels.bms", string.Join("\n",
+                "#BPM 160",
+                "#WAV01 tap.wav",
+                "#00056:01000100")); // 56 -> 16 (4번 레인)
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Single(chart!.Measures);
+            Assert.Equal(2, chart.Measures[0].Notes.Count);
+
+            BmsNoteEvent startNote = chart.Measures[0].Notes[0];
+            BmsNoteEvent endNote = chart.Measures[0].Notes[1];
+
+            Assert.Equal(16, startNote.Channel);
+            Assert.Equal(BmsNoteKind.HoldStart, startNote.Kind);
+            Assert.Equal(16, endNote.Channel);
+            Assert.Equal(BmsNoteKind.HoldEnd, endNote.Kind);
+        }
+
+        [Fact]
+        public void TryParse_Channel03And08_AppliesMeasureBpm()
+        {
+            string path = WriteBms("bpm_changes.bms", string.Join("\n",
+                "#BPM 120",
+                "#BPM01 200",
+                "#WAV01 tap.wav",
+                "#00016:0100",
+                "#00103:96",       // 0x96 = 150 BPM
+                "#00116:0100",
+                "#00208:01",       // #BPM01 = 200 BPM
+                "#00216:0100",
+                "#00316:0100"));    // 3번 마디는 2번 마디의 200 BPM 지속
+
+            BmsChart? chart = BmsChart.TryParse(path);
+
+            Assert.NotNull(chart);
+            Assert.Equal(4, chart!.Measures.Count);
+            Assert.Equal(120.0, chart.Measures[0].Bpm);
+            Assert.Equal(150.0, chart.Measures[1].Bpm);
+            Assert.Equal(200.0, chart.Measures[2].Bpm);
+            Assert.Equal(200.0, chart.Measures[3].Bpm);
         }
 
         [Fact]

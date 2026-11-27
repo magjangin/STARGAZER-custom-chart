@@ -151,7 +151,7 @@ namespace STARGAZER_custom_chart
                         }
                     }
 
-                    TrySetValueByNameCandidates(newArea, AreaBpmNames, chart.Bpm);
+                    TrySetValueByNameCandidates(newArea, AreaBpmNames, measure.Bpm);
                     TrySetValueByNameCandidates(newArea, LengthNames, areaLength);
                     TrySetValueByNameCandidates(newArea, TargetLayerNames, layer);
 
